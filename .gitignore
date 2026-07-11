@@ -1,8 +1,14 @@
 # Ignore node modules installed by npm
 node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
 
 # Optional: ignore npm debug logs
 npm-debug.log*
 
 # Ignore local environment files
 .env
+.env.local
+.env.*.local
