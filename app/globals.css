@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  background: #080914;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(51, 242, 209, 0.15), transparent 28rem),
+    radial-gradient(circle at 92% 8%, rgba(255, 79, 139, 0.12), transparent 24rem),
+    linear-gradient(180deg, #080914 0%, #101322 56%, #07110f 100%);
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  color: #f5f7fb;
+  background: transparent;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  color: #080914;
+  background: #33f2d1;
+}
+
+.grid-floor {
+  background-image:
+    linear-gradient(rgba(51, 242, 209, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(51, 242, 209, 0.1) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+.scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanline::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 255, 255, 0.035),
+    transparent
+  );
+  transform: translateY(-100%);
+  animation: scan 4.8s linear infinite;
+}
+
+@keyframes scan {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(51, 242, 209, 0);
+  }
+  45% {
+    box-shadow: 0 0 42px rgba(51, 242, 209, 0.42);
+  }
+}
+
+.activity-flash {
+  animation: flash 1.8s ease-in-out;
+}
+
+.plaza-canvas canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
