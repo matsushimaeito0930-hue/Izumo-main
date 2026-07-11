@@ -1,0 +1,8 @@
+# Ignore node modules installed by npm
+node_modules/
+
+# Optional: ignore npm debug logs
+npm-debug.log*
+
+# Ignore local environment files
+.env
