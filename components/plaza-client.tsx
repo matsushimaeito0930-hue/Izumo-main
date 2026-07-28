@@ -39,7 +39,7 @@ export function PlazaClient({ initialState }: { initialState: HackVerseState }) 
             <div className="rounded-lg border border-pulse/25 bg-void/64 px-4 py-3 text-center shadow-neon backdrop-blur">
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-pulse">
-                  HackVerse Metaverse Lobby
+                  HackVerse City Lobby
                 </p>
                 <RealtimeStatusBadge
                   status={realtimeStatus}
@@ -47,7 +47,7 @@ export function PlazaClient({ initialState }: { initialState: HackVerseState }) 
                 />
               </div>
               <p className="mt-2 text-sm text-white/68">
-                GitHubイベントが空間・家・ランキングに反応します
+                GitHubイベントが街のラボ、ランキング、アクティビティに反映されます。
               </p>
             </div>
 
@@ -55,7 +55,7 @@ export function PlazaClient({ initialState }: { initialState: HackVerseState }) 
               {nearbyTeam ? (
                 <>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-sun">
-                    Nearby Team
+                    Nearby Team Lab
                   </p>
                   <div className="mt-3 flex items-end justify-between gap-4">
                     <div>
@@ -71,7 +71,7 @@ export function PlazaClient({ initialState }: { initialState: HackVerseState }) 
                         {nearbyTeam.score}
                       </p>
                       <p className="text-xs text-white/50">
-                        Lv {nearbyTeam.house_level}
+                        Lab Lv {nearbyTeam.house_level}
                       </p>
                     </div>
                   </div>
@@ -87,10 +87,10 @@ export function PlazaClient({ initialState }: { initialState: HackVerseState }) 
               ) : (
                 <>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-white/50">
-                    Walk To A House
+                    Walk To A Team Lab
                   </p>
                   <p className="mt-2 text-sm text-white/70">
-                    家に近づくとチーム情報がHUDに表示されます。
+                    ラボに近づくと、チームのスコアとGitHub状況がここに表示されます。
                   </p>
                 </>
               )}

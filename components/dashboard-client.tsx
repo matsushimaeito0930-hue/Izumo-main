@@ -2,6 +2,7 @@
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { DemoControls } from "@/components/demo-controls";
+import { DevelopmentOverview } from "@/components/development-overview";
 import { HelpBoard } from "@/components/help-board";
 import { HelpComposer } from "@/components/help-composer";
 import { MentorList } from "@/components/mentor-list";
@@ -32,7 +33,7 @@ export function DashboardClient({
 
   if (view === "home") {
     return (
-      <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-5">
           <TeamHouseCard team={currentTeam} />
           <ActivityFeed
@@ -52,7 +53,7 @@ export function DashboardClient({
 
   if (view === "help") {
     return (
-      <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-5">
           <HelpComposer teams={state.teams} onSubmit={createHelp} />
           <HelpBoard posts={state.helpPosts} />
@@ -67,7 +68,7 @@ export function DashboardClient({
 
   if (view === "ranking") {
     return (
-      <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <RankingPanel teams={state.teams} />
         <div className="space-y-5">
           <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
@@ -78,31 +79,41 @@ export function DashboardClient({
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1fr_22rem_22rem]">
-      <div className="space-y-5">
-        <section className="rounded-lg border border-pulse/20 bg-white/[0.045] p-6 shadow-neon">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-pulse">
-              Realtime Lobby
+    <div className="space-y-5">
+      <section className="rounded-lg border border-pulse/20 bg-panel/80 p-5 shadow-neon sm:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-pulse">
+                HackVerse Control Room
+              </p>
+              <RealtimeStatusBadge status={realtimeStatus} isRefreshing={isRefreshing} />
+            </div>
+            <h1 className="mt-3 max-w-3xl text-3xl font-black leading-tight tracking-tight text-white sm:text-5xl">
+              開発状況を、ひと目で。
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/60 sm:text-base">
+              チームごとのコミット数、Momentum Score、最新イベントを同じ画面で比較できます。
             </p>
-            <RealtimeStatusBadge status={realtimeStatus} isRefreshing={isRefreshing} />
           </div>
-          <h1 className="mt-3 max-w-3xl text-4xl font-black leading-tight text-white md:text-6xl">
-            ハッカソンに、ロビーを。
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-white/64">
-            GitHubのPush、PR、Merge、Issue完了をMomentum Scoreへ変換し、
-            広場・家・ランキング・HELP掲示板へ数秒で反映します。
-          </p>
-        </section>
+          <div className="shrink-0 font-mono text-xs text-white/40">
+            {state.updatedAt ? `Updated ${new Date(state.updatedAt).toLocaleTimeString()}` : "Waiting for data"}
+          </div>
+        </div>
+      </section>
+
+      <DevelopmentOverview teams={state.teams} activities={state.activities} />
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]">
         <ActivityFeed activities={state.activities} highlightId={lastActivityId} />
+        <div className="space-y-5">
+          <RankingPanel teams={state.teams} />
+          <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
+        </div>
       </div>
-      <div className="space-y-5">
-        <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
+
+      <div className="grid gap-5 lg:grid-cols-2">
         <HelpBoard posts={state.helpPosts} />
-      </div>
-      <div className="space-y-5">
-        <RankingPanel teams={state.teams} />
         <MentorList mentors={state.mentors} />
       </div>
     </div>

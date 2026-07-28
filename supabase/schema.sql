@@ -29,6 +29,14 @@ create table if not exists public.team_members (
   unique (team_id, user_id)
 );
 
+create table if not exists public.team_invites (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  team_id uuid not null references public.teams(id) on delete cascade,
+  invited_by text not null default 'HackVerse Admin',
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.activities (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
@@ -71,12 +79,14 @@ create index if not exists help_posts_status_idx on public.help_posts(status);
 create index if not exists teams_score_idx on public.teams(score desc);
 create index if not exists teams_commit_count_idx on public.teams(commit_count desc);
 create unique index if not exists mentors_user_id_idx on public.mentors(user_id);
+create index if not exists team_invites_created_at_idx on public.team_invites(created_at desc);
 
 grant select on public.users to anon;
 grant select on public.teams to anon;
 grant select on public.activities to anon;
 grant select on public.help_posts to anon;
 grant select on public.mentors to anon;
+grant select on public.team_invites to anon;
 
 do $$
 begin
@@ -114,6 +124,18 @@ values
   ('Team C', 'example/team-c', 365, 18, 3),
   ('Team D', 'example/team-d', 54, 4, 1)
 on conflict (github_repo) do nothing;
+
+insert into public.team_invites (code, team_id, invited_by)
+select 'TEAM-A', id, 'HackVerse Admin'
+from public.teams
+where github_repo = 'matsushimaeito0930-hue/Izumo-main'
+on conflict (code) do nothing;
+
+insert into public.team_invites (code, team_id, invited_by)
+select 'TEAM-B', id, 'HackVerse Admin'
+from public.teams
+where github_repo = 'example/team-b'
+on conflict (code) do nothing;
 
 insert into public.mentors (user_id, specialty, availability)
 select id, 'JavaScript / Realtime', 'available'

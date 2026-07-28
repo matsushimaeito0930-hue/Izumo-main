@@ -1,5 +1,13 @@
 import { getHouseLevel } from "@/lib/house";
-import type { Activity, HelpPost, Mentor, Team, User } from "@/lib/types";
+import type {
+  Activity,
+  HelpPost,
+  Mentor,
+  Team,
+  TeamInvite,
+  TeamMember,
+  User
+} from "@/lib/types";
 
 const now = new Date();
 const minutesAgo = (minutes: number) =>
@@ -153,5 +161,35 @@ export const seedMentors: Mentor[] = [
     user_id: "mentor-ui",
     specialty: "UI/UX / Pitch polish",
     availability: "busy"
+  }
+];
+
+export const seedTeamMembers: TeamMember[] = [
+  {
+    id: "member-a",
+    team_id: "team-a",
+    user_id: "user-a"
+  },
+  {
+    id: "member-b",
+    team_id: "team-b",
+    user_id: "user-b"
+  }
+];
+
+export const seedTeamInvites: TeamInvite[] = [
+  {
+    id: "invite-team-a",
+    code: "TEAM-A",
+    team_id: "team-a",
+    invited_by: "HackVerse Admin",
+    created_at: minutesAgo(70)
+  },
+  {
+    id: "invite-team-b",
+    code: "TEAM-B",
+    team_id: "team-b",
+    invited_by: "HackVerse Admin",
+    created_at: minutesAgo(65)
   }
 ];

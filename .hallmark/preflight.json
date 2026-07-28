@@ -1,0 +1,20 @@
+{
+  "date": "2026-07-28",
+  "framework": "Next.js 14 App Router",
+  "fontStack": "system sans and system mono via Tailwind defaults",
+  "palette": "dark void/panel with cyan, magenta, amber, and green signals",
+  "motion": "motion-cut with one existing activity flash",
+  "spacing": "Tailwind spacing with a 4-point-compatible scale",
+  "preserve": [
+    "dark palette",
+    "existing routes and data contracts",
+    "realtime activity behavior",
+    "GitHub and Supabase integrations"
+  ],
+  "introduce": [
+    "Workbench dashboard structure",
+    "commit and score comparison bars",
+    "clearer data hierarchy",
+    "responsive overflow-safe layout"
+  ]
+}

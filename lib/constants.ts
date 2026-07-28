@@ -1,10 +1,10 @@
 import type { ActivityType } from "@/lib/types";
 
 export const HOUSE_LEVELS = [
-  { level: 1, minScore: 0, label: "Mini House" },
-  { level: 2, minScore: 100, label: "Base House" },
-  { level: 3, minScore: 300, label: "Guild House" },
-  { level: 4, minScore: 600, label: "Signal Tower" }
+  { level: 1, minScore: 0, label: "小さな机", englishLabel: "Small Desk" },
+  { level: 2, minScore: 100, label: "チームブース", englishLabel: "Team Booth" },
+  { level: 3, minScore: 300, label: "ネオンラボ", englishLabel: "Neon Lab" },
+  { level: 4, minScore: 600, label: "タワー型開発拠点", englishLabel: "Tower HQ" }
 ] as const;
 
 export const SCORE_BY_ACTIVITY: Record<ActivityType, number> = {

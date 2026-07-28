@@ -1,3 +1,5 @@
+@import "../tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -13,6 +15,7 @@
 
 html {
   min-height: 100%;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 18% 12%, rgba(51, 242, 209, 0.15), transparent 28rem),
     radial-gradient(circle at 92% 8%, rgba(255, 79, 139, 0.12), transparent 24rem),
@@ -22,7 +25,9 @@ html {
 body {
   min-height: 100%;
   margin: 0;
+  overflow-x: clip;
   color: #f5f7fb;
+  font-family: var(--font-body);
   background: transparent;
 }
 
@@ -36,6 +41,15 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
 }
 
 ::selection {
@@ -93,4 +107,15 @@ select {
 .plaza-canvas canvas {
   width: 100% !important;
   height: 100% !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

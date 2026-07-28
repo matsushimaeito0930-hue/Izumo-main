@@ -10,6 +10,8 @@ import {
   seedActivities,
   seedHelpPosts,
   seedMentors,
+  seedTeamInvites,
+  seedTeamMembers,
   seedTeams,
   seedUsers
 } from "@/lib/seed";
@@ -18,6 +20,7 @@ import type {
   Activity,
   ActivityType,
   ActivityView,
+  AppSession,
   HackVerseState,
   HelpPost,
   HelpPostView,
@@ -25,6 +28,9 @@ import type {
   Mentor,
   MentorProfile,
   Team,
+  TeamInvite,
+  TeamInviteView,
+  TeamMember,
   User
 } from "@/lib/types";
 
@@ -34,6 +40,8 @@ type MemoryStore = {
   activities: Activity[];
   helpPosts: HelpPost[];
   mentors: Mentor[];
+  teamMembers: TeamMember[];
+  teamInvites: TeamInvite[];
 };
 
 function normalizeTeam(team: Team): Team {
@@ -53,7 +61,9 @@ function cloneStore(): MemoryStore {
     teams: structuredClone(seedTeams),
     activities: structuredClone(seedActivities),
     helpPosts: structuredClone(seedHelpPosts),
-    mentors: structuredClone(seedMentors)
+    mentors: structuredClone(seedMentors),
+    teamMembers: structuredClone(seedTeamMembers),
+    teamInvites: structuredClone(seedTeamInvites)
   };
 }
 
@@ -420,5 +430,312 @@ export async function createHelpPost(input: {
     ...post,
     author_name: user.display_name,
     team_name: team.name
+  };
+}
+
+function makeInviteCode(teamName: string): string {
+  const compactName = teamName
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 4)
+    .toUpperCase();
+  const suffix = randomUUID().replace(/-/g, "").slice(0, 5).toUpperCase();
+  return `${compactName || "TEAM"}-${suffix}`;
+}
+
+function inviteViews(teams: Team[], invites: TeamInvite[]): TeamInviteView[] {
+  const teamsById = new Map(teams.map((team) => [team.id, normalizeTeam(team)]));
+
+  return invites
+    .map((invite) => {
+      const team = teamsById.get(invite.team_id);
+      return {
+        ...invite,
+        team_name: team?.name ?? "Unknown Team",
+        github_repo: team?.github_repo ?? ""
+      };
+    })
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}
+
+export async function getTeamInvites(): Promise<TeamInviteView[]> {
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const [teamsResult, invitesResult] = await Promise.all([
+        supabase.from("teams").select("*"),
+        supabase
+          .from("team_invites")
+          .select("*")
+          .order("created_at", { ascending: false })
+      ]);
+
+      if (!teamsResult.error && !invitesResult.error) {
+        return inviteViews(
+          ((teamsResult.data ?? []) as Team[]).map(normalizeTeam),
+          (invitesResult.data ?? []) as TeamInvite[]
+        );
+      }
+    }
+  }
+
+  const store = getMemoryStore();
+  return inviteViews(store.teams, store.teamInvites);
+}
+
+export async function createTeamInvite(input: {
+  teamName: string;
+  githubRepo: string;
+  invitedBy: string;
+}): Promise<TeamInviteView> {
+  const teamName = input.teamName.trim();
+  const githubRepo = input.githubRepo.trim();
+  const invitedBy = input.invitedBy.trim() || "HackVerse Admin";
+
+  if (!teamName || !githubRepo) {
+    throw new Error("Team name and GitHub repository are required.");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const team = normalizeTeam(
+        (await findOrCreateSupabaseTeam(githubRepo, teamName)) as Team
+      );
+      const invite: Omit<TeamInvite, "id" | "created_at"> = {
+        code: makeInviteCode(teamName),
+        team_id: team.id,
+        invited_by: invitedBy
+      };
+      const { data, error } = await supabase
+        .from("team_invites")
+        .insert(invite)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      return {
+        ...(data as TeamInvite),
+        team_name: team.name,
+        github_repo: team.github_repo
+      };
+    }
+  }
+
+  const store = getMemoryStore();
+  const team = findOrCreateMemoryTeam(githubRepo, teamName);
+  const invite: TeamInvite = {
+    id: randomUUID(),
+    code: makeInviteCode(team.name),
+    team_id: team.id,
+    invited_by: invitedBy,
+    created_at: new Date().toISOString()
+  };
+
+  store.teamInvites.unshift(invite);
+
+  return {
+    ...invite,
+    team_name: team.name,
+    github_repo: team.github_repo
+  };
+}
+
+export async function joinTeamWithInvite(input: {
+  code: string;
+  displayName: string;
+  githubUsername?: string;
+}): Promise<AppSession> {
+  const code = input.code.trim().toUpperCase();
+  const displayName = input.displayName.trim();
+  const githubUsername =
+    input.githubUsername?.trim() || `guest-${randomUUID().slice(0, 8)}`;
+
+  if (!code || !displayName) {
+    throw new Error("Invite code and display name are required.");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: invite, error: inviteError } = await supabase
+        .from("team_invites")
+        .select("*")
+        .eq("code", code)
+        .maybeSingle();
+
+      if (inviteError) throw inviteError;
+      if (!invite) throw new Error("Invite code was not found.");
+
+      const { data: team, error: teamError } = await supabase
+        .from("teams")
+        .select("*")
+        .eq("id", invite.team_id)
+        .single();
+
+      if (teamError) throw teamError;
+
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .upsert(
+          {
+            github_username: githubUsername,
+            display_name: displayName,
+            role: "participant"
+          },
+          { onConflict: "github_username" }
+        )
+        .select("*")
+        .single();
+
+      if (userError) throw userError;
+
+      await supabase.from("team_members").upsert(
+        {
+          team_id: invite.team_id,
+          user_id: user.id
+        },
+        { onConflict: "team_id,user_id" }
+      );
+
+      return {
+        role: "participant",
+        displayName,
+        githubUsername,
+        teamId: team.id,
+        teamName: team.name,
+        inviteCode: code
+      };
+    }
+  }
+
+  const store = getMemoryStore();
+  const invite = store.teamInvites.find((candidate) => candidate.code === code);
+  if (!invite) {
+    throw new Error("Invite code was not found.");
+  }
+
+  const team = store.teams.find((candidate) => candidate.id === invite.team_id);
+  if (!team) {
+    throw new Error("Invited team was not found.");
+  }
+
+  let user = store.users.find(
+    (candidate) => candidate.github_username === githubUsername
+  );
+  if (!user) {
+    user = {
+      id: randomUUID(),
+      github_username: githubUsername,
+      display_name: displayName,
+      avatar_url: null,
+      role: "participant",
+      created_at: new Date().toISOString()
+    };
+    store.users.push(user);
+  }
+
+  if (
+    !store.teamMembers.some(
+      (member) => member.team_id === team.id && member.user_id === user.id
+    )
+  ) {
+    store.teamMembers.push({
+      id: randomUUID(),
+      team_id: team.id,
+      user_id: user.id
+    });
+  }
+
+  return {
+    role: "participant",
+    displayName,
+    githubUsername,
+    teamId: team.id,
+    teamName: team.name,
+    inviteCode: code
+  };
+}
+
+export async function createMentorSession(input: {
+  displayName: string;
+  githubUsername?: string;
+  specialty: string;
+}): Promise<AppSession> {
+  const displayName = input.displayName.trim();
+  const specialty = input.specialty.trim();
+  const githubUsername =
+    input.githubUsername?.trim() || `mentor-${randomUUID().slice(0, 8)}`;
+
+  if (!displayName || !specialty) {
+    throw new Error("Display name and specialty are required.");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .upsert(
+          {
+            github_username: githubUsername,
+            display_name: displayName,
+            role: "mentor"
+          },
+          { onConflict: "github_username" }
+        )
+        .select("*")
+        .single();
+
+      if (userError) throw userError;
+
+      await supabase.from("mentors").upsert(
+        {
+          user_id: user.id,
+          specialty,
+          availability: "available"
+        },
+        { onConflict: "user_id" }
+      );
+    }
+  } else {
+    const store = getMemoryStore();
+    let user = store.users.find(
+      (candidate) => candidate.github_username === githubUsername
+    );
+
+    if (!user) {
+      user = {
+        id: randomUUID(),
+        github_username: githubUsername,
+        display_name: displayName,
+        avatar_url: null,
+        role: "mentor",
+        created_at: new Date().toISOString()
+      };
+      store.users.push(user);
+    }
+
+    const existingMentor = store.mentors.find(
+      (mentor) => mentor.user_id === user.id
+    );
+    if (existingMentor) {
+      existingMentor.specialty = specialty;
+      existingMentor.availability = "available";
+    } else {
+      store.mentors.push({
+        id: randomUUID(),
+        user_id: user.id,
+        specialty,
+        availability: "available"
+      });
+    }
+  }
+
+  return {
+    role: "mentor",
+    displayName,
+    githubUsername,
+    specialty
   };
 }

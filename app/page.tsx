@@ -1,15 +1,10 @@
-import { DashboardClient } from "@/components/dashboard-client";
-import { Shell } from "@/components/shell";
-import { getHackVerseState } from "@/lib/store";
+import { OnboardingClient } from "@/components/onboarding-client";
+import { getTeamInvites } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const state = await getHackVerseState();
+  const invites = await getTeamInvites();
 
-  return (
-    <Shell>
-      <DashboardClient initialState={state} view="lobby" />
-    </Shell>
-  );
+  return <OnboardingClient initialInvites={invites} />;
 }

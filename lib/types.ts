@@ -29,6 +29,30 @@ export type Team = {
   created_at: string;
 };
 
+export type TeamMember = {
+  id: string;
+  team_id: string;
+  user_id: string;
+};
+
+export type TeamInvite = {
+  id: string;
+  code: string;
+  team_id: string;
+  invited_by: string;
+  created_at: string;
+};
+
+export type AppSession = {
+  role: UserRole;
+  displayName: string;
+  githubUsername?: string;
+  teamId?: string;
+  teamName?: string;
+  inviteCode?: string;
+  specialty?: string;
+};
+
 export type Activity = {
   id: string;
   team_id: string;
@@ -77,6 +101,11 @@ export type HackVerseState = {
   helpPosts: HelpPostView[];
   mentors: MentorProfile[];
   updatedAt: string;
+};
+
+export type TeamInviteView = TeamInvite & {
+  team_name: string;
+  github_repo: string;
 };
 
 export type DemoEventInput = {

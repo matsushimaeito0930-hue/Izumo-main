@@ -8,7 +8,7 @@ import { Vector3 } from "three";
 import { TEAM_COLORS } from "@/lib/constants";
 import type { HackVerseState, Team } from "@/lib/types";
 
-const HOUSE_POSITIONS = [
+const LAB_POSITIONS = [
   [-7.2, 0, -4.1],
   [-2.4, 0, -5.7],
   [3.2, 0, -5.2],
@@ -17,7 +17,7 @@ const HOUSE_POSITIONS = [
   [2.4, 0, 4.8]
 ] as const;
 
-function House({
+function TeamLab({
   team,
   index,
   active
@@ -27,8 +27,12 @@ function House({
   active: boolean;
 }) {
   const ref = useRef<Group>(null);
-  const [x, y, z] = HOUSE_POSITIONS[index % HOUSE_POSITIONS.length];
-  const height = 0.65 + team.house_level * 0.34;
+  const [x, y, z] = LAB_POSITIONS[index % LAB_POSITIONS.length];
+  const level = Math.min(4, Math.max(1, team.house_level));
+  const width = [1.45, 2.05, 2.45, 2.8][level - 1];
+  const depth = [1.2, 1.65, 1.9, 2.15][level - 1];
+  const height = [0.72, 1.42, 2.1, 3.35][level - 1];
+  const signY = level === 4 ? 2.35 : Math.max(0.96, height + 0.18);
   const color = TEAM_COLORS[index % TEAM_COLORS.length];
 
   useFrame((state) => {
@@ -39,38 +43,129 @@ function House({
 
   return (
     <group ref={ref} position={[x, y, z]}>
-      <mesh position={[0, height / 2, 0]}>
-        <boxGeometry args={[1.18, height, 1.18]} />
+      <mesh position={[0, 0.06, 0]}>
+        <boxGeometry args={[width + 0.24, 0.12, depth + 0.24]} />
+        <meshStandardMaterial color="#101827" emissive={color} emissiveIntensity={0.22} />
+      </mesh>
+      <mesh position={[0, 0.13, 0]}>
+        <boxGeometry args={[width, 0.08, depth]} />
+        <meshStandardMaterial color="#182335" roughness={0.35} />
+      </mesh>
+
+      {level === 1 && (
+        <group>
+          <mesh position={[0, 0.56, 0]}>
+            <boxGeometry args={[0.88, 0.1, 0.46]} />
+            <meshStandardMaterial color="#202d3f" emissive={color} emissiveIntensity={0.15} />
+          </mesh>
+          {[-0.32, 0.32].map((legX) => (
+            <mesh key={legX} position={[legX, 0.33, 0]}>
+              <boxGeometry args={[0.06, 0.44, 0.06]} />
+              <meshStandardMaterial color="#617287" />
+            </mesh>
+          ))}
+          <mesh position={[0, 0.86, -0.08]} rotation={[-0.22, 0, 0]}>
+            <boxGeometry args={[0.6, 0.38, 0.045]} />
+            <meshStandardMaterial color="#0b1220" emissive={color} emissiveIntensity={0.8} />
+          </mesh>
+          <mesh position={[0.1, 0.59, 0.04]}>
+            <boxGeometry args={[0.16, 0.025, 0.2]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} />
+          </mesh>
+        </group>
+      )}
+
+      {level === 2 && (
+        <group>
+          {[
+            [-0.82, 0, -0.62],
+            [0.82, 0, -0.62],
+            [-0.82, 0, 0.62],
+            [0.82, 0, 0.62]
+          ].map(([pillarX, pillarY, pillarZ]) => (
+            <mesh key={`${pillarX}-${pillarZ}`} position={[pillarX, 0.78, pillarZ]}>
+              <boxGeometry args={[0.11, 1.45, 0.11]} />
+              <meshStandardMaterial color="#26384b" emissive={color} emissiveIntensity={0.35} />
+            </mesh>
+          ))}
+          <mesh position={[0, 1.5, 0]}>
+            <boxGeometry args={[2.12, 0.12, 1.7]} />
+            <meshStandardMaterial color="#162334" emissive={color} emissiveIntensity={0.6} />
+          </mesh>
+          <mesh position={[0, 0.58, 0.12]}>
+            <boxGeometry args={[1.15, 0.08, 0.5]} />
+            <meshStandardMaterial color="#26384b" />
+          </mesh>
+          <mesh position={[0, 0.98, -0.54]}>
+            <boxGeometry args={[1.14, 0.38, 0.05]} />
+            <meshStandardMaterial color="#07101c" emissive={color} emissiveIntensity={0.8} />
+          </mesh>
+        </group>
+      )}
+
+      {level === 3 && (
+        <group>
+          <mesh position={[0, 0.98, 0]}>
+            <boxGeometry args={[2.34, 1.75, 1.78]} />
+            <meshStandardMaterial color="#162334" emissive={active ? color : "#101c2c"} emissiveIntensity={active ? 0.9 : 0.25} roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 1.08, 0.91]}>
+            <boxGeometry args={[1.8, 1.18, 0.045]} />
+            <meshStandardMaterial color="#07101b" emissive={color} emissiveIntensity={0.75} transparent opacity={0.9} />
+          </mesh>
+          {[-0.92, 0.92].map((panelX) => (
+            <mesh key={panelX} position={[panelX, 1.05, 0]}>
+              <boxGeometry args={[0.07, 1.45, 1.52]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} />
+            </mesh>
+          ))}
+          <mesh position={[0, 1.92, 0]}>
+            <boxGeometry args={[2.5, 0.08, 1.92]} />
+            <meshStandardMaterial color="#26384b" emissive={color} emissiveIntensity={0.7} />
+          </mesh>
+          <mesh position={[0, 0.72, 0.96]}>
+            <boxGeometry args={[1.3, 0.05, 0.05]} />
+            <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.2} />
+          </mesh>
+        </group>
+      )}
+
+      {level === 4 && (
+        <group>
+          {[0.64, 1.48, 2.36].map((moduleY, moduleIndex) => (
+            <group key={moduleY}>
+              <mesh position={[0, moduleY, 0]}>
+                <boxGeometry args={[width - moduleIndex * 0.24, 0.66, depth - moduleIndex * 0.2]} />
+                <meshStandardMaterial color={moduleIndex === 1 ? "#1c2d43" : "#172235"} emissive={active ? color : "#0b1727"} emissiveIntensity={active ? 0.75 : 0.22} roughness={0.28} />
+              </mesh>
+              <mesh position={[0, moduleY, depth / 2 + 0.02 - moduleIndex * 0.1]}>
+                <boxGeometry args={[width - 0.38 - moduleIndex * 0.18, 0.08, 0.04]} />
+                <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.1} />
+              </mesh>
+            </group>
+          ))}
+          <mesh position={[0, 3.26, 0]}>
+            <cylinderGeometry args={[0.11, 0.2, 0.95, 10]} />
+            <meshStandardMaterial color="#ff4f8b" emissive="#ff4f8b" emissiveIntensity={1.2} />
+          </mesh>
+          <mesh position={[0, 3.78, 0]}>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.6} />
+          </mesh>
+        </group>
+      )}
+
+      <mesh position={[0, signY, depth / 2 + 0.08]}>
+        <boxGeometry args={[Math.min(width + 0.25, 2.7), 0.48, 0.06]} />
         <meshStandardMaterial
-          color={active ? "#ffffff" : color}
-          emissive={active ? color : "#111111"}
-          emissiveIntensity={active ? 1.35 : 0.25}
-          roughness={0.45}
+          color="#09111e"
+          emissive={active ? color : "#122133"}
+          emissiveIntensity={active ? 1.15 : 0.45}
         />
       </mesh>
-      {team.house_level < 4 ? (
-        <mesh position={[0, height + 0.36, 0]} rotation={[0, Math.PI / 4, 0]}>
-          <coneGeometry args={[0.95, 0.72, 4]} />
-          <meshStandardMaterial color="#ffd166" emissive="#5c3600" />
-        </mesh>
-      ) : (
-        <mesh position={[0, height + 0.78, 0]}>
-          <cylinderGeometry args={[0.36, 0.52, 1.56, 6]} />
-          <meshStandardMaterial
-            color="#ff4f8b"
-            emissive="#ff4f8b"
-            emissiveIntensity={0.55}
-          />
-        </mesh>
-      )}
-      <mesh position={[0, 0.08, 0.82]}>
-        <boxGeometry args={[1.38, 0.16, 0.08]} />
-        <meshStandardMaterial color="#080914" emissive={color} emissiveIntensity={0.35} />
-      </mesh>
       <Text
-        position={[0, 0.05, 0.88]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.24}
+        position={[0, signY + 0.08, depth / 2 + 0.12]}
+        fontSize={0.18}
         color="#f8fafc"
         anchorX="center"
         anchorY="middle"
@@ -78,25 +173,15 @@ function House({
         {team.name}
       </Text>
       <Text
-        position={[0, 0.05, 1.2]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.18}
-        color="#33f2d1"
+        position={[0, signY - 0.1, depth / 2 + 0.12]}
+        fontSize={0.12}
+        color={color}
         anchorX="center"
         anchorY="middle"
       >
-        {`${team.score} pts / Lv ${team.house_level}`}
+        {`L${level} / ${team.score} PTS / ${team.commit_count} COMMITS`}
       </Text>
-      <Text
-        position={[0, 0.05, 1.48]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.15}
-        color="#ffd166"
-        anchorX="center"
-        anchorY="middle"
-      >
-        {`${team.commit_count} commits`}
-      </Text>
+      {active && <pointLight position={[0, Math.min(height + 1.1, 3.4), 0]} color={color} intensity={5} distance={4.2} />}
     </group>
   );
 }
@@ -140,6 +225,78 @@ function StreetLight({
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.4} />
       </mesh>
       <pointLight position={[0, 1.72, 0]} color={color} intensity={4} distance={3.4} />
+    </group>
+  );
+}
+
+function RoadGrid() {
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.018, 0]}>
+        <planeGeometry args={[21, 1.45]} />
+        <meshStandardMaterial color="#0b111b" roughness={0.85} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.019, 0]}>
+        <planeGeometry args={[1.45, 16.2]} />
+        <meshStandardMaterial color="#0b111b" roughness={0.85} />
+      </mesh>
+      <mesh position={[0, 0.035, -0.7]}>
+        <boxGeometry args={[20.8, 0.035, 0.045]} />
+        <meshStandardMaterial color="#33f2d1" emissive="#33f2d1" emissiveIntensity={0.8} />
+      </mesh>
+      <mesh position={[0, 0.035, 0.7]}>
+        <boxGeometry args={[20.8, 0.035, 0.045]} />
+        <meshStandardMaterial color="#ff4f8b" emissive="#ff4f8b" emissiveIntensity={0.65} />
+      </mesh>
+      <mesh position={[-0.7, 0.035, 0]}>
+        <boxGeometry args={[0.045, 0.035, 15.8]} />
+        <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={0.7} />
+      </mesh>
+      <mesh position={[0.7, 0.035, 0]}>
+        <boxGeometry args={[0.045, 0.035, 15.8]} />
+        <meshStandardMaterial color="#7c5cff" emissive="#7c5cff" emissiveIntensity={0.7} />
+      </mesh>
+      {[-0.52, -0.26, 0, 0.26, 0.52].map((offset) => (
+        <mesh key={`cross-x-${offset}`} position={[offset, 0.04, 0]}>
+          <boxGeometry args={[0.12, 0.025, 1.2]} />
+          <meshStandardMaterial color="#d9e6e8" emissive="#d9e6e8" emissiveIntensity={0.15} />
+        </mesh>
+      ))}
+      {[-0.52, -0.26, 0, 0.26, 0.52].map((offset) => (
+        <mesh key={`cross-z-${offset}`} position={[0, 0.04, offset]}>
+          <boxGeometry args={[1.2, 0.025, 0.12]} />
+          <meshStandardMaterial color="#d9e6e8" emissive="#d9e6e8" emissiveIntensity={0.15} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function CityCore() {
+  return (
+    <group position={[0, 0, -0.75]}>
+      <mesh position={[0, 0.08, 0]}>
+        <cylinderGeometry args={[2.35, 2.55, 0.14, 64]} />
+        <meshStandardMaterial color="#122032" emissive="#33f2d1" emissiveIntensity={0.2} roughness={0.42} />
+      </mesh>
+      <mesh position={[0, 0.16, 0]}>
+        <torusGeometry args={[1.72, 0.035, 10, 64]} />
+        <meshStandardMaterial color="#33f2d1" emissive="#33f2d1" emissiveIntensity={1.1} />
+      </mesh>
+      <mesh position={[0, 0.44, 0]}>
+        <cylinderGeometry args={[0.42, 0.62, 0.62, 8]} />
+        <meshStandardMaterial color="#1d3246" emissive="#ff4f8b" emissiveIntensity={0.65} />
+      </mesh>
+      <mesh position={[0, 0.92, 0]}>
+        <sphereGeometry args={[0.18, 18, 18]} />
+        <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.8} />
+      </mesh>
+      <Text position={[0, 1.23, 0]} fontSize={0.28} color="#f8fafc" anchorX="center" anchorY="middle">
+        HACKVERSE CITY
+      </Text>
+      <Text position={[0, 0.98, 0]} fontSize={0.12} color="#33f2d1" anchorX="center" anchorY="middle">
+        TEAM DEVELOPMENT DISTRICT
+      </Text>
     </group>
   );
 }
@@ -275,7 +432,7 @@ function WalkControls({
     let nearestDistance = Number.POSITIVE_INFINITY;
 
     for (const [index, team] of teams.entries()) {
-      const [x, , z] = HOUSE_POSITIONS[index % HOUSE_POSITIONS.length];
+      const [x, , z] = LAB_POSITIONS[index % LAB_POSITIONS.length];
       const distance = Math.hypot(camera.position.x - x, camera.position.z - z);
       if (distance < nearestDistance) {
         nearestDistance = distance;
@@ -334,6 +491,8 @@ export function PlazaScene({
           <meshStandardMaterial color="#162018" roughness={0.75} />
         </mesh>
         <gridHelper args={[24, 30, "#33f2d1", "#244c49"]} position={[0, 0.01, 0]} />
+        <RoadGrid />
+        <CityCore />
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0.15]}>
           <ringGeometry args={[3.2, 3.36, 64]} />
           <meshStandardMaterial color="#33f2d1" emissive="#33f2d1" emissiveIntensity={0.35} />
@@ -345,7 +504,7 @@ export function PlazaScene({
         <StreetLight position={[0, 0, -8.0]} color="#33f2d1" />
         <StreetLight position={[0, 0, 8.0]} color="#ff4f8b" />
         {state.teams.map((team, index) => (
-          <House
+          <TeamLab
             key={team.id}
             team={team}
             index={index}

@@ -5,6 +5,7 @@
   "description": "HackVerse MVP - a realtime hackathon lobby powered by GitHub activity.",
   "scripts": {
     "dev": "next dev",
+    "dev:webhook": "node server/express-webhook.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext .ts,.tsx",
@@ -16,6 +17,8 @@
     "@react-three/fiber": "^8.17.10",
     "@supabase/supabase-js": "^2.48.1",
     "clsx": "^2.1.1",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
     "lucide-react": "^0.468.0",
     "next": "^14.2.22",
     "react": "^18.3.1",
