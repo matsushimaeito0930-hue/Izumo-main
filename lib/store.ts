@@ -913,6 +913,112 @@ export async function joinTeamWithInvite(input: {
   };
 }
 
+export async function joinTeamByName(input: {
+  teamName: string;
+  displayName: string;
+  githubUsername?: string;
+}): Promise<AppSession> {
+  const teamName = input.teamName.trim();
+  const displayName = input.displayName.trim();
+  const githubUsername =
+    input.githubUsername?.trim() || `guest-${randomUUID().slice(0, 8)}`;
+
+  if (!teamName || !displayName) {
+    throw new Error("Team name and display name are required.");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: team, error: teamError } = await supabase
+        .from("teams")
+        .select("*")
+        .eq("name", teamName)
+        .maybeSingle();
+
+      if (teamError) throw teamError;
+      if (!team) throw new Error("Team name was not found.");
+
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .upsert(
+          {
+            github_username: githubUsername,
+            display_name: displayName,
+            role: "participant"
+          },
+          { onConflict: "github_username" }
+        )
+        .select("*")
+        .single();
+
+      if (userError) throw userError;
+
+      const { error: memberError } = await supabase.from("team_members").upsert(
+        {
+          team_id: team.id,
+          user_id: user.id
+        },
+        { onConflict: "team_id,user_id" }
+      );
+
+      if (memberError) throw memberError;
+
+      return {
+        role: "participant",
+        displayName,
+        githubUsername,
+        teamId: team.id,
+        teamName: team.name
+      };
+    }
+  }
+
+  const store = getMemoryStore();
+  const team = store.teams.find(
+    (candidate) => candidate.name.trim().toLowerCase() === teamName.toLowerCase()
+  );
+
+  if (!team) {
+    throw new Error("Team name was not found.");
+  }
+
+  let user = store.users.find(
+    (candidate) => candidate.github_username === githubUsername
+  );
+  if (!user) {
+    user = {
+      id: randomUUID(),
+      github_username: githubUsername,
+      display_name: displayName,
+      avatar_url: null,
+      role: "participant",
+      created_at: new Date().toISOString()
+    };
+    store.users.push(user);
+  }
+
+  if (
+    !store.teamMembers.some(
+      (member) => member.team_id === team.id && member.user_id === user.id
+    )
+  ) {
+    store.teamMembers.push({
+      id: randomUUID(),
+      team_id: team.id,
+      user_id: user.id
+    });
+  }
+
+  return {
+    role: "participant",
+    displayName,
+    githubUsername,
+    teamId: team.id,
+    teamName: team.name
+  };
+}
+
 export async function createMentorSession(input: {
   displayName: string;
   githubUsername?: string;

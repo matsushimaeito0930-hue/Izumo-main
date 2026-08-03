@@ -12,7 +12,7 @@ import {
   Plus,
   TriangleAlert
 } from "lucide-react";
-import type { AppSession, TeamInviteView, UserRole } from "@/lib/types";
+import type { AppSession, Team, TeamInviteView, UserRole } from "@/lib/types";
 
 type Viewer = {
   login: string;
@@ -83,19 +83,21 @@ function Collapsible({
 
 export function OnboardingClient({
   initialInvites,
+  initialTeams,
   authConfigured,
   viewer
 }: {
   initialInvites: TeamInviteView[];
+  initialTeams: Team[];
   authConfigured: boolean;
   viewer: Viewer | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [invites, setInvites] = useState(initialInvites);
-  const [teamName, setTeamName] = useState("");
+  const [teamName, setTeamName] = useState(initialTeams[0]?.name ?? "");
+  const [newTeamName, setNewTeamName] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
-  const [joinCode, setJoinCode] = useState(initialInvites[0]?.code ?? "");
   const [displayName, setDisplayName] = useState("");
   const [specialty, setSpecialty] = useState("JavaScript / リアルタイム通信");
   const [message, setMessage] = useState("");
@@ -109,14 +111,17 @@ export function OnboardingClient({
   useEffect(() => {
     const inviteCode = searchParams.get("invite");
     if (inviteCode) {
-      setJoinCode(inviteCode.toUpperCase());
+      const invite = initialInvites.find(
+        (candidate) => candidate.code === inviteCode.toUpperCase()
+      );
+      if (invite) setTeamName(invite.team_name);
     }
 
     const authError = searchParams.get("auth_error");
     if (authError) {
       setMessage(authErrorMessages[authError] ?? "ログインに失敗しました。");
     }
-  }, [searchParams]);
+  }, [initialInvites, searchParams]);
 
   async function createInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,7 +132,7 @@ export function OnboardingClient({
       const response = await fetch("/api/admin/invites", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ teamName, githubRepo })
+        body: JSON.stringify({ teamName: newTeamName, githubRepo })
       });
       const payload = (await response.json()) as {
         invite: TeamInviteView;
@@ -137,8 +142,8 @@ export function OnboardingClient({
       if (!response.ok) throw new Error(payload.error ?? "招待コードを作成できませんでした。");
 
       setInvites((current) => [payload.invite, ...current]);
-      setJoinCode(payload.invite.code);
-      setTeamName("");
+      setTeamName(payload.invite.team_name);
+      setNewTeamName("");
       setGithubRepo("");
       setMessage(`招待コード ${payload.invite.code} を作成しました。`);
     } catch (error) {
@@ -154,11 +159,11 @@ export function OnboardingClient({
     setMessage("");
 
     try {
-      const response = await fetch("/api/invites/join", {
+      const response = await fetch("/api/teams/join", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          code: joinCode,
+          teamName,
           displayName: manualEntry ? displayName : undefined
         })
       });
@@ -257,14 +262,30 @@ export function OnboardingClient({
               </div>
 
               <form onSubmit={joinTeam} className="space-y-4">
-                <Field label="運営からもらった招待コード">
-                  <input
-                    value={joinCode}
-                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                    className={inputClass}
-                    placeholder="TEAM-A"
-                    required
-                  />
+                <Field label="チーム名">
+                  {initialTeams.length > 0 ? (
+                    <select
+                      value={teamName}
+                      onChange={(event) => setTeamName(event.target.value)}
+                      className={inputClass}
+                      required
+                    >
+                      <option value="">チームを選択</option>
+                      {initialTeams.map((team) => (
+                        <option key={team.id} value={team.name}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={teamName}
+                      onChange={(event) => setTeamName(event.target.value)}
+                      className={inputClass}
+                      placeholder="例）チーム出雲"
+                      required
+                    />
+                  )}
                 </Field>
                 <button type="submit" disabled={isBusy} className={primaryButtonClass}>
                   <DoorOpen className="size-4" />
@@ -277,7 +298,7 @@ export function OnboardingClient({
               <ol className="mb-5 space-y-2.5 text-sm text-ink2">
                 {[
                   "GitHubでログインする",
-                  "運営からもらった招待コードを入れる",
+                  "参加するチーム名を選ぶ",
                   "あとはいつも通り開発するだけ"
                 ].map((step, index) => (
                   <li key={step} className="flex items-start gap-2.5">
@@ -301,14 +322,30 @@ export function OnboardingClient({
                   GitHubログインは未設定です。いまは名前を入れて参加できます。
                 </span>
               </div>
-              <Field label="招待コード">
-                <input
-                  value={joinCode}
-                  onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                  className={inputClass}
-                  placeholder="TEAM-A"
-                  required
-                />
+              <Field label="チーム名">
+                {initialTeams.length > 0 ? (
+                  <select
+                    value={teamName}
+                    onChange={(event) => setTeamName(event.target.value)}
+                    className={inputClass}
+                    required
+                  >
+                    <option value="">チームを選択</option>
+                    {initialTeams.map((team) => (
+                      <option key={team.id} value={team.name}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={teamName}
+                    onChange={(event) => setTeamName(event.target.value)}
+                    className={inputClass}
+                    placeholder="例）チーム出雲"
+                    required
+                  />
+                )}
               </Field>
               <Field label="表示名">
                 <input
@@ -337,12 +374,12 @@ export function OnboardingClient({
         </div>
 
         {canJoin && (
-          <Collapsible title="運営の方：チームを登録して招待コードを作る">
+          <Collapsible title="運営の方：チームを登録する">
             <form onSubmit={createInvite} className="space-y-4">
               <Field label="チーム名">
                 <input
-                  value={teamName}
-                  onChange={(event) => setTeamName(event.target.value)}
+                  value={newTeamName}
+                  onChange={(event) => setNewTeamName(event.target.value)}
                   className={inputClass}
                   placeholder="例）チーム出雲"
                   required

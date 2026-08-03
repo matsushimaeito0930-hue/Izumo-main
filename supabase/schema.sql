@@ -22,6 +22,9 @@ create table if not exists public.teams (
 alter table public.teams
   add column if not exists commit_count integer not null default 0;
 
+create unique index if not exists teams_name_lower_idx
+  on public.teams (lower(name));
+
 create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
