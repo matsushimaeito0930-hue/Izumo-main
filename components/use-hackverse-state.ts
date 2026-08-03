@@ -1,17 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import type { ActivityType, HackVerseState } from "@/lib/types";
+import type {
+  ActivityType,
+  ChatChannel,
+  ChatMessage,
+  HackVerseState
+} from "@/lib/types";
 
 type RealtimeStatus = "fallback-polling" | "connecting" | "connected" | "error";
 
 export function useHackVerseState(initialState: HackVerseState) {
   const [state, setState] = useState(initialState);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastActivityId, setLastActivityId] = useState(
-    initialState.activities[0]?.id ?? ""
-  );
+  // 初回表示では光らせない。あとから届いたイベントだけをハイライトする。
+  const [lastActivityId, setLastActivityId] = useState("");
+  const newestActivityIdRef = useRef(initialState.activities[0]?.id ?? "");
   const [realtimeStatus, setRealtimeStatus] =
     useState<RealtimeStatus>("fallback-polling");
 
@@ -23,8 +28,14 @@ export function useHackVerseState(initialState: HackVerseState) {
         return;
       }
       const nextState = (await response.json()) as HackVerseState;
+      const newestId = nextState.activities[0]?.id ?? "";
+
+      if (newestId && newestId !== newestActivityIdRef.current) {
+        newestActivityIdRef.current = newestId;
+        setLastActivityId(newestId);
+      }
+
       setState(nextState);
-      setLastActivityId(nextState.activities[0]?.id ?? "");
     } finally {
       setIsRefreshing(false);
     }
@@ -69,7 +80,17 @@ export function useHackVerseState(initialState: HackVerseState) {
         { event: "*", schema: "public", table: "help_posts" },
         scheduleRefresh
       )
-      .subscribe((status) => {
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "help_replies" },
+        scheduleRefresh
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_messages" },
+        scheduleRefresh
+      )
+      .subscribe((status: string) => {
         if (status === "SUBSCRIBED") {
           setRealtimeStatus("connected");
           return;
@@ -134,6 +155,68 @@ export function useHackVerseState(initialState: HackVerseState) {
     [refresh]
   );
 
+  const createHelpReply = useCallback(
+    async (input: { helpPostId: string; body: string; authorName?: string }) => {
+      const response = await fetch("/api/help/replies", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? "回答を投稿できませんでした。");
+      }
+
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const acceptHelpReply = useCallback(
+    async (input: { helpPostId: string; replyId: string }) => {
+      const response = await fetch("/api/help/replies/accept", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? "採用できませんでした。");
+      }
+
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const createChatMessage = useCallback(
+    async (input: {
+      channel: ChatChannel;
+      teamId?: string;
+      authorName: string;
+      authorRole: ChatMessage["author_role"];
+      body: string;
+    }) => {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(input)
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? "Message could not be sent.");
+      }
+
+      await refresh();
+    },
+    [refresh]
+  );
+
   return useMemo(
     () => ({
       state,
@@ -142,7 +225,10 @@ export function useHackVerseState(initialState: HackVerseState) {
       lastActivityId,
       refresh,
       triggerDemoEvent,
-      createHelp
+      createHelp,
+      createHelpReply,
+      acceptHelpReply,
+      createChatMessage
     }),
     [
       state,
@@ -151,7 +237,10 @@ export function useHackVerseState(initialState: HackVerseState) {
       lastActivityId,
       refresh,
       triggerDemoEvent,
-      createHelp
+      createHelp,
+      createHelpReply,
+      acceptHelpReply,
+      createChatMessage
     ]
   );
 }

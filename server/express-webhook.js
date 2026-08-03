@@ -13,14 +13,6 @@ const SCORE_BY_ACTIVITY = {
   review: 10
 };
 
-const ACTIVITY_ICONS = {
-  push: "🔥",
-  pull_request_opened: "🚀",
-  pull_request_merged: "🎉",
-  issue_closed: "✅",
-  review: "👀"
-};
-
 function getHouseLevel(score) {
   if (score >= 600) return 4;
   if (score >= 300) return 3;
@@ -110,26 +102,24 @@ function parseGitHubWebhook(eventName, payload) {
 }
 
 function makeActivityMessage(teamName, type, metadata) {
-  const icon = ACTIVITY_ICONS[type];
-
   if (type === "push") {
     const count = typeof metadata.commitCount === "number" ? metadata.commitCount : 1;
-    return `${icon} ${teamName} pushed ${count} commit${count === 1 ? "" : "s"}`;
+    return `${teamName} が ${count} 件のコミットをプッシュしました`;
   }
 
   if (type === "pull_request_opened") {
-    return `${icon} ${teamName} opened PR #${metadata.number ?? "?"}`;
+    return `${teamName} が PR #${metadata.number ?? "?"} を作成しました`;
   }
 
   if (type === "pull_request_merged") {
-    return `${icon} ${teamName} merged PR #${metadata.number ?? "?"}`;
+    return `${teamName} が PR #${metadata.number ?? "?"} をマージしました`;
   }
 
   if (type === "issue_closed") {
-    return `${icon} ${teamName} closed Issue #${metadata.number ?? "?"}`;
+    return `${teamName} が Issue #${metadata.number ?? "?"} をクローズしました`;
   }
 
-  return `${icon} ${teamName} reviewed a pull request`;
+  return `${teamName} がプルリクエストをレビューしました`;
 }
 
 function createSupabase() {

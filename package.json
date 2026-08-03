@@ -2,7 +2,7 @@
   "name": "hackverse",
   "version": "0.1.0",
   "private": true,
-  "description": "HackVerse MVP - a realtime hackathon lobby powered by GitHub activity.",
+  "description": "HackVerse - GitHubの活動をリアルタイムに可視化するハッカソン運営ダッシュボード。",
   "scripts": {
     "dev": "next dev",
     "dev:webhook": "node server/express-webhook.js",
@@ -10,11 +10,10 @@
     "start": "next start",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify:core": "node --experimental-strip-types scripts/verify-core.ts"
   },
   "dependencies": {
-    "@react-three/drei": "^9.122.0",
-    "@react-three/fiber": "^8.17.10",
     "@supabase/supabase-js": "^2.48.1",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.7",
@@ -22,14 +21,12 @@
     "lucide-react": "^0.468.0",
     "next": "^14.2.22",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "three": "^0.171.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
-    "@types/three": "^0.171.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.22",

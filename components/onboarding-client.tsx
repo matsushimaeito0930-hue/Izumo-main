@@ -1,80 +1,120 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Clipboard,
+  ChevronDown,
   DoorOpen,
+  Github,
   GraduationCap,
-  LogIn,
+  LogOut,
   Plus,
-  ShieldCheck,
-  Users
+  TriangleAlert
 } from "lucide-react";
-import type { AppSession, TeamInviteView } from "@/lib/types";
+import type { AppSession, TeamInviteView, UserRole } from "@/lib/types";
 
-type InviteResponse = {
-  invite: TeamInviteView;
+type Viewer = {
+  login: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: UserRole;
 };
 
-type JoinResponse = {
-  session: AppSession;
+const roleLabels: Record<UserRole, string> = {
+  participant: "参加者",
+  mentor: "メンター",
+  admin: "運営"
+};
+
+const authErrorMessages: Record<string, string> = {
+  not_configured: "GitHubログインが未設定です。環境変数を確認してください。",
+  denied: "GitHubの認可がキャンセルされました。",
+  state_mismatch: "認証の検証に失敗しました。もう一度お試しください。",
+  exchange_failed: "GitHubとの通信に失敗しました。もう一度お試しください。"
 };
 
 function saveSession(session: AppSession) {
   window.localStorage.setItem("hackverse-session", JSON.stringify(session));
 }
 
-function Field({
-  label,
-  children
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+const inputClass =
+  "h-11 w-full rounded-xl border border-line bg-paper px-3 text-sm text-ink shadow-inset outline-none transition-colors placeholder:text-muted/70 hover:border-lineStrong focus:border-pulse";
+
+const primaryButtonClass =
+  "flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none";
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-white/55">
-        {label}
-      </span>
+      <span className="mb-1.5 block text-xs font-medium text-ink2">{label}</span>
       {children}
     </label>
   );
 }
 
-const inputClass =
-  "h-11 w-full rounded-md border border-white/12 bg-void px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-pulse";
+/** 運営・メンター向けの操作は普段畳んでおく。参加者の視界に入れない。 */
+function Collapsible({
+  title,
+  children
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="rounded-2xl border border-line/70 bg-surface shadow-soft">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-ink2 transition-colors hover:text-ink"
+      >
+        {title}
+        <ChevronDown
+          className={`size-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+      {isOpen && <div className="border-t border-line p-4">{children}</div>}
+    </div>
+  );
+}
 
 export function OnboardingClient({
-  initialInvites
+  initialInvites,
+  authConfigured,
+  viewer
 }: {
   initialInvites: TeamInviteView[];
+  authConfigured: boolean;
+  viewer: Viewer | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [invites, setInvites] = useState(initialInvites);
   const [teamName, setTeamName] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
-  const [invitedBy, setInvitedBy] = useState("HackVerse Admin");
   const [joinCode, setJoinCode] = useState(initialInvites[0]?.code ?? "");
   const [displayName, setDisplayName] = useState("");
-  const [githubUsername, setGithubUsername] = useState("");
-  const [mentorName, setMentorName] = useState("");
-  const [mentorGithub, setMentorGithub] = useState("");
-  const [specialty, setSpecialty] = useState("JavaScript / Realtime");
+  const [specialty, setSpecialty] = useState("JavaScript / リアルタイム通信");
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
 
-  const latestInvite = invites[0];
-  const inviteLink = useMemo(() => {
-    if (!latestInvite || typeof window === "undefined") return "";
-    return `${window.location.origin}/?invite=${latestInvite.code}`;
-  }, [latestInvite]);
+  // GitHubログイン未設定のローカル環境だけ、手入力での参加を許す。
+  const manualEntry = !authConfigured;
+  const canJoin = manualEntry || Boolean(viewer);
+  const isStaff = viewer?.role === "mentor" || viewer?.role === "admin";
 
   useEffect(() => {
     const inviteCode = searchParams.get("invite");
     if (inviteCode) {
       setJoinCode(inviteCode.toUpperCase());
+    }
+
+    const authError = searchParams.get("auth_error");
+    if (authError) {
+      setMessage(authErrorMessages[authError] ?? "ログインに失敗しました。");
     }
   }, [searchParams]);
 
@@ -87,19 +127,22 @@ export function OnboardingClient({
       const response = await fetch("/api/admin/invites", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ teamName, githubRepo, invitedBy })
+        body: JSON.stringify({ teamName, githubRepo })
       });
-      const payload = (await response.json()) as InviteResponse & { error?: string };
+      const payload = (await response.json()) as {
+        invite: TeamInviteView;
+        error?: string;
+      };
 
-      if (!response.ok) throw new Error(payload.error ?? "Invite creation failed.");
+      if (!response.ok) throw new Error(payload.error ?? "招待コードを作成できませんでした。");
 
       setInvites((current) => [payload.invite, ...current]);
       setJoinCode(payload.invite.code);
       setTeamName("");
       setGithubRepo("");
-      setMessage(`${payload.invite.team_name} の招待コードを作成しました。`);
+      setMessage(`招待コード ${payload.invite.code} を作成しました。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "招待コードの作成に失敗しました。");
+      setMessage(error instanceof Error ? error.message : "作成に失敗しました。");
     } finally {
       setIsBusy(false);
     }
@@ -116,18 +159,17 @@ export function OnboardingClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           code: joinCode,
-          displayName,
-          githubUsername
+          displayName: manualEntry ? displayName : undefined
         })
       });
-      const payload = (await response.json()) as JoinResponse & { error?: string };
+      const payload = (await response.json()) as { session: AppSession; error?: string };
 
-      if (!response.ok) throw new Error(payload.error ?? "Join failed.");
+      if (!response.ok) throw new Error(payload.error ?? "チームに参加できませんでした。");
 
       saveSession(payload.session);
-      router.push("/plaza");
+      router.push("/dashboard");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "チーム参加に失敗しました。");
+      setMessage(error instanceof Error ? error.message : "参加に失敗しました。");
     } finally {
       setIsBusy(false);
     }
@@ -143,205 +185,123 @@ export function OnboardingClient({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          displayName: mentorName,
-          githubUsername: mentorGithub,
-          specialty
+          specialty,
+          displayName: manualEntry ? displayName : undefined
         })
       });
-      const payload = (await response.json()) as JoinResponse & { error?: string };
+      const payload = (await response.json()) as { session: AppSession; error?: string };
 
-      if (!response.ok) throw new Error(payload.error ?? "Mentor join failed.");
+      if (!response.ok) throw new Error(payload.error ?? "登録に失敗しました。");
 
       saveSession(payload.session);
       router.push("/help");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "メンター参加に失敗しました。");
+      setMessage(error instanceof Error ? error.message : "登録に失敗しました。");
     } finally {
       setIsBusy(false);
     }
   }
 
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.localStorage.removeItem("hackverse-session");
+    router.refresh();
+  }
+
   return (
-    <main className="min-h-screen bg-transparent px-5 py-6">
-      <div className="mx-auto max-w-7xl">
-        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
-          <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-md border border-pulse/35 bg-pulse/10 text-lg font-black text-white shadow-neon">
-              HV
-            </span>
-            <div>
-              <p className="text-sm font-black uppercase tracking-[0.18em] text-pulse">
-                HackVerse
-              </p>
-              <h1 className="text-2xl font-black text-white">
-                チーム招待から始めるハッカソンロビー
-              </h1>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="flex h-10 items-center gap-2 rounded-md border border-white/12 bg-white/[0.06] px-3 text-sm font-bold text-white/75 transition hover:bg-white/10 hover:text-white"
-          >
-            <DoorOpen className="size-4" />
-            ロビーを見る
-          </button>
-        </header>
+    <main className="min-h-screen bg-paper px-4 py-10 sm:px-6">
+      <div className="mx-auto w-full max-w-md space-y-5">
+        <div className="text-center">
+          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-pulse text-base font-bold text-white shadow-btn">
+            HV
+          </span>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-ink">HackVerse</h1>
+          <p className="mt-1.5 text-sm leading-6 text-muted">
+            GitHubにプッシュすると、チームの進み具合が自動で見える場所です。
+          </p>
+        </div>
 
-        <section className="grid gap-6 py-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-lg border border-white/10 bg-panel/80 p-6 shadow-neon">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-pulse">
-              Event Setup
-            </p>
-            <h2 className="mt-3 max-w-2xl text-4xl font-black leading-tight text-white">
-              運営がチームを招待し、参加者はコードで入る。
-            </h2>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-white/64">
-              GitHub repoをチームに紐づけると、pushやPRがそのチームの家・ランキング・
-              Live Activityに反映されます。まずは運営が招待コードを発行してください。
-            </p>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-md border border-white/10 bg-white/[0.045] p-4">
-                <ShieldCheck className="size-5 text-pulse" />
-                <p className="mt-3 text-sm font-black text-white">運営</p>
-                <p className="mt-1 text-xs text-white/55">チームとrepoを登録</p>
-              </div>
-              <div className="rounded-md border border-white/10 bg-white/[0.045] p-4">
-                <Users className="size-5 text-sun" />
-                <p className="mt-3 text-sm font-black text-white">参加者</p>
-                <p className="mt-1 text-xs text-white/55">招待コードで入場</p>
-              </div>
-              <div className="rounded-md border border-white/10 bg-white/[0.045] p-4">
-                <GraduationCap className="size-5 text-hot" />
-                <p className="mt-3 text-sm font-black text-white">メンター</p>
-                <p className="mt-1 text-xs text-white/55">HELPを見て支援</p>
-              </div>
-            </div>
-
-            {message && (
-              <div className="mt-5 rounded-md border border-sun/25 bg-sun/10 px-4 py-3 text-sm font-bold text-sun">
-                {message}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-lg border border-white/10 bg-panel/80 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.28)]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-sm font-black uppercase tracking-[0.16em] text-white/70">
-                Latest Invites
-              </h2>
-              <span className="rounded bg-pulse/10 px-2 py-1 text-xs font-black text-pulse">
-                {invites.length} active
-              </span>
-            </div>
-            <div className="space-y-3">
-              {invites.slice(0, 4).map((invite) => (
+        <div className="rounded-2xl border border-line/70 bg-surface p-5 shadow-card">
+          {viewer ? (
+            <>
+              <div className="mb-4 flex items-center gap-3 rounded-xl border border-line/70 bg-sand/60 p-3 shadow-inset">
+                {viewer.avatarUrl ? (
+                  <Image
+                    src={viewer.avatarUrl}
+                    alt=""
+                    width={36}
+                    height={36}
+                    className="size-9 rounded-full"
+                  />
+                ) : (
+                  <span className="grid size-9 place-items-center rounded-full bg-paper2 text-sm text-muted">
+                    {viewer.displayName.slice(0, 1)}
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {viewer.displayName}
+                  </p>
+                  <p className="truncate font-mono text-xs text-muted">
+                    @{viewer.login}・{roleLabels[viewer.role]}
+                  </p>
+                </div>
                 <button
-                  key={invite.id}
                   type="button"
-                  onClick={() => setJoinCode(invite.code)}
-                  className="w-full rounded-md border border-white/10 bg-white/[0.045] p-3 text-left transition hover:border-pulse/45 hover:bg-pulse/10"
+                  onClick={logout}
+                  aria-label="ログアウト"
+                  className="grid size-8 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted shadow-soft transition-colors hover:text-ink"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-white">
-                        {invite.team_name}
-                      </p>
-                      <p className="truncate text-xs text-white/45">
-                        {invite.github_repo}
-                      </p>
-                    </div>
-                    <code className="rounded bg-void px-2 py-1 text-xs font-black text-pulse">
-                      {invite.code}
-                    </code>
-                  </div>
+                  <LogOut className="size-3.5" />
                 </button>
-              ))}
-            </div>
-            {latestInvite && (
-              <button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(inviteLink || latestInvite.code);
-                  setMessage("最新の招待リンクをコピーしました。");
-                }}
-                className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-pulse/35 bg-pulse/10 text-sm font-black text-pulse transition hover:bg-pulse/18"
-              >
-                <Clipboard className="size-4" />
-                最新招待リンクをコピー
-              </button>
-            )}
-          </div>
-        </section>
-
-        <section className="grid gap-5 lg:grid-cols-3">
-          <form
-            onSubmit={createInvite}
-            className="rounded-lg border border-white/10 bg-panel/80 p-5"
-          >
-            <div className="mb-5 flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-md bg-pulse/10 text-pulse">
-                <ShieldCheck className="size-5" />
-              </span>
-              <div>
-                <h2 className="text-lg font-black text-white">運営として招待</h2>
-                <p className="text-xs text-white/50">チームとGitHub repoを登録</p>
               </div>
-            </div>
-            <div className="space-y-4">
-              <Field label="Team Name">
-                <input
-                  value={teamName}
-                  onChange={(event) => setTeamName(event.target.value)}
-                  className={inputClass}
-                  placeholder="Team Izumo"
-                  required
-                />
-              </Field>
-              <Field label="GitHub Repo">
-                <input
-                  value={githubRepo}
-                  onChange={(event) => setGithubRepo(event.target.value)}
-                  className={inputClass}
-                  placeholder="owner/repository"
-                  required
-                />
-              </Field>
-              <Field label="Invited By">
-                <input
-                  value={invitedBy}
-                  onChange={(event) => setInvitedBy(event.target.value)}
-                  className={inputClass}
-                  placeholder="HackVerse Admin"
-                />
-              </Field>
-              <button
-                type="submit"
-                disabled={isBusy}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-pulse px-4 text-sm font-black text-void transition hover:bg-pulse/90 disabled:opacity-50"
-              >
-                <Plus className="size-4" />
-                招待コードを作成
-              </button>
-            </div>
-          </form>
 
-          <form
-            onSubmit={joinTeam}
-            className="rounded-lg border border-white/10 bg-panel/80 p-5"
-          >
-            <div className="mb-5 flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-md bg-sun/10 text-sun">
-                <LogIn className="size-5" />
-              </span>
-              <div>
-                <h2 className="text-lg font-black text-white">招待コードで参加</h2>
-                <p className="text-xs text-white/50">参加者としてPlazaへ入る</p>
+              <form onSubmit={joinTeam} className="space-y-4">
+                <Field label="運営からもらった招待コード">
+                  <input
+                    value={joinCode}
+                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                    className={inputClass}
+                    placeholder="TEAM-A"
+                    required
+                  />
+                </Field>
+                <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+                  <DoorOpen className="size-4" />
+                  チームに参加する
+                </button>
+              </form>
+            </>
+          ) : authConfigured ? (
+            <>
+              <ol className="mb-5 space-y-2.5 text-sm text-ink2">
+                {[
+                  "GitHubでログインする",
+                  "運営からもらった招待コードを入れる",
+                  "あとはいつも通り開発するだけ"
+                ].map((step, index) => (
+                  <li key={step} className="flex items-start gap-2.5">
+                    <span className="grid size-5 shrink-0 place-items-center rounded-full bg-paper2 text-xs font-medium text-muted shadow-inset">
+                      {index + 1}
+                    </span>
+                    <span className="leading-5">{step}</span>
+                  </li>
+                ))}
+              </ol>
+              <a href="/api/auth/github" className={primaryButtonClass}>
+                <Github className="size-5" />
+                GitHubでログイン
+              </a>
+            </>
+          ) : (
+            <form onSubmit={joinTeam} className="space-y-4">
+              <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  GitHubログインは未設定です。いまは名前を入れて参加できます。
+                </span>
               </div>
-            </div>
-            <div className="space-y-4">
-              <Field label="Invite Code">
+              <Field label="招待コード">
                 <input
                   value={joinCode}
                   onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
@@ -350,66 +310,91 @@ export function OnboardingClient({
                   required
                 />
               </Field>
-              <Field label="Display Name">
+              <Field label="表示名">
                 <input
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
                   className={inputClass}
-                  placeholder="Matsu"
+                  placeholder="例）まつ"
                   required
                 />
               </Field>
-              <Field label="GitHub Username">
-                <input
-                  value={githubUsername}
-                  onChange={(event) => setGithubUsername(event.target.value)}
-                  className={inputClass}
-                  placeholder="matsushimaeito0930-hue"
-                />
-              </Field>
-              <button
-                type="submit"
-                disabled={isBusy}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-sun px-4 text-sm font-black text-void transition hover:bg-sun/90 disabled:opacity-50"
-              >
+              <button type="submit" disabled={isBusy} className={primaryButtonClass}>
                 <DoorOpen className="size-4" />
-                Plazaへ入る
+                チームに参加する
               </button>
-            </div>
-          </form>
+            </form>
+          )}
 
-          <form
-            onSubmit={joinMentor}
-            className="rounded-lg border border-white/10 bg-panel/80 p-5"
-          >
-            <div className="mb-5 flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-md bg-hot/10 text-hot">
-                <GraduationCap className="size-5" />
-              </span>
-              <div>
-                <h2 className="text-lg font-black text-white">メンターとして入る</h2>
-                <p className="text-xs text-white/50">HELP投稿を見て支援する</p>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <Field label="Display Name">
+          {message && (
+            <p
+              role="status"
+              className="mt-4 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft"
+            >
+              {message}
+            </p>
+          )}
+        </div>
+
+        {canJoin && (
+          <Collapsible title="運営の方：チームを登録して招待コードを作る">
+            <form onSubmit={createInvite} className="space-y-4">
+              <Field label="チーム名">
                 <input
-                  value={mentorName}
-                  onChange={(event) => setMentorName(event.target.value)}
+                  value={teamName}
+                  onChange={(event) => setTeamName(event.target.value)}
                   className={inputClass}
-                  placeholder="JavaScript Mentor"
+                  placeholder="例）チーム出雲"
                   required
                 />
               </Field>
-              <Field label="GitHub Username">
+              <Field label="GitHubリポジトリ">
                 <input
-                  value={mentorGithub}
-                  onChange={(event) => setMentorGithub(event.target.value)}
+                  value={githubRepo}
+                  onChange={(event) => setGithubRepo(event.target.value)}
                   className={inputClass}
-                  placeholder="mentor-user"
+                  placeholder="owner/repository"
+                  required
                 />
               </Field>
-              <Field label="Specialty">
+              <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+                <Plus className="size-4" />
+                招待コードを作る
+              </button>
+            </form>
+
+            {invites.length > 0 && (
+              <ul className="mt-4 space-y-2 border-t border-line pt-4">
+                {invites.slice(0, 4).map((invite) => (
+                  <li
+                    key={invite.id}
+                    className="flex items-center justify-between gap-3 text-xs"
+                  >
+                    <span className="min-w-0 truncate text-ink2">{invite.team_name}</span>
+                    <code className="shrink-0 rounded-lg bg-paper px-2 py-1 font-mono font-bold text-pulse shadow-inset">
+                      {invite.code}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Collapsible>
+        )}
+
+        {(isStaff || manualEntry) && (
+          <Collapsible title="メンターの方：担当として登録する">
+            <form onSubmit={joinMentor} className="space-y-4">
+              {manualEntry && !viewer && (
+                <Field label="表示名">
+                  <input
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    className={inputClass}
+                    placeholder="例）JavaScript メンター"
+                  />
+                </Field>
+              )}
+              <Field label="得意分野">
                 <input
                   value={specialty}
                   onChange={(event) => setSpecialty(event.target.value)}
@@ -418,17 +403,13 @@ export function OnboardingClient({
                   required
                 />
               </Field>
-              <button
-                type="submit"
-                disabled={isBusy}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-hot px-4 text-sm font-black text-white transition hover:bg-hot/90 disabled:opacity-50"
-              >
+              <button type="submit" disabled={isBusy} className={primaryButtonClass}>
                 <GraduationCap className="size-4" />
-                HELPを見る
+                メンターとして入る
               </button>
-            </div>
-          </form>
-        </section>
+            </form>
+          </Collapsible>
+        )}
       </div>
     </main>
   );

@@ -1,14 +1,12 @@
 import { randomUUID } from "node:crypto";
-import {
-  ACTIVITY_ICONS,
-  ACTIVITY_LABELS,
-  SCORE_BY_ACTIVITY
-} from "@/lib/constants";
+import { ACTIVITY_LABELS, SCORE_BY_ACTIVITY } from "@/lib/constants";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getHouseLevel } from "@/lib/house";
 import {
   seedActivities,
+  seedChatMessages,
   seedHelpPosts,
+  seedHelpReplies,
   seedMentors,
   seedTeamInvites,
   seedTeamMembers,
@@ -21,9 +19,12 @@ import type {
   ActivityType,
   ActivityView,
   AppSession,
+  ChatChannel,
+  ChatMessage,
   HackVerseState,
   HelpPost,
   HelpPostView,
+  HelpReply,
   HelpStatus,
   Mentor,
   MentorProfile,
@@ -39,7 +40,9 @@ type MemoryStore = {
   teams: Team[];
   activities: Activity[];
   helpPosts: HelpPost[];
+  helpReplies: HelpReply[];
   mentors: Mentor[];
+  messages: ChatMessage[];
   teamMembers: TeamMember[];
   teamInvites: TeamInvite[];
 };
@@ -60,7 +63,9 @@ function cloneStore(): MemoryStore {
     users: structuredClone(seedUsers),
     teams: structuredClone(seedTeams),
     activities: structuredClone(seedActivities),
+    messages: structuredClone(seedChatMessages),
     helpPosts: structuredClone(seedHelpPosts),
+    helpReplies: structuredClone(seedHelpReplies),
     mentors: structuredClone(seedMentors),
     teamMembers: structuredClone(seedTeamMembers),
     teamInvites: structuredClone(seedTeamInvites)
@@ -77,7 +82,9 @@ function withViews(
   teams: Team[],
   activities: Activity[],
   helpPosts: HelpPost[],
-  mentors: Mentor[]
+  helpReplies: HelpReply[],
+  mentors: Mentor[],
+  messages: ChatMessage[]
 ): HackVerseState {
   const teamsById = new Map(teams.map((team) => [team.id, team]));
   const usersById = new Map(users.map((user) => [user.id, user]));
@@ -89,11 +96,24 @@ function withViews(
     }))
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 
+  const repliesByPost = new Map<string, HelpReply[]>();
+  for (const reply of helpReplies) {
+    const bucket = repliesByPost.get(reply.help_post_id) ?? [];
+    bucket.push(reply);
+    repliesByPost.set(reply.help_post_id, bucket);
+  }
+
   const helpPostViews: HelpPostView[] = helpPosts
     .map((post) => ({
       ...post,
-      author_name: usersById.get(post.user_id)?.display_name ?? "Anonymous",
-      team_name: teamsById.get(post.team_id)?.name ?? "Unknown Team"
+      author_name: usersById.get(post.user_id)?.display_name ?? "匿名",
+      author_github: usersById.get(post.user_id)?.github_username ?? null,
+      team_name: teamsById.get(post.team_id)?.name ?? "不明なチーム",
+      replies: (repliesByPost.get(post.id) ?? []).sort((a, b) => {
+        // 採用された回答を先頭に、それ以外は古い順。
+        if (a.is_accepted !== b.is_accepted) return a.is_accepted ? -1 : 1;
+        return Date.parse(a.created_at) - Date.parse(b.created_at);
+      })
     }))
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 
@@ -111,6 +131,9 @@ function withViews(
     activities: activityViews,
     helpPosts: helpPostViews,
     mentors: mentorProfiles,
+    messages: messages
+      .slice()
+      .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
     updatedAt: new Date().toISOString()
   };
 }
@@ -123,7 +146,9 @@ export async function getHackVerseState(): Promise<HackVerseState> {
       store.teams,
       store.activities,
       store.helpPosts,
-      store.mentors
+      store.helpReplies,
+      store.mentors,
+      store.messages
     );
   }
 
@@ -135,17 +160,33 @@ export async function getHackVerseState(): Promise<HackVerseState> {
       store.teams,
       store.activities,
       store.helpPosts,
-      store.mentors
+      store.helpReplies,
+      store.mentors,
+      store.messages
     );
   }
 
-  const [usersResult, teamsResult, activitiesResult, helpPostsResult, mentorsResult] =
+  const [
+    usersResult,
+    teamsResult,
+    activitiesResult,
+    helpPostsResult,
+    helpRepliesResult,
+    mentorsResult,
+    messagesResult
+  ] =
     await Promise.all([
       supabase.from("users").select("*"),
       supabase.from("teams").select("*"),
       supabase.from("activities").select("*").order("created_at", { ascending: false }).limit(30),
       supabase.from("help_posts").select("*").order("created_at", { ascending: false }).limit(30),
-      supabase.from("mentors").select("*")
+      supabase
+        .from("help_replies")
+        .select("*")
+        .order("created_at", { ascending: true })
+        .limit(200),
+      supabase.from("mentors").select("*"),
+      supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).limit(80)
     ]);
 
   if (teamsResult.error || activitiesResult.error) {
@@ -155,7 +196,9 @@ export async function getHackVerseState(): Promise<HackVerseState> {
       store.teams,
       store.activities,
       store.helpPosts,
-      store.mentors
+      store.helpReplies,
+      store.mentors,
+      store.messages
     );
   }
 
@@ -164,7 +207,13 @@ export async function getHackVerseState(): Promise<HackVerseState> {
     ((teamsResult.data ?? seedTeams) as Team[]).map(normalizeTeam),
     (activitiesResult.data ?? seedActivities) as Activity[],
     (helpPostsResult.data ?? seedHelpPosts) as HelpPost[],
-    (mentorsResult.data ?? seedMentors) as Mentor[]
+    (helpRepliesResult.error
+      ? getMemoryStore().helpReplies
+      : (helpRepliesResult.data ?? seedHelpReplies)) as HelpReply[],
+    (mentorsResult.data ?? seedMentors) as Mentor[],
+    (messagesResult.error
+      ? getMemoryStore().messages
+      : (messagesResult.data ?? seedChatMessages)) as ChatMessage[]
   );
 }
 
@@ -173,29 +222,25 @@ function makeActivityMessage(
   type: ActivityType,
   metadata: Record<string, unknown>
 ): string {
-  const icon = ACTIVITY_ICONS[type];
-
   if (type === "push") {
     const commitCount =
       typeof metadata.commitCount === "number" ? metadata.commitCount : 1;
-    return `${icon} ${teamName} pushed ${commitCount} commit${
-      commitCount === 1 ? "" : "s"
-    }`;
+    return `${teamName} が ${commitCount} 件のコミットをプッシュしました`;
   }
 
   if (
     (type === "pull_request_opened" || type === "pull_request_merged") &&
     typeof metadata.number === "number"
   ) {
-    const verb = type === "pull_request_opened" ? "opened PR" : "merged PR";
-    return `${icon} ${teamName} ${verb} #${metadata.number}`;
+    const verb = type === "pull_request_opened" ? "を作成" : "をマージ";
+    return `${teamName} が PR #${metadata.number} ${verb}しました`;
   }
 
   if (type === "issue_closed" && typeof metadata.number === "number") {
-    return `${icon} ${teamName} closed Issue #${metadata.number}`;
+    return `${teamName} が Issue #${metadata.number} をクローズしました`;
   }
 
-  return `${icon} ${teamName} ${ACTIVITY_LABELS[type]}`;
+  return `${teamName} ${ACTIVITY_LABELS[type]}`;
 }
 
 async function findOrCreateSupabaseTeam(githubRepo: string, fallbackName: string) {
@@ -364,33 +409,109 @@ export async function recordActivity(input: {
   };
 }
 
+export async function createChatMessage(input: {
+  channel: ChatChannel;
+  teamId?: string;
+  authorName: string;
+  authorRole: ChatMessage["author_role"];
+  body: string;
+}): Promise<ChatMessage> {
+  const body = input.body.trim();
+  const authorName = input.authorName.trim() || "HackVerse user";
+
+  if (!body || body.length > 500) {
+    throw new Error("メッセージは1〜500文字で入力してください。");
+  }
+
+  // メンター相談もチームごとのスレッドにするため、どちらのチャンネルでもチームが要る。
+  if (!input.teamId) {
+    throw new Error("チームを選択してください。");
+  }
+
+  const message: ChatMessage = {
+    id: randomUUID(),
+    channel: input.channel,
+    team_id: input.teamId,
+    author_name: authorName,
+    author_role: input.authorRole,
+    body,
+    created_at: new Date().toISOString()
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .insert(message)
+        .select("*")
+        .single();
+
+      if (!error && data) {
+        return data as ChatMessage;
+      }
+    }
+  }
+
+  const store = getMemoryStore();
+  store.messages.push(message);
+  return message;
+}
+
 export async function createHelpPost(input: {
   teamId: string;
   title: string;
   body: string;
   category: string;
   status?: HelpStatus;
+  authorName?: string;
+  authorGithub?: string;
 }): Promise<HelpPostView> {
   const status = input.status ?? "open";
 
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
-      const [{ data: user }, { data: team }] = await Promise.all([
-        supabase.from("users").select("*").eq("role", "participant").limit(1).single(),
-        supabase.from("teams").select("*").eq("id", input.teamId).single()
-      ]);
+      const { data: team } = await supabase
+        .from("teams")
+        .select("*")
+        .eq("id", input.teamId)
+        .single();
 
-      const fallbackUser = user as User | null;
       const selectedTeam = team as Team | null;
 
       if (!selectedTeam) {
-        throw new Error("Selected team was not found.");
+        throw new Error("選択されたチームが見つかりません。");
+      }
+
+      // ログイン済みならその本人を、そうでなければ既存の参加者を投稿者にする。
+      let author: User | null = null;
+      if (input.authorGithub) {
+        const { data } = await supabase
+          .from("users")
+          .upsert(
+            {
+              github_username: input.authorGithub,
+              display_name: input.authorName ?? input.authorGithub
+            },
+            { onConflict: "github_username" }
+          )
+          .select("*")
+          .single();
+        author = data as User | null;
+      } else {
+        const { data } = await supabase
+          .from("users")
+          .select("*")
+          .eq("role", "participant")
+          .limit(1)
+          .single();
+        author = data as User | null;
       }
 
       const post: HelpPost = {
         id: randomUUID(),
-        user_id: fallbackUser?.id ?? "unknown-user",
+        user_id: author?.id ?? "unknown-user",
         team_id: selectedTeam.id,
         title: input.title,
         body: input.body,
@@ -402,15 +523,34 @@ export async function createHelpPost(input: {
       await supabase.from("help_posts").insert(post);
       return {
         ...post,
-        author_name: fallbackUser?.display_name ?? "Participant",
-        team_name: selectedTeam.name
+        author_name: author?.display_name ?? input.authorName ?? "参加者",
+        author_github: author?.github_username ?? input.authorGithub ?? null,
+        team_name: selectedTeam.name,
+        replies: []
       };
     }
   }
 
   const store = getMemoryStore();
   const team = store.teams.find((candidate) => candidate.id === input.teamId) ?? store.teams[0];
-  const user =
+
+  let user = input.authorGithub
+    ? store.users.find((candidate) => candidate.github_username === input.authorGithub)
+    : undefined;
+
+  if (!user && input.authorGithub) {
+    user = {
+      id: randomUUID(),
+      github_username: input.authorGithub,
+      display_name: input.authorName ?? input.authorGithub,
+      avatar_url: null,
+      role: "participant",
+      created_at: new Date().toISOString()
+    };
+    store.users.push(user);
+  }
+
+  user ??=
     store.users.find((candidate) => candidate.role === "participant") ?? store.users[0];
 
   const post: HelpPost = {
@@ -429,8 +569,124 @@ export async function createHelpPost(input: {
   return {
     ...post,
     author_name: user.display_name,
-    team_name: team.name
+    author_github: user.github_username,
+    team_name: team.name,
+    replies: []
   };
+}
+
+/** 掲示板への回答。参加している人なら誰でも投稿できる。 */
+export async function createHelpReply(input: {
+  helpPostId: string;
+  authorName: string;
+  authorGithub?: string;
+  authorRole?: HelpReply["author_role"];
+  body: string;
+}): Promise<HelpReply> {
+  const body = input.body.trim();
+
+  if (!body || body.length > 1000) {
+    throw new Error("回答は1〜1000文字で入力してください。");
+  }
+
+  const reply: HelpReply = {
+    id: randomUUID(),
+    help_post_id: input.helpPostId,
+    author_name: input.authorName.trim() || "匿名",
+    author_github: input.authorGithub?.trim() || null,
+    author_role: input.authorRole ?? "participant",
+    body,
+    is_accepted: false,
+    created_at: new Date().toISOString()
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("help_replies")
+        .insert(reply)
+        .select("*")
+        .single();
+
+      if (!error && data) {
+        // 最初の回答が付いた時点で「対応中」に進める。
+        await supabase
+          .from("help_posts")
+          .update({ status: "helping" })
+          .eq("id", input.helpPostId)
+          .eq("status", "open");
+
+        return data as HelpReply;
+      }
+    }
+  }
+
+  const store = getMemoryStore();
+  store.helpReplies.push(reply);
+
+  const post = store.helpPosts.find((candidate) => candidate.id === input.helpPostId);
+  if (post && post.status === "open") {
+    post.status = "helping";
+  }
+
+  return reply;
+}
+
+/**
+ * ベストアンサーを採用する。質問が解決済みになり、他の回答の採用は外れる。
+ * 採用できるのは質問者本人・メンター・運営のみ。
+ */
+export async function acceptHelpReply(input: {
+  helpPostId: string;
+  replyId: string;
+}): Promise<void> {
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      await supabase
+        .from("help_replies")
+        .update({ is_accepted: false })
+        .eq("help_post_id", input.helpPostId);
+
+      const { error } = await supabase
+        .from("help_replies")
+        .update({ is_accepted: true })
+        .eq("id", input.replyId);
+
+      if (!error) {
+        await supabase
+          .from("help_posts")
+          .update({ status: "solved" })
+          .eq("id", input.helpPostId);
+        return;
+      }
+    }
+  }
+
+  const store = getMemoryStore();
+  let found = false;
+
+  for (const reply of store.helpReplies) {
+    if (reply.help_post_id !== input.helpPostId) continue;
+    reply.is_accepted = reply.id === input.replyId;
+    if (reply.is_accepted) found = true;
+  }
+
+  if (!found) {
+    throw new Error("採用する回答が見つかりません。");
+  }
+
+  const post = store.helpPosts.find((candidate) => candidate.id === input.helpPostId);
+  if (post) {
+    post.status = "solved";
+  }
+}
+
+/** 掲示板の投稿を1件取得する。権限チェック用。 */
+export async function getHelpPostById(id: string): Promise<HelpPostView | null> {
+  const state = await getHackVerseState();
+  return state.helpPosts.find((post) => post.id === id) ?? null;
 }
 
 function makeInviteCode(teamName: string): string {

@@ -66,6 +66,17 @@ create table if not exists public.help_posts (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.help_replies (
+  id uuid primary key default gen_random_uuid(),
+  help_post_id uuid not null references public.help_posts(id) on delete cascade,
+  author_name text not null,
+  author_github text,
+  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin')),
+  body text not null check (char_length(body) between 1 and 1000),
+  is_accepted boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.mentors (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references public.users(id) on delete cascade,
@@ -73,24 +84,46 @@ create table if not exists public.mentors (
   availability text not null default 'offline' check (availability in ('available', 'busy', 'offline'))
 );
 
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  channel text not null check (channel in ('team', 'mentor')),
+  team_id uuid references public.teams(id) on delete cascade,
+  author_name text not null,
+  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin')),
+  body text not null check (char_length(body) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
 create index if not exists activities_created_at_idx on public.activities(created_at desc);
 create index if not exists activities_team_id_idx on public.activities(team_id);
 create index if not exists help_posts_status_idx on public.help_posts(status);
+create index if not exists help_replies_post_idx on public.help_replies(help_post_id, created_at);
 create index if not exists teams_score_idx on public.teams(score desc);
 create index if not exists teams_commit_count_idx on public.teams(commit_count desc);
 create unique index if not exists mentors_user_id_idx on public.mentors(user_id);
 create index if not exists team_invites_created_at_idx on public.team_invites(created_at desc);
+create index if not exists chat_messages_created_at_idx on public.chat_messages(created_at);
+create index if not exists chat_messages_channel_team_idx on public.chat_messages(channel, team_id);
 
 grant select on public.users to anon;
 grant select on public.teams to anon;
 grant select on public.activities to anon;
 grant select on public.help_posts to anon;
+grant select, insert on public.help_replies to anon;
 grant select on public.mentors to anon;
 grant select on public.team_invites to anon;
+grant select, insert on public.chat_messages to anon;
 
 do $$
 begin
   alter publication supabase_realtime add table public.activities;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.chat_messages;
 exception
   when duplicate_object then null;
 end $$;
@@ -105,6 +138,13 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.help_posts;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.help_replies;
 exception
   when duplicate_object then null;
 end $$;

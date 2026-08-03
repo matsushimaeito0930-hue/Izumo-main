@@ -22,22 +22,35 @@ export async function POST(request: Request) {
   }
 
   const eventName = request.headers.get("x-github-event") ?? "";
-  const payload = JSON.parse(body) as unknown;
+
+  // Webhook登録直後にGitHubが送ってくる疎通確認。成功が分かるように明示的に返す。
+  if (eventName === "ping") {
+    return NextResponse.json({ ok: true, pong: true });
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return NextResponse.json({ error: "Payload could not be parsed." }, { status: 400 });
+  }
+
   const parsedActivity = parseGitHubWebhook(eventName, payload);
 
   if (!parsedActivity) {
-    return NextResponse.json({
-      ok: true,
-      ignored: true,
-      eventName
-    });
+    // 対象外のイベントは200で返す。エラーにするとGitHub側で配信失敗が並ぶため。
+    return NextResponse.json({ ok: true, ignored: true, eventName });
   }
 
-  const activity = await recordActivity(parsedActivity);
-
-  return NextResponse.json({
-    ok: true,
-    eventName,
-    activity
-  });
+  try {
+    const activity = await recordActivity(parsedActivity);
+    return NextResponse.json({ ok: true, eventName, activity });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Activity could not be recorded."
+      },
+      { status: 500 }
+    );
+  }
 }

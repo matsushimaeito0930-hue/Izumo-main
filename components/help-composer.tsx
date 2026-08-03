@@ -5,6 +5,11 @@ import { Send } from "lucide-react";
 import { Panel } from "@/components/panel";
 import type { Team } from "@/lib/types";
 
+const fieldClass =
+  "w-full rounded-xl border border-line bg-paper px-3 text-sm text-ink shadow-inset outline-none transition-colors placeholder:text-muted/70 hover:border-lineStrong focus:border-pulse";
+
+const labelClass = "mb-1.5 block text-xs font-medium text-ink2";
+
 export function HelpComposer({
   teams,
   onSubmit
@@ -20,7 +25,7 @@ export function HelpComposer({
   const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [category, setCategory] = useState("Frontend");
+  const [category, setCategory] = useState("フロントエンド");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -36,17 +41,18 @@ export function HelpComposer({
   }
 
   return (
-    <Panel title="Post Help">
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+    <Panel
+      title="わからないことを書く"
+      description="メンターだけでなく、参加している人なら誰でも答えてくれます。"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-white/55">
-              Team
-            </span>
+            <span className={labelClass}>自分のチーム</span>
             <select
               value={teamId}
               onChange={(event) => setTeamId(event.target.value)}
-              className="h-10 w-full rounded-md border border-white/10 bg-void px-3 text-sm text-white outline-none focus:border-pulse"
+              className={`h-10 ${fieldClass}`}
             >
               {teams.map((team) => (
                 <option key={team.id} value={team.id}>
@@ -56,54 +62,48 @@ export function HelpComposer({
             </select>
           </label>
           <label className="block">
-            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-white/55">
-              Category
-            </span>
+            <span className={labelClass}>カテゴリ</span>
             <select
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              className="h-10 w-full rounded-md border border-white/10 bg-void px-3 text-sm text-white outline-none focus:border-pulse"
+              className={`h-10 ${fieldClass}`}
             >
-              <option>Frontend</option>
-              <option>Backend</option>
-              <option>Realtime</option>
+              <option>フロントエンド</option>
+              <option>バックエンド</option>
+              <option>リアルタイム通信</option>
               <option>UI/UX</option>
-              <option>Pitch</option>
+              <option>発表準備</option>
             </select>
           </label>
         </div>
         <label className="block">
-          <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-white/55">
-            Title
-          </span>
+          <span className={labelClass}>ひとことで言うと</span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             required
-            placeholder="Firebase auth is not returning a session"
-            className="h-10 w-full rounded-md border border-white/10 bg-void px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-pulse"
+            placeholder="例）ログインしてもセッションが取れない"
+            className={`h-10 ${fieldClass}`}
           />
         </label>
         <label className="block">
-          <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-white/55">
-            Details
-          </span>
+          <span className={labelClass}>くわしく</span>
           <textarea
             value={body}
             onChange={(event) => setBody(event.target.value)}
             required
             rows={4}
-            placeholder="What did you try, and where are you blocked?"
-            className="w-full resize-none rounded-md border border-white/10 bg-void px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-pulse"
+            placeholder="やりたいこと・試したこと・出ているエラーを書くと、答えが返ってきやすいです。"
+            className={`resize-none py-2 ${fieldClass}`}
           />
         </label>
         <button
           type="submit"
           disabled={isSubmitting || !teamId}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-hot px-4 text-sm font-black text-white shadow-hot transition hover:bg-hot/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
         >
           <Send className="size-4" />
-          <span>{isSubmitting ? "Posting" : "Post Help"}</span>
+          <span>{isSubmitting ? "送信中..." : "質問を投稿する"}</span>
         </button>
       </form>
     </Panel>

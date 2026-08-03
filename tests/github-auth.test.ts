@@ -1,0 +1,133 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  SESSION_MAX_AGE,
+  buildAuthorizeUrl,
+  isGitHubAuthConfigured,
+  parseIdentity,
+  resolveRole,
+  serializeIdentity,
+  type GitHubIdentity
+} from "@/lib/github-auth";
+
+const baseIdentity: GitHubIdentity = {
+  githubId: 12345,
+  login: "matsu",
+  displayName: "まつ",
+  avatarUrl: "https://avatars.githubusercontent.com/u/12345",
+  role: "participant",
+  issuedAt: Math.floor(Date.now() / 1000)
+};
+
+const originalEnv = { ...process.env };
+
+beforeEach(() => {
+  process.env.AUTH_SECRET = "test-auth-secret";
+  process.env.GITHUB_CLIENT_ID = "test-client-id";
+  process.env.GITHUB_CLIENT_SECRET = "test-client-secret";
+  delete process.env.MENTOR_GITHUB_LOGINS;
+  delete process.env.ADMIN_GITHUB_LOGINS;
+});
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+});
+
+describe("セッションcookieの署名", () => {
+  it("署名したものを復元できる", () => {
+    const token = serializeIdentity(baseIdentity);
+    expect(parseIdentity(token)).toEqual(baseIdentity);
+  });
+
+  it("本文を書き換えたトークンは拒否する", () => {
+    const token = serializeIdentity(baseIdentity);
+    const [, signature] = token.split(".");
+    const forgedPayload = Buffer.from(
+      JSON.stringify({ ...baseIdentity, role: "admin" })
+    )
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    expect(parseIdentity(`${forgedPayload}.${signature}`)).toBeNull();
+  });
+
+  it("鍵が違えば拒否する", () => {
+    const token = serializeIdentity(baseIdentity);
+    process.env.AUTH_SECRET = "another-secret";
+    expect(parseIdentity(token)).toBeNull();
+  });
+
+  it("形式が壊れていれば拒否する", () => {
+    expect(parseIdentity(undefined)).toBeNull();
+    expect(parseIdentity("")).toBeNull();
+    expect(parseIdentity("no-dot")).toBeNull();
+    expect(parseIdentity("a.b")).toBeNull();
+  });
+
+  it("有効期限を過ぎたものは拒否する", () => {
+    const expired = serializeIdentity({
+      ...baseIdentity,
+      issuedAt: Math.floor(Date.now() / 1000) - SESSION_MAX_AGE - 60
+    });
+
+    expect(parseIdentity(expired)).toBeNull();
+  });
+});
+
+describe("allowlistによる役割の判定", () => {
+  it("設定がなければ参加者になる", () => {
+    expect(resolveRole("matsu")).toBe("participant");
+  });
+
+  it("メンターと運営を判定する", () => {
+    process.env.MENTOR_GITHUB_LOGINS = "carol, dave";
+    process.env.ADMIN_GITHUB_LOGINS = "alice";
+
+    expect(resolveRole("carol")).toBe("mentor");
+    expect(resolveRole("dave")).toBe("mentor");
+    expect(resolveRole("alice")).toBe("admin");
+    expect(resolveRole("matsu")).toBe("participant");
+  });
+
+  it("大文字小文字を区別しない", () => {
+    process.env.ADMIN_GITHUB_LOGINS = "Alice";
+    expect(resolveRole("alice")).toBe("admin");
+    expect(resolveRole("ALICE")).toBe("admin");
+  });
+
+  it("運営とメンターの両方にいる場合は運営を優先する", () => {
+    process.env.MENTOR_GITHUB_LOGINS = "alice";
+    process.env.ADMIN_GITHUB_LOGINS = "alice";
+    expect(resolveRole("alice")).toBe("admin");
+  });
+});
+
+describe("認可URLの組み立て", () => {
+  it("必要なパラメータが揃っている", () => {
+    const url = new URL(
+      buildAuthorizeUrl({
+        state: "abc123",
+        callbackUrl: "http://localhost:3000/api/auth/github/callback"
+      })
+    );
+
+    expect(url.origin + url.pathname).toBe("https://github.com/login/oauth/authorize");
+    expect(url.searchParams.get("client_id")).toBe("test-client-id");
+    expect(url.searchParams.get("state")).toBe("abc123");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "http://localhost:3000/api/auth/github/callback"
+    );
+    // リポジトリへのアクセス権限は要求しない。
+    expect(url.searchParams.get("scope")).toBe("read:user");
+  });
+});
+
+describe("設定の有無", () => {
+  it("client idとsecretが揃っているときだけ有効", () => {
+    expect(isGitHubAuthConfigured()).toBe(true);
+
+    delete process.env.GITHUB_CLIENT_SECRET;
+    expect(isGitHubAuthConfigured()).toBe(false);
+  });
+});

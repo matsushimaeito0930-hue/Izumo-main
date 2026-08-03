@@ -1,0 +1,252 @@
+/**
+ * 依存パッケージ無しで動く中核ロジックの検証。
+ * node_modules を入れていなくても実行できるので、環境構築前の動作確認に使えます。
+ *
+ *   npm run verify:core
+ *   （中身: node --experimental-strip-types scripts/verify-core.ts）
+ */
+import { createHmac } from "node:crypto";
+import { parseGitHubWebhook, verifyGitHubSignature } from "../lib/github.ts";
+import {
+  SESSION_MAX_AGE,
+  buildAuthorizeUrl,
+  isGitHubAuthConfigured,
+  parseIdentity,
+  resolveRole,
+  serializeIdentity
+} from "../lib/github-auth.ts";
+
+let pass = 0;
+let fail = 0;
+
+function check(name: string, actual: unknown, expected: unknown) {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a === e) {
+    pass++;
+    console.log(`  OK   ${name}`);
+  } else {
+    fail++;
+    console.log(`  FAIL ${name}\n         期待: ${e}\n         実際: ${a}`);
+  }
+}
+
+const SECRET = "hackverse-webhook-secret";
+const sign = (body: string) =>
+  `sha256=${createHmac("sha256", SECRET).update(body).digest("hex")}`;
+
+console.log("\n[1] Webhook署名の検証");
+{
+  const body = JSON.stringify({ ref: "refs/heads/main", commits: [{ id: "a" }] });
+  check(
+    "正しい署名を受け入れる",
+    verifyGitHubSignature({ body, signature: sign(body), secret: SECRET }),
+    true
+  );
+  check(
+    "本文を1文字変えたら拒否する",
+    verifyGitHubSignature({ body: body + " ", signature: sign(body), secret: SECRET }),
+    false
+  );
+  check(
+    "secretが違えば拒否する",
+    verifyGitHubSignature({ body, signature: sign(body), secret: "wrong-secret" }),
+    false
+  );
+  check(
+    "署名ヘッダが無ければ拒否する",
+    verifyGitHubSignature({ body, signature: null, secret: SECRET }),
+    false
+  );
+  check(
+    "sha1形式は拒否する",
+    verifyGitHubSignature({ body, signature: "sha1=abc", secret: SECRET }),
+    false
+  );
+  check(
+    "長さが違う署名で例外を投げない",
+    verifyGitHubSignature({ body, signature: "sha256=short", secret: SECRET }),
+    false
+  );
+}
+
+console.log("\n[2] GitHubイベントの解析");
+{
+  const repository = { full_name: "matsu/izumo-main", name: "izumo-main" };
+
+  check(
+    "push（3コミット）",
+    parseGitHubWebhook("push", { repository, commits: [1, 2, 3] }),
+    {
+      type: "push",
+      githubRepo: "matsu/izumo-main",
+      fallbackTeamName: "Izumo Main",
+      metadata: { commitCount: 3 }
+    }
+  );
+  check(
+    "push（0コミット）は無視",
+    parseGitHubWebhook("push", { repository, commits: [] }),
+    null
+  );
+  check(
+    "PR作成",
+    parseGitHubWebhook("pull_request", {
+      action: "opened",
+      repository,
+      pull_request: { number: 7 }
+    }),
+    {
+      type: "pull_request_opened",
+      githubRepo: "matsu/izumo-main",
+      fallbackTeamName: "Izumo Main",
+      metadata: { number: 7 }
+    }
+  );
+  check(
+    "PRマージ",
+    parseGitHubWebhook("pull_request", {
+      action: "closed",
+      repository,
+      pull_request: { number: 12, merged: true }
+    }),
+    {
+      type: "pull_request_merged",
+      githubRepo: "matsu/izumo-main",
+      fallbackTeamName: "Izumo Main",
+      metadata: { number: 12 }
+    }
+  );
+  check(
+    "マージせず閉じたPRは無視",
+    parseGitHubWebhook("pull_request", {
+      action: "closed",
+      repository,
+      pull_request: { number: 12, merged: false }
+    }),
+    null
+  );
+  check(
+    "Issueクローズ",
+    parseGitHubWebhook("issues", {
+      action: "closed",
+      repository,
+      issue: { number: 4 }
+    }),
+    {
+      type: "issue_closed",
+      githubRepo: "matsu/izumo-main",
+      fallbackTeamName: "Izumo Main",
+      metadata: { number: 4 }
+    }
+  );
+  check(
+    "Issue作成は無視",
+    parseGitHubWebhook("issues", { action: "opened", repository, issue: { number: 4 } }),
+    null
+  );
+  check(
+    "レビュー送信",
+    parseGitHubWebhook("pull_request_review", {
+      action: "submitted",
+      repository,
+      pull_request: { number: 9 }
+    }),
+    {
+      type: "review",
+      githubRepo: "matsu/izumo-main",
+      fallbackTeamName: "Izumo Main",
+      metadata: { number: 9 }
+    }
+  );
+  check("pingは無視", parseGitHubWebhook("ping", { repository, zen: "..." }), null);
+  check("starは無視", parseGitHubWebhook("star", { repository }), null);
+}
+
+console.log("\n[3] ログインセッションcookieの署名");
+{
+  process.env.AUTH_SECRET = "test-auth-secret";
+  process.env.GITHUB_CLIENT_ID = "test-client-id";
+  process.env.GITHUB_CLIENT_SECRET = "test-client-secret";
+
+  const identity = {
+    githubId: 12345,
+    login: "matsu",
+    displayName: "まつ",
+    avatarUrl: "https://avatars.githubusercontent.com/u/12345",
+    role: "participant" as const,
+    issuedAt: Math.floor(Date.now() / 1000)
+  };
+
+  const token = serializeIdentity(identity);
+  check("署名して復元できる", parseIdentity(token), identity);
+
+  const b64url = (value: string) =>
+    Buffer.from(value)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+  const forged = `${b64url(JSON.stringify({ ...identity, role: "admin" }))}.${
+    token.split(".")[1]
+  }`;
+  check("roleをadminに書き換えたトークンを拒否する", parseIdentity(forged), null);
+
+  check("壊れた形式を拒否する", parseIdentity("no-dot"), null);
+  check("空を拒否する", parseIdentity(""), null);
+  check("undefinedを拒否する", parseIdentity(undefined), null);
+
+  const expired = serializeIdentity({
+    ...identity,
+    issuedAt: Math.floor(Date.now() / 1000) - SESSION_MAX_AGE - 60
+  });
+  check("期限切れを拒否する", parseIdentity(expired), null);
+
+  process.env.AUTH_SECRET = "rotated-secret";
+  check("鍵を変えたら以前のトークンを拒否する", parseIdentity(token), null);
+  process.env.AUTH_SECRET = "test-auth-secret";
+}
+
+console.log("\n[4] 役割のallowlist");
+{
+  delete process.env.MENTOR_GITHUB_LOGINS;
+  delete process.env.ADMIN_GITHUB_LOGINS;
+  check("既定は参加者", resolveRole("matsu"), "participant");
+
+  process.env.MENTOR_GITHUB_LOGINS = "carol, dave";
+  process.env.ADMIN_GITHUB_LOGINS = "alice";
+  check("メンター判定", resolveRole("carol"), "mentor");
+  check("空白入りでも判定できる", resolveRole("dave"), "mentor");
+  check("運営判定", resolveRole("alice"), "admin");
+  check("該当なしは参加者", resolveRole("matsu"), "participant");
+  check("大文字小文字を無視する", resolveRole("ALICE"), "admin");
+
+  process.env.MENTOR_GITHUB_LOGINS = "alice";
+  check("両方に居たら運営を優先する", resolveRole("alice"), "admin");
+}
+
+console.log("\n[5] 認可URLの組み立て");
+{
+  process.env.GITHUB_CLIENT_ID = "test-client-id";
+  const url = new URL(
+    buildAuthorizeUrl({
+      state: "abc123",
+      callbackUrl: "http://localhost:3000/api/auth/github/callback"
+    })
+  );
+  check("認可先", url.origin + url.pathname, "https://github.com/login/oauth/authorize");
+  check("client_id", url.searchParams.get("client_id"), "test-client-id");
+  check("state", url.searchParams.get("state"), "abc123");
+  check(
+    "redirect_uri",
+    url.searchParams.get("redirect_uri"),
+    "http://localhost:3000/api/auth/github/callback"
+  );
+  check("scopeはread:userのみ", url.searchParams.get("scope"), "read:user");
+  check("設定ありと判定", isGitHubAuthConfigured(), true);
+  delete process.env.GITHUB_CLIENT_SECRET;
+  check("secretが無ければ無効", isGitHubAuthConfigured(), false);
+}
+
+console.log(`\n結果: ${pass} 件成功 / ${fail} 件失敗\n`);
+process.exit(fail === 0 ? 0 : 1);

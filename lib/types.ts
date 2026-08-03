@@ -8,6 +8,8 @@ export type ActivityType =
 export type HelpStatus = "open" | "helping" | "solved";
 export type MentorAvailability = "available" | "busy" | "offline";
 
+export type ChatChannel = "mentor";
+
 export type UserRole = "participant" | "mentor" | "admin";
 
 export type User = {
@@ -86,9 +88,33 @@ export type MentorProfile = Mentor & {
   github_username: string;
 };
 
+export type ChatMessage = {
+  id: string;
+  channel: ChatChannel;
+  team_id: string | null;
+  author_name: string;
+  author_role: UserRole;
+  body: string;
+  created_at: string;
+};
+
+/** 掲示板の回答。メンターに限らず、参加している人なら誰でも投稿できる。 */
+export type HelpReply = {
+  id: string;
+  help_post_id: string;
+  author_name: string;
+  author_github: string | null;
+  author_role: UserRole;
+  body: string;
+  is_accepted: boolean;
+  created_at: string;
+};
+
 export type HelpPostView = HelpPost & {
   author_name: string;
+  author_github: string | null;
   team_name: string;
+  replies: HelpReply[];
 };
 
 export type ActivityView = Activity & {
@@ -100,6 +126,7 @@ export type HackVerseState = {
   activities: ActivityView[];
   helpPosts: HelpPostView[];
   mentors: MentorProfile[];
+  messages: ChatMessage[];
   updatedAt: string;
 };
 
