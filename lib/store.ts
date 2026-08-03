@@ -379,16 +379,18 @@ export async function recordActivity(input: {
         throw updateError;
       }
 
-      const { error: activityError } = await supabase
+      const { data: insertedActivity, error: activityError } = await supabase
         .from("activities")
-        .insert(activity);
+        .insert(activity)
+        .select("*")
+        .single();
 
       if (activityError) {
         throw activityError;
       }
 
       return {
-        ...activity,
+        ...(insertedActivity as Activity),
         team_name: team.name
       };
     }
