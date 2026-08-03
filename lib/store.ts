@@ -178,7 +178,11 @@ export async function getHackVerseState(): Promise<HackVerseState> {
     await Promise.all([
       supabase.from("users").select("*"),
       supabase.from("teams").select("*"),
-      supabase.from("activities").select("*").order("created_at", { ascending: false }).limit(30),
+      supabase
+        .from("activities")
+        .select("id,team_id,type,message,score_delta,metadata,created_at")
+        .order("created_at", { ascending: false })
+        .limit(30),
       supabase.from("help_posts").select("*").order("created_at", { ascending: false }).limit(30),
       supabase
         .from("help_replies")

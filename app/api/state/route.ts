@@ -12,7 +12,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ configured: false });
     }
 
-    const [activitiesResult, teamResult, allActivitiesResult, allTeamsResult] = await Promise.all([
+    const [activitiesResult, teamResult, allActivitiesResult, allTeamsResult, compactActivitiesResult] = await Promise.all([
       supabase.from("activities").select("id", { count: "exact", head: true }),
       supabase
         .from("teams")
@@ -20,7 +20,12 @@ export async function GET(request: Request) {
         .eq("github_repo", "matsushimaeito0930-hue/Izumo-main")
         .maybeSingle(),
       supabase.from("activities").select("*").order("created_at", { ascending: false }).limit(30),
-      supabase.from("teams").select("*")
+      supabase.from("teams").select("*"),
+      supabase
+        .from("activities")
+        .select("id,team_id,type,message,score_delta,metadata,created_at")
+        .order("created_at", { ascending: false })
+        .limit(30)
     ]);
 
     return NextResponse.json({
@@ -32,7 +37,9 @@ export async function GET(request: Request) {
       allActivitiesCount: allActivitiesResult.data?.length ?? 0,
       allActivitiesError: allActivitiesResult.error?.message ?? null,
       allTeamsCount: allTeamsResult.data?.length ?? 0,
-      allTeamsError: allTeamsResult.error?.message ?? null
+      allTeamsError: allTeamsResult.error?.message ?? null,
+      compactActivitiesCount: compactActivitiesResult.data?.length ?? 0,
+      compactActivitiesError: compactActivitiesResult.error?.message ?? null
     });
   }
 
