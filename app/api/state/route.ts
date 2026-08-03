@@ -12,13 +12,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ configured: false });
     }
 
-    const [activitiesResult, teamResult] = await Promise.all([
+    const [activitiesResult, teamResult, allActivitiesResult, allTeamsResult] = await Promise.all([
       supabase.from("activities").select("id", { count: "exact", head: true }),
       supabase
         .from("teams")
         .select("id,name,github_repo,commit_count,score")
         .eq("github_repo", "matsushimaeito0930-hue/Izumo-main")
-        .maybeSingle()
+        .maybeSingle(),
+      supabase.from("activities").select("*").order("created_at", { ascending: false }).limit(30),
+      supabase.from("teams").select("*")
     ]);
 
     return NextResponse.json({
@@ -26,7 +28,11 @@ export async function GET(request: Request) {
       activityCount: activitiesResult.count ?? 0,
       activityError: activitiesResult.error?.message ?? null,
       team: teamResult.data,
-      teamError: teamResult.error?.message ?? null
+      teamError: teamResult.error?.message ?? null,
+      allActivitiesCount: allActivitiesResult.data?.length ?? 0,
+      allActivitiesError: allActivitiesResult.error?.message ?? null,
+      allTeamsCount: allTeamsResult.data?.length ?? 0,
+      allTeamsError: allTeamsResult.error?.message ?? null
     });
   }
 
