@@ -41,7 +41,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const activity = await recordActivity(parsedActivity);
+    const activity = await recordActivity({
+      ...parsedActivity,
+      githubDeliveryId: request.headers.get("x-github-delivery") ?? undefined
+    });
     return NextResponse.json({ ok: true, eventName, activity });
   } catch (error) {
     return NextResponse.json(

@@ -9,6 +9,10 @@ type GitHubRepository = {
 type PushPayload = {
   repository?: GitHubRepository;
   commits?: unknown[];
+  after?: string;
+  head_commit?: {
+    id?: string;
+  };
 };
 
 type PullRequestPayload = {
@@ -99,11 +103,13 @@ export function parseGitHubWebhook(
     }
 
     const repo = repoName(push.repository);
+    const commitSha = push.after ?? push.head_commit?.id;
     return {
       type: "push",
       ...repo,
       metadata: {
-        commitCount
+        commitCount,
+        ...(commitSha ? { commitSha } : {})
       }
     };
   }

@@ -318,9 +318,13 @@ export async function recordActivity(input: {
   teamId?: string;
   githubRepo?: string;
   fallbackTeamName?: string;
+  githubDeliveryId?: string;
   metadata?: Record<string, unknown>;
 }): Promise<ActivityView> {
-  const metadata = input.metadata ?? {};
+  const metadata: Record<string, unknown> = {
+    ...(input.metadata ?? {}),
+    ...(input.githubDeliveryId ? { githubDeliveryId: input.githubDeliveryId } : {})
+  };
   const scoreDelta = SCORE_BY_ACTIVITY[input.type];
   const commitDelta =
     input.type === "push" && typeof metadata.commitCount === "number"
@@ -358,6 +362,46 @@ export async function recordActivity(input: {
       }
 
       team = normalizeTeam(team);
+
+      const deliveryId = input.githubDeliveryId;
+      const commitSha = typeof metadata.commitSha === "string" ? metadata.commitSha : undefined;
+      const duplicateQueries = [];
+
+      if (deliveryId) {
+        duplicateQueries.push(
+          supabase
+            .from("activities")
+            .select("*")
+            .contains("metadata", { githubDeliveryId: deliveryId })
+            .maybeSingle()
+        );
+      }
+
+      if (commitSha) {
+        duplicateQueries.push(
+          supabase
+            .from("activities")
+            .select("*")
+            .contains("metadata", { commitSha })
+            .eq("team_id", team.id)
+            .maybeSingle()
+        );
+      }
+
+      for (const duplicateQuery of duplicateQueries) {
+        const { data: existingActivity, error: duplicateError } = await duplicateQuery;
+        if (duplicateError) {
+          throw duplicateError;
+        }
+
+        if (existingActivity) {
+          return {
+            ...(existingActivity as Activity),
+            team_name: team.name
+          };
+        }
+      }
+
       const nextScore = team.score + scoreDelta;
       const nextCommitCount = team.commit_count + commitDelta;
       const nextLevel = getHouseLevel(nextScore);
@@ -416,6 +460,23 @@ export async function recordActivity(input: {
 
   if (!team) {
     team = findOrCreateMemoryTeam("demo/team-a", "Team A");
+  }
+
+  const duplicateActivity = store.activities.find((activity) => {
+    const activityMetadata = activity.metadata ?? {};
+    return (
+      (input.githubDeliveryId && activityMetadata.githubDeliveryId === input.githubDeliveryId) ||
+      (typeof metadata.commitSha === "string" &&
+        activityMetadata.commitSha === metadata.commitSha &&
+        activity.team_id === team?.id)
+    );
+  });
+
+  if (duplicateActivity) {
+    return {
+      ...duplicateActivity,
+      team_name: team.name
+    };
   }
 
   team.commit_count ??= 0;
