@@ -249,11 +249,15 @@ async function findOrCreateSupabaseTeam(githubRepo: string, fallbackName: string
     return null;
   }
 
-  const { data: existingTeam } = await supabase
+  const { data: existingTeam, error: selectError } = await supabase
     .from("teams")
     .select("*")
     .eq("github_repo", githubRepo)
     .maybeSingle();
+
+  if (selectError) {
+    throw selectError;
+  }
 
   if (existingTeam) {
     return existingTeam as Team;
@@ -269,7 +273,16 @@ async function findOrCreateSupabaseTeam(githubRepo: string, fallbackName: string
     created_at: new Date().toISOString()
   };
 
-  const { data } = await supabase.from("teams").insert(newTeam).select("*").single();
+  const { data, error: insertError } = await supabase
+    .from("teams")
+    .insert(newTeam)
+    .select("*")
+    .single();
+
+  if (insertError) {
+    throw insertError;
+  }
+
   return (data as Team | null) ?? newTeam;
 }
 
@@ -353,7 +366,7 @@ export async function recordActivity(input: {
         created_at: new Date().toISOString()
       };
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("teams")
         .update({
           score: nextScore,
@@ -361,7 +374,18 @@ export async function recordActivity(input: {
           house_level: nextLevel
         })
         .eq("id", team.id);
-      await supabase.from("activities").insert(activity);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      const { error: activityError } = await supabase
+        .from("activities")
+        .insert(activity);
+
+      if (activityError) {
+        throw activityError;
+      }
 
       return {
         ...activity,
