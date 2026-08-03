@@ -177,7 +177,9 @@ export async function getHackVerseState(): Promise<HackVerseState> {
   ] =
     await Promise.all([
       supabase.from("users").select("*"),
-      supabase.from("teams").select("*"),
+      supabase
+        .from("teams")
+        .select("id,name,github_repo,score,commit_count,house_level,created_at"),
       supabase
         .from("activities")
         .select("id,team_id,type,message,score_delta,metadata,created_at")
