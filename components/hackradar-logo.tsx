@@ -23,9 +23,9 @@ export function HackRadarLogo({
         <circle cx="11" cy="32" r="4.4" fill="#0f8b7e" />
         <circle cx="52" cy="14" r="4.4" fill="#c05575" />
         <circle cx="50" cy="49" r="4.4" fill="#b5771a" />
-        <path d="m9.1 32 1.7-1.7M9.1 32l1.7 1.7M12.9 30.3 11.2 32l1.7 1.7" fill="none" stroke="#fffdfa" strokeWidth=".9" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="m50.1 14 1.7-1.7M50.1 14l1.7 1.7M53.9 12.3 52.2 14l1.7 1.7" fill="none" stroke="#fffdfa" strokeWidth=".9" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="m48.1 49 1.7-1.7M48.1 49l1.7 1.7M51.9 47.3 50.2 49l1.7 1.7" fill="none" stroke="#fffdfa" strokeWidth=".9" strokeLinecap="round" strokeLinejoin="round" />
+        <text x="11" y="33.8" textAnchor="middle" fill="#fffdfa" fontFamily="Arial, sans-serif" fontSize="5.2" fontWeight="700" textLength="8.2" lengthAdjust="spacingAndGlyphs">&lt;/&gt;</text>
+        <text x="52" y="15.8" textAnchor="middle" fill="#fffdfa" fontFamily="Arial, sans-serif" fontSize="5.2" fontWeight="700" textLength="8.2" lengthAdjust="spacingAndGlyphs">&lt;/&gt;</text>
+        <text x="50" y="50.8" textAnchor="middle" fill="#fffdfa" fontFamily="Arial, sans-serif" fontSize="5.2" fontWeight="700" textLength="8.2" lengthAdjust="spacingAndGlyphs">&lt;/&gt;</text>
         <circle cx="32" cy="32" r="3.2" fill="#0f8b7e" />
       </svg>
       {label && <span className="text-sm font-bold tracking-tight text-ink">HackRadar</span>}
