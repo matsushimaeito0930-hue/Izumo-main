@@ -263,29 +263,19 @@ export function OnboardingClient({
 
               <form onSubmit={joinTeam} className="space-y-4">
                 <Field label="チーム名">
-                  {initialTeams.length > 0 ? (
-                    <select
-                      value={teamName}
-                      onChange={(event) => setTeamName(event.target.value)}
-                      className={inputClass}
-                      required
-                    >
-                      <option value="">チームを選択</option>
-                      {initialTeams.map((team) => (
-                        <option key={team.id} value={team.name}>
-                          {team.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      value={teamName}
-                      onChange={(event) => setTeamName(event.target.value)}
-                      className={inputClass}
-                      placeholder="例）Team Aurora"
-                      required
-                    />
-                  )}
+                  <input
+                    list="registered-team-names"
+                    value={teamName}
+                    onChange={(event) => setTeamName(event.target.value)}
+                    className={inputClass}
+                    placeholder="例）Team Aurora"
+                    required
+                  />
+                  <datalist id="registered-team-names">
+                    {initialTeams.map((team) => (
+                      <option key={team.id} value={team.name} />
+                    ))}
+                  </datalist>
                 </Field>
                 <button type="submit" disabled={isBusy} className={primaryButtonClass}>
                   <DoorOpen className="size-4" />
@@ -323,29 +313,19 @@ export function OnboardingClient({
                 </span>
               </div>
               <Field label="チーム名">
-                {initialTeams.length > 0 ? (
-                  <select
-                    value={teamName}
-                    onChange={(event) => setTeamName(event.target.value)}
-                    className={inputClass}
-                    required
-                  >
-                    <option value="">チームを選択</option>
-                    {initialTeams.map((team) => (
-                      <option key={team.id} value={team.name}>
-                        {team.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={teamName}
-                    onChange={(event) => setTeamName(event.target.value)}
-                    className={inputClass}
-                    placeholder="例）Team Aurora"
-                    required
-                  />
-                )}
+                <input
+                  list="registered-team-names"
+                  value={teamName}
+                  onChange={(event) => setTeamName(event.target.value)}
+                  className={inputClass}
+                  placeholder="例）Team Aurora"
+                  required
+                />
+                <datalist id="registered-team-names">
+                  {initialTeams.map((team) => (
+                    <option key={team.id} value={team.name} />
+                  ))}
+                </datalist>
               </Field>
               <Field label="表示名">
                 <input
