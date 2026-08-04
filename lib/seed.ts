@@ -16,17 +16,17 @@ const minutesAgo = (minutes: number) =>
 
 export const seedUsers: User[] = [
   {
-    id: "mentor-js",
-    github_username: "js-mentor",
-    display_name: "JavaScript メンター",
+    id: "mentor-frontend",
+    github_username: "frontend-mentor",
+    display_name: "フロントエンドメンター",
     avatar_url: null,
     role: "mentor",
     created_at: minutesAgo(140)
   },
   {
-    id: "mentor-ui",
-    github_username: "ui-mentor",
-    display_name: "UI/UX メンター",
+    id: "mentor-backend",
+    github_username: "backend-mentor",
+    display_name: "バックエンドメンター",
     avatar_url: null,
     role: "mentor",
     created_at: minutesAgo(130)
@@ -43,15 +43,15 @@ export const seedHelpReplies: HelpReply[] = [];
 
 export const seedMentors: Mentor[] = [
   {
-    id: "mentor-row-js",
-    user_id: "mentor-js",
-    specialty: "JavaScript / リアルタイム通信",
+    id: "mentor-row-frontend",
+    user_id: "mentor-frontend",
+    specialty: "Next.js / React",
     availability: "available"
   },
   {
-    id: "mentor-row-ui",
-    user_id: "mentor-ui",
-    specialty: "UI/UX / 発表資料",
+    id: "mentor-row-backend",
+    user_id: "mentor-backend",
+    specialty: "Express / Supabase",
     availability: "busy"
   }
 ];

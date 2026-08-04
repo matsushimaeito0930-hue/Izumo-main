@@ -100,7 +100,7 @@ export function OnboardingClient({
   const [newTeamName, setNewTeamName] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [specialty, setSpecialty] = useState("JavaScript / リアルタイム通信");
+  const [specialty, setSpecialty] = useState("");
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
 
@@ -406,7 +406,6 @@ export function OnboardingClient({
                     value={displayName}
                     onChange={(event) => setDisplayName(event.target.value)}
                     className={inputClass}
-                    placeholder="例）JavaScript メンター"
                   />
                 </Field>
               )}
@@ -415,7 +414,6 @@ export function OnboardingClient({
                   value={specialty}
                   onChange={(event) => setSpecialty(event.target.value)}
                   className={inputClass}
-                  placeholder="UI/UX / Firebase"
                   required
                 />
               </Field>

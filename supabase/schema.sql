@@ -154,16 +154,16 @@ end $$;
 
 insert into public.users (github_username, display_name, role)
 values
-  ('js-mentor', 'JavaScript Mentor', 'mentor'),
+  ('frontend-mentor', 'Frontend Mentor', 'mentor'),
   ('ui-mentor', 'UI/UX Mentor', 'mentor')
 on conflict (github_username) do nothing;
 
 -- Teams and invites are created by the operator from the onboarding screen.
 
 insert into public.mentors (user_id, specialty, availability)
-select id, 'JavaScript / Realtime', 'available'
+select id, 'Next.js / React', 'available'
 from public.users
-where github_username = 'js-mentor'
+where github_username = 'frontend-mentor'
 on conflict do nothing;
 
 insert into public.mentors (user_id, specialty, availability)
