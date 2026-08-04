@@ -127,9 +127,14 @@ function withViews(
 
   const mentorProfiles: MentorProfile[] = mentors.map((mentor) => {
     const user = usersById.get(mentor.user_id);
+    const isLegacyFrontendMentor =
+      user?.github_username === "js-mentor" || mentor.specialty === "JavaScript / Realtime";
     return {
       ...mentor,
-      display_name: user?.display_name ?? "Mentor",
+      display_name: isLegacyFrontendMentor
+        ? "フロントエンドメンター"
+        : (user?.display_name ?? "Mentor"),
+      specialty: isLegacyFrontendMentor ? "Next.js / React" : mentor.specialty,
       github_username: user?.github_username ?? "mentor"
     };
   });
