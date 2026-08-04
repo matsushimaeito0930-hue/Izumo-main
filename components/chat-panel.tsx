@@ -109,8 +109,10 @@ export function ChatPanel({
           <select
             value={selectedTeam?.id ?? ""}
             onChange={(event) => setTeamId(event.target.value)}
+            disabled={teams.length === 0}
             className="h-9 max-w-40 rounded-xl border border-line bg-paper px-2 text-sm text-ink shadow-inset outline-none focus:border-pulse"
           >
+            {teams.length === 0 && <option value="">チーム未登録</option>}
             {teams.map((team) => (
               <option key={team.id} value={team.id}>
                 {team.name}
@@ -176,12 +178,13 @@ export function ChatPanel({
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           maxLength={500}
+          disabled={!selectedTeam}
           placeholder="メンターに聞きたいことを書く"
           className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-paper px-3 text-sm text-ink shadow-inset outline-none transition-colors placeholder:text-muted/70 hover:border-lineStrong focus:border-pulse"
         />
         <button
           type="submit"
-          disabled={isSending || !message.trim()}
+          disabled={isSending || !message.trim() || !selectedTeam}
           className="flex h-11 shrink-0 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
         >
           <Send className="size-4" />

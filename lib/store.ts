@@ -459,7 +459,7 @@ export async function recordActivity(input: {
       : store.teams[0]);
 
   if (!team) {
-    team = findOrCreateMemoryTeam("demo/team-a", "Team A");
+    throw new Error("No team is available for this activity.");
   }
 
   const duplicateActivity = store.activities.find((activity) => {

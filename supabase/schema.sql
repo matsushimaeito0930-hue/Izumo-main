@@ -154,31 +154,11 @@ end $$;
 
 insert into public.users (github_username, display_name, role)
 values
-  ('team-a-lead', 'サンプル参加者', 'participant'),
-  ('team-b-dev', 'サンプル開発者', 'participant'),
   ('js-mentor', 'JavaScript Mentor', 'mentor'),
   ('ui-mentor', 'UI/UX Mentor', 'mentor')
 on conflict (github_username) do nothing;
 
-insert into public.teams (name, github_repo, score, commit_count, house_level)
-values
-  ('Team A', 'matsushimaeito0930-hue/Izumo-main', 95, 3, 1),
-  ('Team B', 'example/team-b', 220, 12, 2),
-  ('Team C', 'example/team-c', 365, 18, 3),
-  ('Team D', 'example/team-d', 54, 4, 1)
-on conflict (github_repo) do nothing;
-
-insert into public.team_invites (code, team_id, invited_by)
-select 'TEAM-A', id, 'HackRadar Admin'
-from public.teams
-where github_repo = 'matsushimaeito0930-hue/Izumo-main'
-on conflict (code) do nothing;
-
-insert into public.team_invites (code, team_id, invited_by)
-select 'TEAM-B', id, 'HackRadar Admin'
-from public.teams
-where github_repo = 'example/team-b'
-on conflict (code) do nothing;
+-- Teams and invites are created by the operator from the onboarding screen.
 
 insert into public.mentors (user_id, specialty, availability)
 select id, 'JavaScript / Realtime', 'available'
@@ -191,29 +171,3 @@ select id, 'UI/UX / Pitch polish', 'busy'
 from public.users
 where github_username = 'ui-mentor'
 on conflict do nothing;
-
-insert into public.help_posts (user_id, team_id, title, body, category, status)
-select users.id, teams.id, 'Firebase auth callback is stuck',
-  'The OAuth redirect returns, but the session never appears in the client.',
-  'Backend', 'open'
-from public.users
-cross join public.teams
-where users.github_username = 'team-a-lead'
-  and teams.github_repo = 'matsushimaeito0930-hue/Izumo-main'
-  and not exists (
-    select 1 from public.help_posts
-    where title = 'Firebase auth callback is stuck'
-  );
-
-insert into public.help_posts (user_id, team_id, title, body, category, status)
-select users.id, teams.id, 'Need a fast UI review',
-  'We have the flow working and want a mentor to check if the first screen makes sense.',
-  'UI/UX', 'helping'
-from public.users
-cross join public.teams
-where users.github_username = 'team-b-dev'
-  and teams.github_repo = 'example/team-b'
-  and not exists (
-    select 1 from public.help_posts
-    where title = 'Need a fast UI review'
-  );

@@ -52,8 +52,10 @@ export function HelpComposer({
             <select
               value={teamId}
               onChange={(event) => setTeamId(event.target.value)}
+              disabled={teams.length === 0}
               className={`h-10 ${fieldClass}`}
             >
+              {teams.length === 0 && <option value="">チーム未登録</option>}
               {teams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name}
@@ -76,6 +78,11 @@ export function HelpComposer({
             </select>
           </label>
         </div>
+        {teams.length === 0 && (
+          <p className="rounded-xl border border-dashed border-lineStrong bg-sand/60 px-3 py-2.5 text-xs leading-5 text-muted">
+            運営がチームを登録すると、質問を投稿できます。
+          </p>
+        )}
         <label className="block">
           <span className={labelClass}>ひとことで言うと</span>
           <input

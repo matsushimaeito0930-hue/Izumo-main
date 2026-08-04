@@ -16,8 +16,13 @@ export function RankingPanel({
       title="ランキング"
       description="コミットやPRの数から計算したスコア順です。"
     >
-      <ol className="space-y-2">
-        {teams.map((team, index) => {
+      {teams.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-lineStrong bg-sand/60 p-6 text-center text-sm text-muted shadow-inset">
+          チーム登録後にランキングが表示されます。
+        </div>
+      ) : (
+        <ol className="space-y-2">
+          {teams.map((team, index) => {
           const isMine = team.id === myTeamId;
           return (
           <li
@@ -60,8 +65,9 @@ export function RankingPanel({
             </div>
           </li>
           );
-        })}
-      </ol>
+          })}
+        </ol>
+      )}
     </Panel>
   );
 }
