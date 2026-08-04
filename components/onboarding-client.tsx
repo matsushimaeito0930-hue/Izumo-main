@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+import { HackRadarLogo } from "@/components/hackradar-logo";
 import {
   ChevronDown,
   DoorOpen,
@@ -217,9 +218,7 @@ export function OnboardingClient({
     <main className="min-h-screen bg-paper px-4 py-10 sm:px-6">
       <div className="mx-auto w-full max-w-md space-y-5">
         <div className="text-center">
-          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-pulse text-base font-bold text-white shadow-btn">
-            HR
-          </span>
+          <HackRadarLogo className="mx-auto size-14" />
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-ink">HackRadar</h1>
           <p className="mt-1.5 text-sm leading-6 text-muted">
             GitHubにプッシュすると、チームの進み具合が自動で見える場所です。

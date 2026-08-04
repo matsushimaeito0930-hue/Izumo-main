@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CircleHelp, Github, LayoutDashboard, LogOut } from "lucide-react";
+import { HackRadarLogo } from "@/components/hackradar-logo";
 import type { UserRole } from "@/lib/types";
 
 type Viewer = {
@@ -46,9 +47,7 @@ export function Nav({
     <nav className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur">
       <div className="mx-auto flex min-w-0 max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-xl bg-pulse text-sm font-bold text-white shadow-btn">
-            HR
-          </span>
+          <HackRadarLogo className="size-9" />
           <span className="hidden text-sm font-bold tracking-tight text-ink sm:block">
             HackRadar
           </span>
