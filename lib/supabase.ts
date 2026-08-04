@@ -11,6 +11,13 @@ export function createServerSupabaseClient() {
   return createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       persistSession: false
+    },
+    global: {
+      fetch: (input, init) =>
+        fetch(input, {
+          ...init,
+          cache: "no-store"
+        })
     }
   });
 }

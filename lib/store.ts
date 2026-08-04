@@ -47,6 +47,8 @@ type MemoryStore = {
   teamInvites: TeamInvite[];
 };
 
+const MEMORY_STORE_VERSION = "empty-teams-v1";
+
 function normalizeTeam(team: Team): Team {
   return {
     ...team,
@@ -56,6 +58,7 @@ function normalizeTeam(team: Team): Team {
 
 declare global {
   var hackVerseMemoryStore: MemoryStore | undefined;
+  var hackVerseMemoryStoreVersion: string | undefined;
 }
 
 function cloneStore(): MemoryStore {
@@ -73,6 +76,11 @@ function cloneStore(): MemoryStore {
 }
 
 function getMemoryStore(): MemoryStore {
+  if (globalThis.hackVerseMemoryStoreVersion !== MEMORY_STORE_VERSION) {
+    globalThis.hackVerseMemoryStore = cloneStore();
+    globalThis.hackVerseMemoryStoreVersion = MEMORY_STORE_VERSION;
+  }
+
   globalThis.hackVerseMemoryStore ??= cloneStore();
   return globalThis.hackVerseMemoryStore;
 }
@@ -138,32 +146,10 @@ function withViews(
   };
 }
 
-export async function getHackVerseState(): Promise<HackVerseState> {
-  if (!isSupabaseConfigured()) {
-    const store = getMemoryStore();
-    return withViews(
-      store.users,
-      store.teams,
-      store.activities,
-      store.helpPosts,
-      store.helpReplies,
-      store.mentors,
-      store.messages
-    );
-  }
-
+export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
   const supabase = createServerSupabaseClient();
   if (!supabase) {
-    const store = getMemoryStore();
-    return withViews(
-      store.users,
-      store.teams,
-      store.activities,
-      store.helpPosts,
-      store.helpReplies,
-      store.mentors,
-      store.messages
-    );
+    throw new Error("Supabase is not configured.");
   }
 
   const [
@@ -196,16 +182,7 @@ export async function getHackVerseState(): Promise<HackVerseState> {
     ]);
 
   if (teamsResult.error || activitiesResult.error) {
-    const store = getMemoryStore();
-    return withViews(
-      store.users,
-      store.teams,
-      store.activities,
-      store.helpPosts,
-      store.helpReplies,
-      store.mentors,
-      store.messages
-    );
+    throw teamsResult.error ?? activitiesResult.error;
   }
 
   return withViews(
@@ -214,12 +191,33 @@ export async function getHackVerseState(): Promise<HackVerseState> {
     (activitiesResult.data ?? seedActivities) as Activity[],
     (helpPostsResult.data ?? seedHelpPosts) as HelpPost[],
     (helpRepliesResult.error
-      ? getMemoryStore().helpReplies
+      ? []
       : (helpRepliesResult.data ?? seedHelpReplies)) as HelpReply[],
     (mentorsResult.data ?? seedMentors) as Mentor[],
     (messagesResult.error
-      ? getMemoryStore().messages
+      ? []
       : (messagesResult.data ?? seedChatMessages)) as ChatMessage[]
+  );
+}
+
+export async function getHackVerseState(): Promise<HackVerseState> {
+  if (isSupabaseConfigured()) {
+    try {
+      return await getSupabaseHackVerseState();
+    } catch {
+      // Keep local development usable when Supabase is unavailable.
+    }
+  }
+
+  const store = getMemoryStore();
+  return withViews(
+    store.users,
+    store.teams,
+    store.activities,
+    store.helpPosts,
+    store.helpReplies,
+    store.mentors,
+    store.messages
   );
 }
 
@@ -292,6 +290,25 @@ async function findOrCreateSupabaseTeam(githubRepo: string, fallbackName: string
   return (data as Team | null) ?? newTeam;
 }
 
+async function findSupabaseTeam(githubRepo: string) {
+  const supabase = createServerSupabaseClient();
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("teams")
+    .select("*")
+    .eq("github_repo", githubRepo)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as Team | null) ?? null;
+}
+
 function findOrCreateMemoryTeam(githubRepo: string, fallbackName: string): Team {
   const store = getMemoryStore();
   const existingTeam = store.teams.find((team) => team.github_repo === githubRepo);
@@ -346,10 +363,7 @@ export async function recordActivity(input: {
       }
 
       if (!team && input.githubRepo) {
-        team = await findOrCreateSupabaseTeam(
-          input.githubRepo,
-          input.fallbackTeamName ?? input.githubRepo
-        );
+        team = await findSupabaseTeam(input.githubRepo);
       }
 
       if (!team) {
@@ -452,10 +466,7 @@ export async function recordActivity(input: {
       ? store.teams.find((candidate) => candidate.id === input.teamId)
       : undefined) ??
     (input.githubRepo
-      ? findOrCreateMemoryTeam(
-          input.githubRepo,
-          input.fallbackTeamName ?? input.githubRepo
-        )
+      ? store.teams.find((candidate) => candidate.github_repo === input.githubRepo)
       : store.teams[0]);
 
   if (!team) {
