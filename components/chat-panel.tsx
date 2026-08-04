@@ -37,7 +37,7 @@ export function ChatPanel({
   const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
   const [message, setMessage] = useState("");
   const [session, setSession] = useState<SessionSnapshot>({
-    displayName: viewer?.displayName ?? "Aoi",
+    displayName: viewer?.displayName ?? "参加者",
     role: viewer?.role ?? "participant"
   });
   const [isSending, setIsSending] = useState(false);
@@ -52,7 +52,7 @@ export function ChatPanel({
     try {
       const nextSession = JSON.parse(rawSession) as SessionSnapshot;
       setSession({
-        displayName: nextSession.displayName || "Aoi",
+        displayName: nextSession.displayName || "参加者",
         role: nextSession.role || "participant",
         teamId: nextSession.teamId
       });
@@ -60,7 +60,7 @@ export function ChatPanel({
         setTeamId(nextSession.teamId);
       }
     } catch {
-      setSession({ displayName: "Aoi", role: "participant" });
+      setSession({ displayName: "参加者", role: "participant" });
     }
   }, [teams, viewer]);
 
@@ -87,7 +87,7 @@ export function ChatPanel({
       await onSend({
         channel: "mentor",
         teamId: selectedTeam.id,
-        authorName: session.displayName || "Aoi",
+        authorName: session.displayName || "参加者",
         authorRole: session.role || "participant",
         body: message
       });

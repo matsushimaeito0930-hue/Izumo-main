@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "HackVerse | ハッカソン運営ダッシュボード",
+  title: "HackRadar | チーム開発ダッシュボード",
   description:
     "GitHubの活動をリアルタイムに可視化し、チームの進捗・ランキング・相談を1画面にまとめるダッシュボード。"
 };

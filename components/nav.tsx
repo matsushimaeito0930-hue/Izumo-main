@@ -47,10 +47,10 @@ export function Nav({
       <div className="mx-auto flex min-w-0 max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
           <span className="grid size-9 place-items-center rounded-xl bg-pulse text-sm font-bold text-white shadow-btn">
-            HV
+            HR
           </span>
           <span className="hidden text-sm font-bold tracking-tight text-ink sm:block">
-            HackVerse
+            HackRadar
           </span>
         </Link>
 

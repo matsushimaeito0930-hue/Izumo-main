@@ -218,9 +218,9 @@ export function OnboardingClient({
       <div className="mx-auto w-full max-w-md space-y-5">
         <div className="text-center">
           <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-pulse text-base font-bold text-white shadow-btn">
-            HV
+            HR
           </span>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-ink">HackVerse</h1>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-ink">HackRadar</h1>
           <p className="mt-1.5 text-sm leading-6 text-muted">
             GitHubにプッシュすると、チームの進み具合が自動で見える場所です。
           </p>
@@ -282,7 +282,7 @@ export function OnboardingClient({
                       value={teamName}
                       onChange={(event) => setTeamName(event.target.value)}
                       className={inputClass}
-                      placeholder="例）チーム出雲"
+                      placeholder="例）Team Aurora"
                       required
                     />
                   )}
@@ -342,7 +342,7 @@ export function OnboardingClient({
                     value={teamName}
                     onChange={(event) => setTeamName(event.target.value)}
                     className={inputClass}
-                    placeholder="例）チーム出雲"
+                    placeholder="例）Team Aurora"
                     required
                   />
                 )}
@@ -352,7 +352,7 @@ export function OnboardingClient({
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
                   className={inputClass}
-                  placeholder="例）まつ"
+                  placeholder="例）山田太郎"
                   required
                 />
               </Field>
@@ -381,7 +381,7 @@ export function OnboardingClient({
                   value={newTeamName}
                   onChange={(event) => setNewTeamName(event.target.value)}
                   className={inputClass}
-                  placeholder="例）チーム出雲"
+                  placeholder="例）Team Aurora"
                   required
                 />
               </Field>

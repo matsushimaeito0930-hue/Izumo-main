@@ -510,7 +510,7 @@ export async function createChatMessage(input: {
   body: string;
 }): Promise<ChatMessage> {
   const body = input.body.trim();
-  const authorName = input.authorName.trim() || "HackVerse user";
+  const authorName = input.authorName.trim() || "HackRadar user";
 
   if (!body || body.length > 500) {
     throw new Error("メッセージは1〜500文字で入力してください。");
@@ -838,7 +838,7 @@ export async function createTeamInvite(input: {
 }): Promise<TeamInviteView> {
   const teamName = input.teamName.trim();
   const githubRepo = input.githubRepo.trim();
-  const invitedBy = input.invitedBy.trim() || "HackVerse Admin";
+  const invitedBy = input.invitedBy.trim() || "HackRadar Admin";
 
   if (!teamName || !githubRepo) {
     throw new Error("Team name and GitHub repository are required.");

@@ -36,7 +36,7 @@ create table if not exists public.team_invites (
   id uuid primary key default gen_random_uuid(),
   code text not null unique,
   team_id uuid not null references public.teams(id) on delete cascade,
-  invited_by text not null default 'HackVerse Admin',
+  invited_by text not null default 'HackRadar Admin',
   created_at timestamptz not null default now()
 );
 
@@ -154,8 +154,8 @@ end $$;
 
 insert into public.users (github_username, display_name, role)
 values
-  ('team-a-lead', 'Aoi', 'participant'),
-  ('team-b-dev', 'Ren', 'participant'),
+  ('team-a-lead', 'サンプル参加者', 'participant'),
+  ('team-b-dev', 'サンプル開発者', 'participant'),
   ('js-mentor', 'JavaScript Mentor', 'mentor'),
   ('ui-mentor', 'UI/UX Mentor', 'mentor')
 on conflict (github_username) do nothing;
@@ -169,13 +169,13 @@ values
 on conflict (github_repo) do nothing;
 
 insert into public.team_invites (code, team_id, invited_by)
-select 'TEAM-A', id, 'HackVerse Admin'
+select 'TEAM-A', id, 'HackRadar Admin'
 from public.teams
 where github_repo = 'matsushimaeito0930-hue/Izumo-main'
 on conflict (code) do nothing;
 
 insert into public.team_invites (code, team_id, invited_by)
-select 'TEAM-B', id, 'HackVerse Admin'
+select 'TEAM-B', id, 'HackRadar Admin'
 from public.teams
 where github_repo = 'example/team-b'
 on conflict (code) do nothing;

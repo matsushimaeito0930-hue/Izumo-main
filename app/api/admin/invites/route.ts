@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const invite = await createTeamInvite({
       teamName: body.teamName,
       githubRepo: body.githubRepo,
-      invitedBy: identity?.displayName ?? body.invitedBy ?? "HackVerse 運営"
+      invitedBy: identity?.displayName ?? body.invitedBy ?? "HackRadar 運営"
     });
 
     return NextResponse.json({ invite });

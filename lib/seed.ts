@@ -19,7 +19,7 @@ export const seedUsers: User[] = [
   {
     id: "user-a",
     github_username: "team-a-lead",
-    display_name: "Aoi",
+    display_name: "サンプル参加者",
     avatar_url: null,
     role: "participant",
     created_at: minutesAgo(160)
@@ -27,7 +27,7 @@ export const seedUsers: User[] = [
   {
     id: "user-b",
     github_username: "team-b-dev",
-    display_name: "Ren",
+    display_name: "サンプル開発者",
     avatar_url: null,
     role: "participant",
     created_at: minutesAgo(150)
@@ -155,7 +155,7 @@ export const seedHelpReplies: HelpReply[] = [
   {
     id: "help-reply-1",
     help_post_id: "help-1",
-    author_name: "Ren",
+    author_name: "サンプル開発者",
     author_github: "team-b-dev",
     author_role: "participant",
     body: "うちも同じところで詰まりました。リダイレクトURLの末尾のスラッシュが設定と1文字違うと、戻ってきてもセッションが作られませんでした。",
@@ -203,7 +203,7 @@ export const seedChatMessages: ChatMessage[] = [
     id: "chat-mentor-2",
     channel: "mentor",
     team_id: "team-a",
-    author_name: "Aoi",
+    author_name: "サンプル参加者",
     author_role: "participant",
     body: "ありがとうございます。次の相談でスクリーンショットも共有します。",
     created_at: minutesAgo(5)
@@ -228,14 +228,14 @@ export const seedTeamInvites: TeamInvite[] = [
     id: "invite-team-a",
     code: "TEAM-A",
     team_id: "team-a",
-    invited_by: "HackVerse 運営",
+    invited_by: "HackRadar 運営",
     created_at: minutesAgo(70)
   },
   {
     id: "invite-team-b",
     code: "TEAM-B",
     team_id: "team-b",
-    invited_by: "HackVerse 運営",
+    invited_by: "HackRadar 運営",
     created_at: minutesAgo(65)
   }
 ];

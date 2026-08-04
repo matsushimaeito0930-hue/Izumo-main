@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       channel: body.channel,
       teamId: body.teamId,
       // ログイン済みなら投稿者名はcookieの本人情報で固定する。
-      authorName: identity?.displayName ?? (body.authorName?.trim() || "HackVerse user"),
+      authorName: identity?.displayName ?? (body.authorName?.trim() || "HackRadar user"),
       authorRole: identity?.role ?? "participant",
       body: body.body
     });

@@ -1,6 +1,6 @@
-# HackVerse
+# HackRadar
 
-HackVerse は、短期間のハッカソン向けのリアルタイム運営ダッシュボードです。
+HackRadar は、短期間のハッカソン向けのリアルタイムチーム開発ダッシュボードです。
 GitHubにプッシュすると、チームの進み具合とランキングが自動で更新されます。
 詰まったら質問掲示板に書けば、参加している人なら誰でも答えられます。
 
@@ -159,7 +159,7 @@ Webhook設定:
 処理の流れ:
 
 1. GitHubがイベントを送信する
-2. HackVerse が HMAC SHA-256 署名を検証する
+2. HackRadar が HMAC SHA-256 署名を検証する
 3. リポジトリを `teams.github_repo` と突き合わせる
 4. アクティビティを1件保存する
 5. `push` の場合は `payload.commits.length` の分だけ `teams.commit_count` を加算する

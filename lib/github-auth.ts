@@ -173,7 +173,7 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubIdenti
     headers: {
       accept: "application/vnd.github+json",
       authorization: `Bearer ${accessToken}`,
-      "user-agent": "HackVerse"
+      "user-agent": "HackRadar"
     }
   });
 
