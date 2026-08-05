@@ -7,10 +7,10 @@ import { HackRadarLogo } from "@/components/hackradar-logo";
 import {
   ChevronDown,
   Clipboard,
+  Link2,
   LoaderCircle,
   DoorOpen,
   Github,
-  GraduationCap,
   LogOut,
   Plus,
   TriangleAlert
@@ -32,7 +32,6 @@ type Viewer = {
 
 const roleLabels: Record<UserRole, string> = {
   participant: "参加者",
-  mentor: "メンター",
   admin: "運営"
 };
 
@@ -62,7 +61,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-/** 運営・メンター向けの操作は普段畳んでおく。参加者の視界に入れない。 */
+/** 運営向けの操作は普段畳んでおく。 */
 function Collapsible({
   title,
   children
@@ -163,16 +162,20 @@ export function OnboardingClient({
   );
   const [manualRepo, setManualRepo] = useState(false);
   const [displayName, setDisplayName] = useState("");
-  const [specialty, setSpecialty] = useState("");
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
 
   // GitHubログイン未設定のローカル環境だけ、手入力での参加を許す。
   const manualEntry = !authConfigured;
   const canJoin = manualEntry || Boolean(viewer);
-  const isStaff = viewer?.role === "mentor" || viewer?.role === "admin";
+  // 運営セクションは運営ロールのときだけ出す。参加者の視界に入れない。
+  const isStaff = viewer?.role === "admin";
 
   useEffect(() => {
+    // 招待URL（/?code=XXXX-XXXX）で来た人は参加コードを自動で埋める。
+    const sharedCode = searchParams.get("code");
+    if (sharedCode) setJoinCode(sharedCode.trim().toUpperCase());
+
     const inviteCode = searchParams.get("invite");
     if (inviteCode) {
       const invite = initialInvites.find(
@@ -344,33 +347,6 @@ export function OnboardingClient({
       router.push("/dashboard");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "参加に失敗しました。");
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function joinMentor(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsBusy(true);
-    setMessage("");
-
-    try {
-      const response = await fetch("/api/mentors/session", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          specialty,
-          displayName: manualEntry ? displayName : undefined
-        })
-      });
-      const payload = (await response.json()) as { session: AppSession; error?: string };
-
-      if (!response.ok) throw new Error(payload.error ?? "登録に失敗しました。");
-
-      saveSession(payload.session);
-      router.push("/help");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "登録に失敗しました。");
     } finally {
       setIsBusy(false);
     }
@@ -630,19 +606,36 @@ export function OnboardingClient({
                   {hackEvent.join_code}
                 </p>
                 <p className="mt-1.5 text-xs leading-5 text-muted">
-                  このコードをDiscordなど参加者が集まる場所に共有してください。
+                  Discordなど参加者が集まる場所に共有してください。
+                  招待URLを貼れば、参加コードが自動で入力された状態で開きます。
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard?.writeText(hackEvent.join_code);
-                    setMessage("参加コードをコピーしました。");
-                  }}
-                  className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface text-sm font-medium text-ink2 shadow-soft transition-[box-shadow,color,transform] hover:text-ink active:translate-y-px active:shadow-pressed"
-                >
-                  <Clipboard className="size-4" />
-                  コードをコピー
-                </button>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(hackEvent.join_code);
+                      setMessage("参加コードをコピーしました。");
+                    }}
+                    className="flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-surface text-sm font-medium text-ink2 shadow-soft transition-[box-shadow,color,transform] hover:text-ink active:translate-y-px active:shadow-pressed"
+                  >
+                    <Clipboard className="size-4" />
+                    コードをコピー
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const inviteUrl = `${window.location.origin}/?code=${encodeURIComponent(
+                        hackEvent.join_code
+                      )}`;
+                      void navigator.clipboard?.writeText(inviteUrl);
+                      setMessage("招待URLをコピーしました。Discordにそのまま貼れます。");
+                    }}
+                    className="flex h-10 items-center justify-center gap-2 rounded-xl bg-ink text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed"
+                  >
+                    <Link2 className="size-4" />
+                    招待URLをコピー
+                  </button>
+                </div>
               </div>
             )}
 
@@ -683,33 +676,6 @@ export function OnboardingClient({
           </Collapsible>
         )}
 
-        {(isStaff || manualEntry) && (
-          <Collapsible title="メンターの方：担当として登録する">
-            <form onSubmit={joinMentor} className="space-y-4">
-              {manualEntry && !viewer && (
-                <Field label="表示名">
-                  <input
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    className={inputClass}
-                  />
-                </Field>
-              )}
-              <Field label="得意分野">
-                <input
-                  value={specialty}
-                  onChange={(event) => setSpecialty(event.target.value)}
-                  className={inputClass}
-                  required
-                />
-              </Field>
-              <button type="submit" disabled={isBusy} className={primaryButtonClass}>
-                <GraduationCap className="size-4" />
-                メンターとして入る
-              </button>
-            </form>
-          </Collapsible>
-        )}
       </div>
     </main>
   );

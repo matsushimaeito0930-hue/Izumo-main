@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
   if ((isGitHubAuthConfigured() || !isDemoModeEnabled()) && !identity) {
     return NextResponse.json(
-      { error: "GitHubでログインしてからメンターに相談してください。" },
+      { error: "GitHubでログインしてから運営に相談してください。" },
       { status: 401 }
     );
   }
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     body?: string;
   };
 
-  if (body.channel !== "mentor") {
+  if (body.channel !== "staff") {
     return NextResponse.json(
       { error: "チャンネルの指定が正しくありません。" },
       { status: 400 }

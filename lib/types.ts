@@ -6,11 +6,12 @@ export type ActivityType =
   | "review";
 
 export type HelpStatus = "open" | "helping" | "solved";
-export type MentorAvailability = "available" | "busy" | "offline";
 
-export type ChatChannel = "mentor";
+/** 相談チャットは「チーム ↔ 運営」の1本だけ。 */
+export type ChatChannel = "staff";
 
-export type UserRole = "participant" | "mentor" | "admin";
+/** メンターは廃止し、運営と参加者の2種類だけにした。 */
+export type UserRole = "participant" | "admin";
 
 export type User = {
   id: string;
@@ -61,7 +62,6 @@ export type AppSession = {
   teamId?: string;
   teamName?: string;
   inviteCode?: string;
-  specialty?: string;
 };
 
 export type Activity = {
@@ -85,18 +85,6 @@ export type HelpPost = {
   created_at: string;
 };
 
-export type Mentor = {
-  id: string;
-  user_id: string;
-  specialty: string;
-  availability: MentorAvailability;
-};
-
-export type MentorProfile = Mentor & {
-  display_name: string;
-  github_username: string;
-};
-
 export type ChatMessage = {
   id: string;
   channel: ChatChannel;
@@ -107,7 +95,7 @@ export type ChatMessage = {
   created_at: string;
 };
 
-/** 掲示板の回答。メンターに限らず、参加している人なら誰でも投稿できる。 */
+/** 掲示板の回答。参加している人なら誰でも投稿できる。 */
 export type HelpReply = {
   id: string;
   help_post_id: string;
@@ -134,7 +122,6 @@ export type HackVerseState = {
   teams: Team[];
   activities: ActivityView[];
   helpPosts: HelpPostView[];
-  mentors: MentorProfile[];
   messages: ChatMessage[];
   updatedAt: string;
 };

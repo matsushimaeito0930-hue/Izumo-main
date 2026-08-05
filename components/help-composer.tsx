@@ -43,7 +43,7 @@ export function HelpComposer({
   return (
     <Panel
       title="わからないことを書く"
-      description="メンターだけでなく、参加している人なら誰でも答えてくれます。"
+      description="参加している人なら誰でも答えてくれます。"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">

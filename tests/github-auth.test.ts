@@ -25,7 +25,6 @@ beforeEach(() => {
   process.env.AUTH_SECRET = "test-auth-secret";
   process.env.GITHUB_CLIENT_ID = "test-client-id";
   process.env.GITHUB_CLIENT_SECRET = "test-client-secret";
-  delete process.env.MENTOR_GITHUB_LOGINS;
   delete process.env.ADMIN_GITHUB_LOGINS;
 });
 
@@ -118,13 +117,11 @@ describe("allowlistによる役割の判定", () => {
     expect(resolveRole("matsu")).toBe("participant");
   });
 
-  it("メンターと運営を判定する", () => {
-    process.env.MENTOR_GITHUB_LOGINS = "carol, dave";
-    process.env.ADMIN_GITHUB_LOGINS = "alice";
+  it("運営を判定する", () => {
+    process.env.ADMIN_GITHUB_LOGINS = "alice, bob";
 
-    expect(resolveRole("carol")).toBe("mentor");
-    expect(resolveRole("dave")).toBe("mentor");
     expect(resolveRole("alice")).toBe("admin");
+    expect(resolveRole("bob")).toBe("admin");
     expect(resolveRole("matsu")).toBe("participant");
   });
 
@@ -134,11 +131,6 @@ describe("allowlistによる役割の判定", () => {
     expect(resolveRole("ALICE")).toBe("admin");
   });
 
-  it("運営とメンターの両方にいる場合は運営を優先する", () => {
-    process.env.MENTOR_GITHUB_LOGINS = "alice";
-    process.env.ADMIN_GITHUB_LOGINS = "alice";
-    expect(resolveRole("alice")).toBe("admin");
-  });
 });
 
 describe("認可URLの組み立て", () => {

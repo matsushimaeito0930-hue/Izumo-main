@@ -5,7 +5,7 @@ create table if not exists public.users (
   github_username text not null unique,
   display_name text not null,
   avatar_url text,
-  role text not null default 'participant' check (role in ('participant', 'mentor', 'admin')),
+  role text not null default 'participant' check (role in ('participant', 'admin')),
   created_at timestamptz not null default now()
 );
 
@@ -87,25 +87,18 @@ create table if not exists public.help_replies (
   help_post_id uuid not null references public.help_posts(id) on delete cascade,
   author_name text not null,
   author_github text,
-  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin')),
+  author_role text not null default 'participant' check (author_role in ('participant', 'admin')),
   body text not null check (char_length(body) between 1 and 1000),
   is_accepted boolean not null default false,
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.mentors (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null unique references public.users(id) on delete cascade,
-  specialty text not null,
-  availability text not null default 'offline' check (availability in ('available', 'busy', 'offline'))
-);
-
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
-  channel text not null check (channel in ('team', 'mentor')),
+  channel text not null check (channel in ('staff')),
   team_id uuid references public.teams(id) on delete cascade,
   author_name text not null,
-  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin')),
+  author_role text not null default 'participant' check (author_role in ('participant', 'admin')),
   body text not null check (char_length(body) between 1 and 500),
   created_at timestamptz not null default now()
 );
@@ -116,7 +109,6 @@ create index if not exists help_posts_status_idx on public.help_posts(status);
 create index if not exists help_replies_post_idx on public.help_replies(help_post_id, created_at);
 create index if not exists teams_score_idx on public.teams(score desc);
 create index if not exists teams_commit_count_idx on public.teams(commit_count desc);
-create unique index if not exists mentors_user_id_idx on public.mentors(user_id);
 create index if not exists team_invites_created_at_idx on public.team_invites(created_at desc);
 create index if not exists chat_messages_created_at_idx on public.chat_messages(created_at);
 create index if not exists chat_messages_channel_team_idx on public.chat_messages(channel, team_id);
@@ -127,7 +119,6 @@ grant select on public.events to anon;
 grant select on public.activities to anon;
 grant select on public.help_posts to anon;
 grant select, insert on public.help_replies to anon;
-grant select on public.mentors to anon;
 grant select on public.team_invites to anon;
 grant select, insert on public.chat_messages to anon;
 
@@ -166,22 +157,25 @@ exception
   when duplicate_object then null;
 end $$;
 
-insert into public.users (github_username, display_name, role)
-values
-  ('frontend-mentor', 'Frontend Mentor', 'mentor'),
-  ('ui-mentor', 'UI/UX Mentor', 'mentor')
-on conflict (github_username) do nothing;
-
 -- Teams and invites are created by the operator from the onboarding screen.
 
-insert into public.mentors (user_id, specialty, availability)
-select id, 'Next.js / React', 'available'
-from public.users
-where github_username = 'frontend-mentor'
-on conflict do nothing;
+-- ここから下は、以前のスキーマで作ったDBを新しい形に合わせるための移行です。
+-- 新規作成なら実行しても何も起きません。
 
-insert into public.mentors (user_id, specialty, availability)
-select id, 'UI/UX / Pitch polish', 'busy'
-from public.users
-where github_username = 'ui-mentor'
-on conflict do nothing;
+-- メンターは廃止したので、既存のメンターは参加者に戻す。
+update public.users set role = 'participant' where role = 'mentor';
+update public.help_replies set author_role = 'participant' where author_role = 'mentor';
+
+-- 相談チャットのチャンネル名を 'mentor' から 'staff' に統一する。
+alter table public.chat_messages drop constraint if exists chat_messages_channel_check;
+update public.chat_messages set channel = 'staff' where channel in ('mentor', 'team');
+update public.chat_messages set author_role = 'participant' where author_role = 'mentor';
+alter table public.chat_messages
+  add constraint chat_messages_channel_check check (channel in ('staff'));
+
+-- ロールの制約を貼り直す。
+alter table public.users drop constraint if exists users_role_check;
+alter table public.users
+  add constraint users_role_check check (role in ('participant', 'admin'));
+
+drop table if exists public.mentors;

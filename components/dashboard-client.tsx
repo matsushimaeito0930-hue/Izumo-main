@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { ActivityFeed } from "@/components/activity-feed";
-import { ChatPanel } from "@/components/chat-panel";
+import { AdminRepoStatus } from "@/components/admin-repo-status";
 import { DemoControls } from "@/components/demo-controls";
 import { DevelopmentOverview } from "@/components/development-overview";
 import { HelpBoard } from "@/components/help-board";
 import { HelpComposer } from "@/components/help-composer";
-import { MentorList } from "@/components/mentor-list";
+import { MyTeamCard } from "@/components/my-team-card";
 import { RankingPanel } from "@/components/ranking-panel";
+import { StaffChat } from "@/components/staff-chat";
 import { RealtimeStatusBadge } from "@/components/realtime-status-badge";
 import { TeamRepoSetup } from "@/components/team-repo-setup";
 import { useHackVerseState } from "@/components/use-hackverse-state";
@@ -61,7 +62,12 @@ export function DashboardClient({
     }
   }, []);
 
+  const isAdmin = viewer?.role === "admin";
   const myTeam = state.teams.find((team) => team.id === myTeamId) ?? null;
+  // state.teams はスコアの降順。順位はその並びから取る。
+  const myRank = myTeam ? state.teams.findIndex((team) => team.id === myTeam.id) + 1 : 0;
+  const myLatestActivity =
+    state.activities.find((activity) => activity.team_id === myTeamId) ?? null;
 
   if (view === "help") {
     return (
@@ -74,14 +80,13 @@ export function DashboardClient({
           onReply={createHelpReply}
           onAccept={acceptHelpReply}
         />
-        <ChatPanel
+        <StaffChat
           teams={state.teams}
-          mentors={state.mentors}
           messages={state.messages}
-          onSend={createChatMessage}
+          myTeamId={myTeamId}
           viewer={viewer}
+          onSend={createChatMessage}
         />
-        <MentorList mentors={state.mentors} />
       </div>
     );
   }
@@ -91,10 +96,12 @@ export function DashboardClient({
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
-            開発状況
+            {isAdmin ? "全体の開発状況" : "開発状況"}
           </h1>
           <p className="mt-1.5 text-sm leading-6 text-muted">
-            GitHubにプッシュすると、この画面が自動で更新されます。
+            {isAdmin
+              ? "全チームの進み具合です。参加コードはヘッダー右上からコピーできます。"
+              : "GitHubにプッシュすると、この画面が自動で更新されます。"}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -108,6 +115,18 @@ export function DashboardClient({
       {myTeam && !myTeam.github_repo && (
         <TeamRepoSetup team={myTeam} onDone={refresh} />
       )}
+
+      {/* 参加者は自分のチームを先に見せる。運営は全チームをフラットに見る。 */}
+      {!isAdmin && myTeam && (
+        <MyTeamCard
+          team={myTeam}
+          rank={myRank}
+          totalTeams={state.teams.length}
+          latestActivity={myLatestActivity}
+        />
+      )}
+
+      {isAdmin && <AdminRepoStatus teams={state.teams} />}
 
       <DevelopmentOverview
         teams={state.teams}

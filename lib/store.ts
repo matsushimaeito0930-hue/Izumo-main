@@ -7,7 +7,6 @@ import {
   seedChatMessages,
   seedHelpPosts,
   seedHelpReplies,
-  seedMentors,
   seedTeamInvites,
   seedTeamMembers,
   seedTeams,
@@ -27,8 +26,6 @@ import type {
   HackEvent,
   HelpReply,
   HelpStatus,
-  Mentor,
-  MentorProfile,
   Team,
   TeamInvite,
   TeamInviteView,
@@ -42,7 +39,6 @@ type MemoryStore = {
   activities: Activity[];
   helpPosts: HelpPost[];
   helpReplies: HelpReply[];
-  mentors: Mentor[];
   messages: ChatMessage[];
   teamMembers: TeamMember[];
   teamInvites: TeamInvite[];
@@ -71,7 +67,6 @@ function cloneStore(): MemoryStore {
     messages: structuredClone(seedChatMessages),
     helpPosts: structuredClone(seedHelpPosts),
     helpReplies: structuredClone(seedHelpReplies),
-    mentors: structuredClone(seedMentors),
     teamMembers: structuredClone(seedTeamMembers),
     teamInvites: structuredClone(seedTeamInvites),
     event: null
@@ -94,7 +89,6 @@ function withViews(
   activities: Activity[],
   helpPosts: HelpPost[],
   helpReplies: HelpReply[],
-  mentors: Mentor[],
   messages: ChatMessage[]
 ): HackVerseState {
   const teamsById = new Map(teams.map((team) => [team.id, team]));
@@ -128,25 +122,10 @@ function withViews(
     }))
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 
-  const mentorProfiles: MentorProfile[] = mentors.map((mentor) => {
-    const user = usersById.get(mentor.user_id);
-    const isLegacyFrontendMentor =
-      user?.github_username === "js-mentor" || mentor.specialty === "JavaScript / Realtime";
-    return {
-      ...mentor,
-      display_name: isLegacyFrontendMentor
-        ? "フロントエンドメンター"
-        : (user?.display_name ?? "Mentor"),
-      specialty: isLegacyFrontendMentor ? "Next.js / React" : mentor.specialty,
-      github_username: user?.github_username ?? "mentor"
-    };
-  });
-
   return {
     teams: teams.map(normalizeTeam).sort((a, b) => b.score - a.score),
     activities: activityViews,
     helpPosts: helpPostViews,
-    mentors: mentorProfiles,
     messages: messages
       .slice()
       .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
@@ -166,7 +145,6 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
     activitiesResult,
     helpPostsResult,
     helpRepliesResult,
-    mentorsResult,
     messagesResult
   ] =
     await Promise.all([
@@ -185,7 +163,6 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
         .select("*")
         .order("created_at", { ascending: true })
         .limit(200),
-      supabase.from("mentors").select("*"),
       supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).limit(80)
     ]);
 
@@ -201,7 +178,6 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
     (helpRepliesResult.error
       ? []
       : (helpRepliesResult.data ?? seedHelpReplies)) as HelpReply[],
-    (mentorsResult.data ?? seedMentors) as Mentor[],
     (messagesResult.error
       ? []
       : (messagesResult.data ?? seedChatMessages)) as ChatMessage[]
@@ -224,7 +200,6 @@ export async function getHackVerseState(): Promise<HackVerseState> {
     store.activities,
     store.helpPosts,
     store.helpReplies,
-    store.mentors,
     store.messages
   );
 }
@@ -535,7 +510,7 @@ export async function createChatMessage(input: {
     throw new Error("メッセージは1〜500文字で入力してください。");
   }
 
-  // メンター相談もチームごとのスレッドにするため、どちらのチャンネルでもチームが要る。
+  // 運営への相談はチームごとのスレッドなので、必ずチームが要る。
   if (!input.teamId) {
     throw new Error("チームを選択してください。");
   }
@@ -747,7 +722,7 @@ export async function createHelpReply(input: {
 
 /**
  * ベストアンサーを採用する。質問が解決済みになり、他の回答の採用は外れる。
- * 採用できるのは質問者本人・メンター・運営のみ。
+ * 採用できるのは質問者本人と運営のみ。
  */
 export async function acceptHelpReply(input: {
   helpPostId: string;
@@ -1306,85 +1281,3 @@ export async function joinTeamByName(input: {
   };
 }
 
-export async function createMentorSession(input: {
-  displayName: string;
-  githubUsername?: string;
-  specialty: string;
-}): Promise<AppSession> {
-  const displayName = input.displayName.trim();
-  const specialty = input.specialty.trim();
-  const githubUsername =
-    input.githubUsername?.trim() || `mentor-${randomUUID().slice(0, 8)}`;
-
-  if (!displayName || !specialty) {
-    throw new Error("Display name and specialty are required.");
-  }
-
-  if (isSupabaseConfigured()) {
-    const supabase = createServerSupabaseClient();
-    if (supabase) {
-      const { data: user, error: userError } = await supabase
-        .from("users")
-        .upsert(
-          {
-            github_username: githubUsername,
-            display_name: displayName,
-            role: "mentor"
-          },
-          { onConflict: "github_username" }
-        )
-        .select("*")
-        .single();
-
-      if (userError) throw userError;
-
-      await supabase.from("mentors").upsert(
-        {
-          user_id: user.id,
-          specialty,
-          availability: "available"
-        },
-        { onConflict: "user_id" }
-      );
-    }
-  } else {
-    const store = getMemoryStore();
-    let user = store.users.find(
-      (candidate) => candidate.github_username === githubUsername
-    );
-
-    if (!user) {
-      user = {
-        id: randomUUID(),
-        github_username: githubUsername,
-        display_name: displayName,
-        avatar_url: null,
-        role: "mentor",
-        created_at: new Date().toISOString()
-      };
-      store.users.push(user);
-    }
-
-    const existingMentor = store.mentors.find(
-      (mentor) => mentor.user_id === user.id
-    );
-    if (existingMentor) {
-      existingMentor.specialty = specialty;
-      existingMentor.availability = "available";
-    } else {
-      store.mentors.push({
-        id: randomUUID(),
-        user_id: user.id,
-        specialty,
-        availability: "available"
-      });
-    }
-  }
-
-  return {
-    role: "mentor",
-    displayName,
-    githubUsername,
-    specialty
-  };
-}

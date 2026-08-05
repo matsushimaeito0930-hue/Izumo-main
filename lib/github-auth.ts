@@ -65,10 +65,6 @@ export function resolveRole(login: string): UserRole {
     return "admin";
   }
 
-  if (parseLogins(process.env.MENTOR_GITHUB_LOGINS).includes(normalized)) {
-    return "mentor";
-  }
-
   return "participant";
 }
 

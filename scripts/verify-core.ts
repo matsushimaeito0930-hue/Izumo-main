@@ -252,20 +252,14 @@ console.log("\n[3] ログインセッション（JWT / HS256）");
 
 console.log("\n[4] 役割のallowlist");
 {
-  delete process.env.MENTOR_GITHUB_LOGINS;
   delete process.env.ADMIN_GITHUB_LOGINS;
   check("既定は参加者", resolveRole("matsu"), "participant");
 
-  process.env.MENTOR_GITHUB_LOGINS = "carol, dave";
-  process.env.ADMIN_GITHUB_LOGINS = "alice";
-  check("メンター判定", resolveRole("carol"), "mentor");
-  check("空白入りでも判定できる", resolveRole("dave"), "mentor");
+  process.env.ADMIN_GITHUB_LOGINS = "alice, bob";
   check("運営判定", resolveRole("alice"), "admin");
+  check("空白入りでも判定できる", resolveRole("bob"), "admin");
   check("該当なしは参加者", resolveRole("matsu"), "participant");
   check("大文字小文字を無視する", resolveRole("ALICE"), "admin");
-
-  process.env.MENTOR_GITHUB_LOGINS = "alice";
-  check("両方に居たら運営を優先する", resolveRole("alice"), "admin");
 }
 
 console.log("\n[5] 認可URLの組み立て");

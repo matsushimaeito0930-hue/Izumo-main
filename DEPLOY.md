@@ -74,7 +74,6 @@ git push
 | `GITHUB_OAUTH_CALLBACK_URL` | ● | `本番URL/api/auth/github/callback` |
 | `GITHUB_WEBHOOK_SECRET` | ● | 自分で決めた長い文字列（手順5で使う） |
 | `ADMIN_GITHUB_LOGINS` | ● | 運営のGitHubユーザー名（カンマ区切り） |
-| `MENTOR_GITHUB_LOGINS` | | メンターのGitHubユーザー名（カンマ区切り） |
 | `ENABLE_DEMO_MODE` | | `false`（審査でデモ操作を見せたい場合のみ `true`） |
 
 **`ADMIN_GITHUB_LOGINS` を空のままにしないでください。** 空だと、ログインした人なら誰でも招待コードを作れてしまいます。
@@ -139,7 +138,7 @@ git push
 - [ ] スコアとランキングが動く
 - [ ] `/help` で質問を投稿できる
 - [ ] 別アカウントでその質問に回答でき、質問者が「これで解決した」を押すと解決済みになる
-- [ ] メンター相談にメッセージを送れる
+- [ ] 運営への相談にメッセージを送れる
 
 pushしても反映されない場合は、GitHub側の Recent Deliveries を見てください。
 
@@ -171,8 +170,9 @@ OAuth Appのコールバックが `本番URL/api/auth/github/callback` と完全
 **ログインしてもすぐログアウトされる**
 `AUTH_SECRET` を変更すると、既存のcookieが全部無効になります。変更した場合は再ログインが必要です。セッションの有効期限は12時間です。
 
-**メンターとして登録できない**
-`MENTOR_GITHUB_LOGINS` にそのGitHubユーザー名が入っているか確認。変更後は再デプロイが必要です。
+**運営の画面にならない（参加コードが右上に出ない）**
+`ADMIN_GITHUB_LOGINS` にそのGitHubユーザー名が入っているか確認。
+変更後は再デプロイし、さらに一度ログインし直してください（ロールはログイン時のcookieに焼き込まれます）。
 
 **スコアがおかしい**
 同時に大量のイベントが来ると加算が落ちることがあります。Supabaseの `teams` テーブルで直接直せます。

@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "投稿が見つかりません。" }, { status: 404 });
   }
 
-  // 採用できるのは質問者本人・メンター・運営のみ。
+  // 採用できるのは質問者本人と運営のみ。
   if (isGitHubAuthConfigured()) {
     if (!identity) {
       return NextResponse.json(
@@ -36,11 +36,11 @@ export async function POST(request: Request) {
     }
 
     const isAuthor = post.author_github === identity.login;
-    const isStaff = identity.role === "mentor" || identity.role === "admin";
+    const isStaff = identity.role === "admin";
 
     if (!isAuthor && !isStaff) {
       return NextResponse.json(
-        { error: "ベストアンサーを選べるのは質問者本人かメンターだけです。" },
+        { error: "ベストアンサーを選べるのは質問者本人か運営だけです。" },
         { status: 403 }
       );
     }
