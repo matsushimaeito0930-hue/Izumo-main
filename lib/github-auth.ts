@@ -31,6 +31,10 @@ export type GitHubRepo = {
   fullName: string;
   private: boolean;
   updatedAt: string;
+  /** リポジトリの所有者。Organizationや他人のリポジトリを見分けるために返す。 */
+  owner: string;
+  /** ログイン中のアカウント自身が持っているリポジトリかどうか。 */
+  isOwn: boolean;
 };
 
 export function isGitHubAuthConfigured(): boolean {
@@ -297,10 +301,15 @@ export async function fetchGitHubUser(
 
 /**
  * ログイン中のユーザーが触れるリポジトリの一覧。
- * 追加のスコープは要求していないため、返るのはパブリックリポジトリのみ。
- * プライベートも選ばせたい場合は認可時のscopeに `repo` を足す必要がある。
+ * 自分のものに加えて、共同編集者として招待されたものと所属Organizationのものも含む。
+ * どこから来たのかUI側で示せるよう、ownerと自分のものかどうかを付けて返す。
+ *
+ * `repo` スコープが無い場合、GitHubが返すのはパブリックリポジトリのみ。
  */
-export async function fetchGitHubRepos(accessToken: string): Promise<GitHubRepo[]> {
+export async function fetchGitHubRepos(
+  accessToken: string,
+  viewerLogin = ""
+): Promise<GitHubRepo[]> {
   const url = new URL("https://api.github.com/user/repos");
   url.searchParams.set("per_page", "100");
   url.searchParams.set("sort", "updated");
@@ -323,15 +332,24 @@ export async function fetchGitHubRepos(accessToken: string): Promise<GitHubRepo[
     full_name?: string;
     private?: boolean;
     updated_at?: string;
+    owner?: { login?: string };
   }>;
 
+  const viewer = viewerLogin.toLowerCase();
+
   return repos
-    .filter((repo): repo is { full_name: string; private?: boolean; updated_at?: string } =>
+    .filter((repo): repo is { full_name: string } & (typeof repos)[number] =>
       Boolean(repo.full_name)
     )
-    .map((repo) => ({
-      fullName: repo.full_name,
-      private: Boolean(repo.private),
-      updatedAt: repo.updated_at ?? ""
-    }));
+    .map((repo) => {
+      // full_name は "owner/repo" 形式。owner が取れない場合はここから拾う。
+      const owner = repo.owner?.login ?? repo.full_name.split("/")[0] ?? "";
+      return {
+        fullName: repo.full_name,
+        private: Boolean(repo.private),
+        updatedAt: repo.updated_at ?? "",
+        owner,
+        isOwn: owner.toLowerCase() === viewer
+      };
+    });
 }

@@ -30,7 +30,7 @@ export async function GET() {
   }
 
   try {
-    const repos = await fetchGitHubRepos(identity.accessToken);
+    const repos = await fetchGitHubRepos(identity.accessToken, identity.login);
     return NextResponse.json({
       repos,
       canListPrivate: canListPrivateRepos(identity.scopes)

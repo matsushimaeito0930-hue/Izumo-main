@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { GitBranch, LoaderCircle } from "lucide-react";
 import { Panel } from "@/components/panel";
+import { RepoOptions, type RepoOption } from "@/components/onboarding-client";
 import type { Team } from "@/lib/types";
 
 /**
@@ -10,7 +11,7 @@ import type { Team } from "@/lib/types";
  * 自分のチームにリポジトリが設定されていないときだけ表示する。
  */
 export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void }) {
-  const [repos, setRepos] = useState<{ fullName: string }[]>([]);
+  const [repos, setRepos] = useState<RepoOption[]>([]);
   const [canListPrivate, setCanListPrivate] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [manual, setManual] = useState(false);
@@ -24,7 +25,7 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
     fetch("/api/github/repos")
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
-          repos?: { fullName: string }[];
+          repos?: RepoOption[];
           canListPrivate?: boolean;
         };
         if (cancelled) return;
@@ -106,11 +107,7 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
             required
           >
             <option value="">選んでください</option>
-            {repos.map((repo) => (
-              <option key={repo.fullName} value={repo.fullName}>
-                {repo.fullName}
-              </option>
-            ))}
+            <RepoOptions repos={repos} />
           </select>
         )}
 

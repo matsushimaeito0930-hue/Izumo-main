@@ -90,6 +90,49 @@ function Collapsible({
   );
 }
 
+export type RepoOption = {
+  fullName: string;
+  private: boolean;
+  owner: string;
+  isOwn: boolean;
+};
+
+/**
+ * リポジトリの選択肢。自分のものと、Organization・共同編集者として見えているものを
+ * 分けて表示する。見覚えのない名前が並ぶ理由が一目で分かるようにするため。
+ */
+export function RepoOptions({ repos }: { repos: RepoOption[] }) {
+  const own = repos.filter((repo) => repo.isOwn);
+  const shared = repos.filter((repo) => !repo.isOwn);
+
+  const label = (repo: RepoOption) =>
+    `${repo.fullName}${repo.private ? "（プライベート）" : ""}`;
+
+  return (
+    <>
+      {own.length > 0 && (
+        <optgroup label="自分のリポジトリ">
+          {own.map((repo) => (
+            <option key={repo.fullName} value={repo.fullName}>
+              {label(repo)}
+            </option>
+          ))}
+        </optgroup>
+      )}
+
+      {shared.length > 0 && (
+        <optgroup label="参加しているリポジトリ（Organization・共同編集者）">
+          {shared.map((repo) => (
+            <option key={repo.fullName} value={repo.fullName}>
+              {label(repo)}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
+  );
+}
+
 export function OnboardingClient({
   initialInvites,
   initialEvent,
@@ -113,7 +156,7 @@ export function OnboardingClient({
   const [teamName, setTeamName] = useState(initialTeams[0]?.name ?? "");
   const [newTeamName, setNewTeamName] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
-  const [repos, setRepos] = useState<{ fullName: string; private: boolean }[]>([]);
+  const [repos, setRepos] = useState<RepoOption[]>([]);
   const [canListPrivate, setCanListPrivate] = useState(false);
   const [reposState, setReposState] = useState<"idle" | "loading" | "ready" | "error">(
     "idle"
@@ -154,7 +197,7 @@ export function OnboardingClient({
     fetch("/api/github/repos")
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
-          repos?: { fullName: string; private: boolean }[];
+          repos?: RepoOption[];
           canListPrivate?: boolean;
           error?: string;
         };
@@ -421,7 +464,7 @@ export function OnboardingClient({
                   )}
                 </Field>
 
-                <Field label="自分のGitHubリポジトリ（あとからでも可）">
+                <Field label="チームのGitHubリポジトリ（あとからでも可）">
                   {reposState === "loading" ? (
                     <p className="flex h-11 items-center gap-2 rounded-xl border border-line bg-paper px-3 text-sm text-muted shadow-inset">
                       <LoaderCircle className="size-4 animate-spin" />
@@ -441,11 +484,7 @@ export function OnboardingClient({
                       className={inputClass}
                     >
                       <option value="">あとで設定する</option>
-                      {repos.map((repo) => (
-                        <option key={repo.fullName} value={repo.fullName}>
-                          {repo.fullName}
-                        </option>
-                      ))}
+                      <RepoOptions repos={repos} />
                     </select>
                   )}
 
