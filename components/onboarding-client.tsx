@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { HackRadarLogo } from "@/components/hackradar-logo";
 import {
   ChevronDown,
+  LoaderCircle,
   DoorOpen,
   Github,
   GraduationCap,
@@ -99,6 +100,11 @@ export function OnboardingClient({
   const [teamName, setTeamName] = useState(initialTeams[0]?.name ?? "");
   const [newTeamName, setNewTeamName] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
+  const [repos, setRepos] = useState<{ fullName: string; private: boolean }[]>([]);
+  const [reposState, setReposState] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle"
+  );
+  const [manualRepo, setManualRepo] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [specialty, setSpecialty] = useState("");
   const [message, setMessage] = useState("");
@@ -123,6 +129,42 @@ export function OnboardingClient({
       setMessage(authErrorMessages[authError] ?? "ログインに失敗しました。");
     }
   }, [initialInvites, searchParams]);
+
+  // 運営としてログインしている場合だけ、選択用にリポジトリ一覧を取りに行く。
+  useEffect(() => {
+    if (!viewer) return;
+
+    let cancelled = false;
+    setReposState("loading");
+
+    fetch("/api/github/repos")
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as {
+          repos?: { fullName: string; private: boolean }[];
+          error?: string;
+        };
+        if (cancelled) return;
+
+        if (!response.ok || !payload.repos) {
+          setReposState("error");
+          setManualRepo(true);
+          return;
+        }
+
+        setRepos(payload.repos);
+        setReposState("ready");
+        if (payload.repos.length === 0) setManualRepo(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReposState("error");
+        setManualRepo(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewer]);
 
   async function createInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -365,13 +407,54 @@ export function OnboardingClient({
                 />
               </Field>
               <Field label="GitHubリポジトリ">
-                <input
-                  value={githubRepo}
-                  onChange={(event) => setGithubRepo(event.target.value)}
-                  className={inputClass}
-                  placeholder="owner/repository"
-                  required
-                />
+                {reposState === "loading" ? (
+                  <p className="flex h-11 items-center gap-2 rounded-xl border border-line bg-paper px-3 text-sm text-muted shadow-inset">
+                    <LoaderCircle className="size-4 animate-spin" />
+                    リポジトリを読み込んでいます...
+                  </p>
+                ) : manualRepo ? (
+                  <input
+                    value={githubRepo}
+                    onChange={(event) => setGithubRepo(event.target.value)}
+                    className={inputClass}
+                    placeholder="owner/repository"
+                    required
+                  />
+                ) : (
+                  <select
+                    value={githubRepo}
+                    onChange={(event) => setGithubRepo(event.target.value)}
+                    className={inputClass}
+                    required
+                  >
+                    <option value="">選んでください</option>
+                    {repos.map((repo) => (
+                      <option key={repo.fullName} value={repo.fullName}>
+                        {repo.fullName}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {reposState === "ready" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualRepo((current) => !current);
+                      setGithubRepo("");
+                    }}
+                    className="mt-1.5 text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
+                  >
+                    {manualRepo ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
+                  </button>
+                )}
+
+                {reposState === "error" && (
+                  <p className="mt-1.5 text-xs leading-5 text-muted">
+                    リポジトリ一覧を取得できませんでした。ログインし直すと取得できることがあります。
+                    そのまま手入力でも登録できます。
+                  </p>
+                )}
               </Field>
               <button type="submit" disabled={isBusy} className={primaryButtonClass}>
                 <Plus className="size-4" />

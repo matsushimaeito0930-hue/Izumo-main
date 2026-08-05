@@ -32,24 +32,55 @@ afterEach(() => {
   process.env = { ...originalEnv };
 });
 
-describe("セッションcookieの署名", () => {
+function b64url(value: string) {
+  return Buffer.from(value)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+describe("セッションJWT（HS256）", () => {
   it("署名したものを復元できる", () => {
     const token = serializeIdentity(baseIdentity);
     expect(parseIdentity(token)).toEqual(baseIdentity);
   });
 
-  it("本文を書き換えたトークンは拒否する", () => {
-    const token = serializeIdentity(baseIdentity);
-    const [, signature] = token.split(".");
-    const forgedPayload = Buffer.from(
-      JSON.stringify({ ...baseIdentity, role: "admin" })
-    )
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
+  it("JWTの形とクレームが正しい", () => {
+    const [header, payload] = serializeIdentity(baseIdentity).split(".");
 
-    expect(parseIdentity(`${forgedPayload}.${signature}`)).toBeNull();
+    expect(serializeIdentity(baseIdentity).split(".")).toHaveLength(3);
+    expect(JSON.parse(Buffer.from(header, "base64url").toString("utf8"))).toEqual({
+      alg: "HS256",
+      typ: "JWT"
+    });
+
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    expect(claims.sub).toBe("12345");
+    expect(claims.login).toBe("matsu");
+    expect(claims.exp - claims.iat).toBe(SESSION_MAX_AGE);
+  });
+
+  it("本文を書き換えたトークンは拒否する", () => {
+    const [header, payload, signature] = serializeIdentity(baseIdentity).split(".");
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const forged = b64url(JSON.stringify({ ...claims, role: "admin" }));
+
+    expect(parseIdentity(`${header}.${forged}.${signature}`)).toBeNull();
+  });
+
+  it("alg:none への差し替えを拒否する", () => {
+    const [, payload] = serializeIdentity(baseIdentity).split(".");
+    const noneHeader = b64url(JSON.stringify({ alg: "none", typ: "JWT" }));
+
+    expect(parseIdentity(`${noneHeader}.${payload}.`)).toBeNull();
+  });
+
+  it("algを別のものに変えたトークンを拒否する", () => {
+    const [, payload, signature] = serializeIdentity(baseIdentity).split(".");
+    const header = b64url(JSON.stringify({ alg: "HS512", typ: "JWT" }));
+
+    expect(parseIdentity(`${header}.${payload}.${signature}`)).toBeNull();
   });
 
   it("鍵が違えば拒否する", () => {
@@ -63,6 +94,12 @@ describe("セッションcookieの署名", () => {
     expect(parseIdentity("")).toBeNull();
     expect(parseIdentity("no-dot")).toBeNull();
     expect(parseIdentity("a.b")).toBeNull();
+    expect(parseIdentity("a.b.c.d")).toBeNull();
+  });
+
+  it("アクセストークンをJWTに載せて復元できる", () => {
+    const token = serializeIdentity({ ...baseIdentity, accessToken: "gho_dummy" });
+    expect(parseIdentity(token)?.accessToken).toBe("gho_dummy");
   });
 
   it("有効期限を過ぎたものは拒否する", () => {

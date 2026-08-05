@@ -13,7 +13,7 @@
 - Next.js 14 App Router / TypeScript / Tailwind CSS
 - Supabase Postgres + Realtime（未設定時はメモリ上のシードデータで動作）
 - GitHub Webhooks（署名検証あり）
-- GitHub OAuth（自前実装、httpOnly cookie + HMAC署名）
+- GitHub OAuth（自前実装、httpOnly cookie + HS256のJWT。`node:crypto` のみで実装）
 
 詳しい仕様は `README.md`、デザイン方針は `design.md`、デプロイ手順は `DEPLOY.md` にある。**着手前に3つとも読むこと。**
 
@@ -27,6 +27,7 @@
 - 相談ボードを質問掲示板に作り替え（回答 + ベストアンサー採用、`help_replies` テーブル追加）
 - メンター相談をチームごとのスレッドに変更、チーム内チャットは廃止
 - 画面を2つ（`/dashboard`、`/help`）に集約し、`/home` と `/ranking` を削除
+- チーム登録のリポジトリ欄をGitHubの一覧から選ぶ方式に変更（スコープは `read:user` のまま）
 
 ## 最優先タスク
 
@@ -36,7 +37,7 @@
 
 ```bash
 npm install
-npm run verify:core   # 依存パッケージ無しで動く37項目の検証
+npm run verify:core   # 依存パッケージ無しで動く46項目の検証
 npm run typecheck
 npm run lint
 npm run test

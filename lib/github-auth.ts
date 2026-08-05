@@ -3,7 +3,7 @@ import type { UserRole } from "@/lib/types";
 
 /**
  * GitHub OAuth（自前実装）。
- * セッションはHMAC署名付きのhttpOnly cookieに入れる。DBを必須にしないので、
+ * セッションは HS256 で署名したJWTを httpOnly cookie に入れる。DBを必須にしないので、
  * Supabase未設定でもログインしてデモできる状態を保てる。
  */
 
@@ -18,6 +18,17 @@ export type GitHubIdentity = {
   avatarUrl: string | null;
   role: UserRole;
   issuedAt: number;
+  /**
+   * リポジトリ一覧の取得に使うGitHubのアクセストークン。
+   * httpOnly cookieの中にしか置かず、クライアントへは一切返さない。
+   */
+  accessToken?: string;
+};
+
+export type GitHubRepo = {
+  fullName: string;
+  private: boolean;
+  updatedAt: string;
 };
 
 export function isGitHubAuthConfigured(): boolean {
@@ -67,24 +78,74 @@ function fromBase64url(input: string): Buffer {
   return Buffer.from(input.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 }
 
-function sign(payload: string): string {
-  return base64url(createHmac("sha256", getAuthSecret()).update(payload).digest());
+const JWT_HEADER = { alg: "HS256", typ: "JWT" } as const;
+
+/** JWTのペイロード。sub / iat / exp は標準クレーム。 */
+type SessionClaims = {
+  sub: string;
+  iat: number;
+  exp: number;
+  login: string;
+  name: string;
+  avatar: string | null;
+  role: UserRole;
+  gh?: string;
+};
+
+function sign(signingInput: string): string {
+  return base64url(createHmac("sha256", getAuthSecret()).update(signingInput).digest());
 }
 
+/**
+ * セッションcookieの中身を HS256 のJWTとして発行する。
+ * 外部ライブラリは使わず node:crypto だけで組み立てている。
+ */
 export function serializeIdentity(identity: GitHubIdentity): string {
-  const payload = base64url(JSON.stringify(identity));
-  return `${payload}.${sign(payload)}`;
+  const claims: SessionClaims = {
+    sub: String(identity.githubId),
+    iat: identity.issuedAt,
+    exp: identity.issuedAt + SESSION_MAX_AGE,
+    login: identity.login,
+    name: identity.displayName,
+    avatar: identity.avatarUrl,
+    role: identity.role,
+    gh: identity.accessToken
+  };
+
+  const header = base64url(JSON.stringify(JWT_HEADER));
+  const payload = base64url(JSON.stringify(claims));
+  const signingInput = `${header}.${payload}`;
+
+  return `${signingInput}.${sign(signingInput)}`;
 }
 
+/**
+ * JWTを検証して本人情報に戻す。壊れていれば null。
+ * alg を検証しているので "alg: none" への差し替えは通らない。
+ */
 export function parseIdentity(token: string | undefined): GitHubIdentity | null {
   if (!token) return null;
 
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+
+  const [header, payload, signature] = parts;
+  if (!header || !payload || !signature) return null;
+
+  // 署名アルゴリズムの差し替えを拒否する。
+  try {
+    const decodedHeader = JSON.parse(fromBase64url(header).toString("utf8")) as {
+      alg?: string;
+      typ?: string;
+    };
+    if (decodedHeader.alg !== JWT_HEADER.alg) return null;
+  } catch {
+    return null;
+  }
 
   let expected: string;
   try {
-    expected = sign(payload);
+    expected = sign(`${header}.${payload}`);
   } catch {
     return null;
   }
@@ -96,11 +157,22 @@ export function parseIdentity(token: string | undefined): GitHubIdentity | null 
   }
 
   try {
-    const identity = JSON.parse(fromBase64url(payload).toString("utf8")) as GitHubIdentity;
-    if (Date.now() / 1000 - identity.issuedAt > SESSION_MAX_AGE) {
-      return null;
-    }
-    return identity;
+    const claims = JSON.parse(fromBase64url(payload).toString("utf8")) as SessionClaims;
+    const now = Math.floor(Date.now() / 1000);
+
+    if (typeof claims.exp !== "number" || claims.exp <= now) return null;
+    if (typeof claims.iat !== "number" || claims.iat - 60 > now) return null;
+    if (!claims.login || !claims.role) return null;
+
+    return {
+      githubId: Number(claims.sub),
+      login: claims.login,
+      displayName: claims.name,
+      avatarUrl: claims.avatar,
+      role: claims.role,
+      issuedAt: claims.iat,
+      accessToken: claims.gh
+    };
   } catch {
     return null;
   }
@@ -194,6 +266,47 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubIdenti
     displayName: user.name?.trim() || user.login,
     avatarUrl: user.avatar_url,
     role: resolveRole(user.login),
-    issuedAt: Math.floor(Date.now() / 1000)
+    issuedAt: Math.floor(Date.now() / 1000),
+    accessToken
   };
+}
+
+/**
+ * ログイン中のユーザーが触れるリポジトリの一覧。
+ * 追加のスコープは要求していないため、返るのはパブリックリポジトリのみ。
+ * プライベートも選ばせたい場合は認可時のscopeに `repo` を足す必要がある。
+ */
+export async function fetchGitHubRepos(accessToken: string): Promise<GitHubRepo[]> {
+  const url = new URL("https://api.github.com/user/repos");
+  url.searchParams.set("per_page", "100");
+  url.searchParams.set("sort", "updated");
+  url.searchParams.set("affiliation", "owner,collaborator,organization_member");
+
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/vnd.github+json",
+      authorization: `Bearer ${accessToken}`,
+      "user-agent": "HackRadar"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error("リポジトリ一覧を取得できませんでした。");
+  }
+
+  const repos = (await response.json()) as Array<{
+    full_name?: string;
+    private?: boolean;
+    updated_at?: string;
+  }>;
+
+  return repos
+    .filter((repo): repo is { full_name: string; private?: boolean; updated_at?: string } =>
+      Boolean(repo.full_name)
+    )
+    .map((repo) => ({
+      fullName: repo.full_name,
+      private: Boolean(repo.private),
+      updatedAt: repo.updated_at ?? ""
+    }));
 }

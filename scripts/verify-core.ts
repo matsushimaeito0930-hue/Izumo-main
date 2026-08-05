@@ -163,7 +163,7 @@ console.log("\n[2] GitHubイベントの解析");
   check("starは無視", parseGitHubWebhook("star", { repository }), null);
 }
 
-console.log("\n[3] ログインセッションcookieの署名");
+console.log("\n[3] ログインセッション（JWT / HS256）");
 {
   process.env.AUTH_SECRET = "test-auth-secret";
   process.env.GITHUB_CLIENT_ID = "test-client-id";
@@ -187,14 +187,56 @@ console.log("\n[3] ログインセッションcookieの署名");
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
-  const forged = `${b64url(JSON.stringify({ ...identity, role: "admin" }))}.${
-    token.split(".")[1]
-  }`;
-  check("roleをadminに書き換えたトークンを拒否する", parseIdentity(forged), null);
+
+  const [header, payloadPart, signaturePart] = token.split(".");
+
+  check("JWTの形式（3パート）である", token.split(".").length, 3);
+  check(
+    "ヘッダが HS256 である",
+    JSON.parse(Buffer.from(header, "base64url").toString("utf8")),
+    { alg: "HS256", typ: "JWT" }
+  );
+  const claims = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8"));
+  check("subにGitHubのIDが入る", claims.sub, "12345");
+  check("expがiat+12時間になっている", claims.exp - claims.iat, SESSION_MAX_AGE);
+
+  const forgedPayload = b64url(JSON.stringify({ ...claims, role: "admin" }));
+  check(
+    "roleをadminに書き換えたトークンを拒否する",
+    parseIdentity(`${header}.${forgedPayload}.${signaturePart}`),
+    null
+  );
+
+  const noneHeader = b64url(JSON.stringify({ alg: "none", typ: "JWT" }));
+  check(
+    "alg:none に差し替えたトークンを拒否する",
+    parseIdentity(`${noneHeader}.${payloadPart}.`),
+    null
+  );
+  check(
+    "alg を書き換えたトークンを拒否する",
+    parseIdentity(
+      `${b64url(JSON.stringify({ alg: "HS512", typ: "JWT" }))}.${payloadPart}.${signaturePart}`
+    ),
+    null
+  );
+  check("署名を落としたトークンを拒否する", parseIdentity(`${header}.${payloadPart}`), null);
 
   check("壊れた形式を拒否する", parseIdentity("no-dot"), null);
   check("空を拒否する", parseIdentity(""), null);
   check("undefinedを拒否する", parseIdentity(undefined), null);
+
+  const withToken = serializeIdentity({ ...identity, accessToken: "gho_dummy" });
+  check(
+    "アクセストークンを載せて復元できる",
+    parseIdentity(withToken)?.accessToken,
+    "gho_dummy"
+  );
+  check(
+    "トークン無しのセッションも扱える",
+    parseIdentity(serializeIdentity(identity))?.accessToken,
+    undefined
+  );
 
   const expired = serializeIdentity({
     ...identity,

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { isDemoModeEnabled } from "@/lib/env";
+import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
 import { createHelpReply } from "@/lib/store";
 
@@ -6,6 +8,13 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const identity = getCurrentIdentity();
+
+  if ((isGitHubAuthConfigured() || !isDemoModeEnabled()) && !identity) {
+    return NextResponse.json(
+      { error: "GitHubでログインしてから回答してください。" },
+      { status: 401 }
+    );
+  }
 
   const body = (await request.json().catch(() => ({}))) as {
     helpPostId?: string;
