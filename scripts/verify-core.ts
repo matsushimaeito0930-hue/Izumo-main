@@ -10,6 +10,7 @@ import { parseGitHubWebhook, verifyGitHubSignature } from "../lib/github.ts";
 import {
   SESSION_MAX_AGE,
   buildAuthorizeUrl,
+  canListPrivateRepos,
   isGitHubAuthConfigured,
   parseIdentity,
   resolveRole,
@@ -284,7 +285,23 @@ console.log("\n[5] 認可URLの組み立て");
     url.searchParams.get("redirect_uri"),
     "http://localhost:3000/api/auth/github/callback"
   );
-  check("scopeはread:userのみ", url.searchParams.get("scope"), "read:user");
+  check("既定のscopeはread:userのみ", url.searchParams.get("scope"), "read:user");
+
+  const privateUrl = new URL(
+    buildAuthorizeUrl({
+      state: "abc123",
+      callbackUrl: "http://localhost:3000/api/auth/github/callback",
+      includePrivate: true
+    })
+  );
+  check(
+    "private=1ならrepoを追加",
+    privateUrl.searchParams.get("scope"),
+    "read:user repo"
+  );
+  check("repo付与でプライベート可", canListPrivateRepos("read:user, repo"), true);
+  check("read:userのみは不可", canListPrivateRepos("read:user"), false);
+  check("スコープ未設定は不可", canListPrivateRepos(undefined), false);
   check("設定ありと判定", isGitHubAuthConfigured(), true);
   delete process.env.GITHUB_CLIENT_SECRET;
   check("secretが無ければ無効", isGitHubAuthConfigured(), false);

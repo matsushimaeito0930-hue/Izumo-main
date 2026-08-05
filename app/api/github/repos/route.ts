@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchGitHubRepos } from "@/lib/github-auth";
+import { canListPrivateRepos, fetchGitHubRepos } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,10 @@ export async function GET() {
 
   try {
     const repos = await fetchGitHubRepos(identity.accessToken);
-    return NextResponse.json({ repos });
+    return NextResponse.json({
+      repos,
+      canListPrivate: canListPrivateRepos(identity.scopes)
+    });
   } catch (error) {
     return NextResponse.json(
       {

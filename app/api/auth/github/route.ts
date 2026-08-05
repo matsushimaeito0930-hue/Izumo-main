@@ -10,7 +10,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const origin = new URL(request.url).origin;
+  const requestUrl = new URL(request.url);
+  const origin = requestUrl.origin;
 
   if (!isGitHubAuthConfigured()) {
     const failed = new URL("/", origin);
@@ -20,7 +21,11 @@ export async function GET(request: Request) {
 
   const state = createOAuthState();
   const callbackUrl = getCallbackUrl(request);
-  const response = NextResponse.redirect(buildAuthorizeUrl({ state, callbackUrl }));
+  // ?private=1 のときだけ repo スコープを足して、プライベートも一覧に出せるようにする。
+  const includePrivate = requestUrl.searchParams.get("private") === "1";
+  const response = NextResponse.redirect(
+    buildAuthorizeUrl({ state, callbackUrl, includePrivate })
+  );
 
   response.cookies.set(STATE_COOKIE, state, {
     httpOnly: true,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   SESSION_MAX_AGE,
   buildAuthorizeUrl,
+  canListPrivateRepos,
   isGitHubAuthConfigured,
   parseIdentity,
   resolveRole,
@@ -155,8 +156,29 @@ describe("認可URLの組み立て", () => {
     expect(url.searchParams.get("redirect_uri")).toBe(
       "http://localhost:3000/api/auth/github/callback"
     );
-    // リポジトリへのアクセス権限は要求しない。
+    // 既定ではリポジトリへのアクセス権限を要求しない。
     expect(url.searchParams.get("scope")).toBe("read:user");
+  });
+
+  it("プライベートを見たいときだけrepoスコープを足す", () => {
+    process.env.GITHUB_CLIENT_ID = "test-client-id";
+
+    const url = new URL(
+      buildAuthorizeUrl({
+        state: "abc123",
+        callbackUrl: "http://localhost:3000/api/auth/github/callback",
+        includePrivate: true
+      })
+    );
+
+    expect(url.searchParams.get("scope")).toBe("read:user repo");
+  });
+
+  it("付与スコープからプライベート表示の可否を判定する", () => {
+    expect(canListPrivateRepos("read:user, repo")).toBe(true);
+    expect(canListPrivateRepos("read:user")).toBe(false);
+    expect(canListPrivateRepos("")).toBe(false);
+    expect(canListPrivateRepos(undefined)).toBe(false);
   });
 });
 

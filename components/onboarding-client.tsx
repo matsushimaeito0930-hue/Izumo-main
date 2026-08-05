@@ -114,6 +114,7 @@ export function OnboardingClient({
   const [newTeamName, setNewTeamName] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
   const [repos, setRepos] = useState<{ fullName: string; private: boolean }[]>([]);
+  const [canListPrivate, setCanListPrivate] = useState(false);
   const [reposState, setReposState] = useState<"idle" | "loading" | "ready" | "error">(
     "idle"
   );
@@ -154,6 +155,7 @@ export function OnboardingClient({
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
           repos?: { fullName: string; private: boolean }[];
+          canListPrivate?: boolean;
           error?: string;
         };
         if (cancelled) return;
@@ -164,6 +166,7 @@ export function OnboardingClient({
           return;
         }
 
+        setCanListPrivate(Boolean(payload.canListPrivate));
         setRepos(payload.repos);
         setReposState("ready");
         if (payload.repos.length === 0) setManualRepo(true);
@@ -447,16 +450,33 @@ export function OnboardingClient({
                   )}
 
                   {reposState === "ready" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setManualRepo((current) => !current);
-                        setGithubRepo("");
-                      }}
-                      className="mt-1.5 text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
-                    >
-                      {manualRepo ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
-                    </button>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualRepo((current) => !current);
+                          setGithubRepo("");
+                        }}
+                        className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
+                      >
+                        {manualRepo ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
+                      </button>
+
+                      {!canListPrivate && (
+                        <a
+                          href="/api/auth/github?private=1"
+                          className="text-xs text-pulse underline underline-offset-2"
+                        >
+                          プライベートも表示する
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {reposState === "ready" && !canListPrivate && (
+                    <p className="mt-1.5 text-xs leading-5 text-muted">
+                      いまはパブリックリポジトリだけが表示されています。
+                    </p>
                   )}
 
                   {reposState === "error" && (

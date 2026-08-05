@@ -40,11 +40,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const accessToken = await exchangeCodeForToken({
+    const { accessToken, scopes } = await exchangeCodeForToken({
       code,
       callbackUrl: getCallbackUrl(request)
     });
-    const identity = await fetchGitHubUser(accessToken);
+    const identity = await fetchGitHubUser(accessToken, scopes);
 
     const destination = new URL("/", origin);
     destination.searchParams.set("logged_in", "1");

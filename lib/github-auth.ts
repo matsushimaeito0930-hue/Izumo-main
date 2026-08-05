@@ -23,6 +23,8 @@ export type GitHubIdentity = {
    * httpOnly cookieの中にしか置かず、クライアントへは一切返さない。
    */
   accessToken?: string;
+  /** GitHubから実際に付与されたスコープ。プライベート表示の可否判定に使う。 */
+  scopes?: string;
 };
 
 export type GitHubRepo = {
@@ -90,6 +92,7 @@ type SessionClaims = {
   avatar: string | null;
   role: UserRole;
   gh?: string;
+  scp?: string;
 };
 
 function sign(signingInput: string): string {
@@ -109,7 +112,8 @@ export function serializeIdentity(identity: GitHubIdentity): string {
     name: identity.displayName,
     avatar: identity.avatarUrl,
     role: identity.role,
-    gh: identity.accessToken
+    gh: identity.accessToken,
+    scp: identity.scopes
   };
 
   const header = base64url(JSON.stringify(JWT_HEADER));
@@ -171,7 +175,8 @@ export function parseIdentity(token: string | undefined): GitHubIdentity | null 
       avatarUrl: claims.avatar,
       role: claims.role,
       issuedAt: claims.iat,
-      accessToken: claims.gh
+      accessToken: claims.gh,
+      scopes: claims.scp
     };
   } catch {
     return null;
@@ -189,19 +194,33 @@ export function getCallbackUrl(request: Request): string {
   return new URL("/api/auth/github/callback", new URL(request.url).origin).toString();
 }
 
+/**
+ * 既定は `read:user` のみ。プライベートリポジトリも一覧に出したい人だけ
+ * includePrivate で `repo` を追加する（許可画面が重くなるため既定では要求しない）。
+ */
 export function buildAuthorizeUrl({
   state,
-  callbackUrl
+  callbackUrl,
+  includePrivate = false
 }: {
   state: string;
   callbackUrl: string;
+  includePrivate?: boolean;
 }): string {
   const url = new URL("https://github.com/login/oauth/authorize");
   url.searchParams.set("client_id", process.env.GITHUB_CLIENT_ID ?? "");
   url.searchParams.set("redirect_uri", callbackUrl);
-  url.searchParams.set("scope", "read:user");
+  url.searchParams.set("scope", includePrivate ? "read:user repo" : "read:user");
   url.searchParams.set("state", state);
   return url.toString();
+}
+
+/** 付与されたスコープにプライベート閲覧が含まれるか。 */
+export function canListPrivateRepos(scopes: string | undefined): boolean {
+  return (scopes ?? "")
+    .split(",")
+    .map((scope) => scope.trim())
+    .includes("repo");
 }
 
 export async function exchangeCodeForToken({
@@ -210,7 +229,7 @@ export async function exchangeCodeForToken({
 }: {
   code: string;
   callbackUrl: string;
-}): Promise<string> {
+}): Promise<{ accessToken: string; scopes: string }> {
   const response = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: {
@@ -227,6 +246,7 @@ export async function exchangeCodeForToken({
 
   const payload = (await response.json().catch(() => ({}))) as {
     access_token?: string;
+    scope?: string;
     error_description?: string;
     error?: string;
   };
@@ -237,10 +257,13 @@ export async function exchangeCodeForToken({
     );
   }
 
-  return payload.access_token;
+  return { accessToken: payload.access_token, scopes: payload.scope ?? "" };
 }
 
-export async function fetchGitHubUser(accessToken: string): Promise<GitHubIdentity> {
+export async function fetchGitHubUser(
+  accessToken: string,
+  scopes = ""
+): Promise<GitHubIdentity> {
   const response = await fetch("https://api.github.com/user", {
     headers: {
       accept: "application/vnd.github+json",
@@ -267,7 +290,8 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubIdenti
     avatarUrl: user.avatar_url,
     role: resolveRole(user.login),
     issuedAt: Math.floor(Date.now() / 1000),
-    accessToken
+    accessToken,
+    scopes
   };
 }
 
@@ -281,6 +305,7 @@ export async function fetchGitHubRepos(accessToken: string): Promise<GitHubRepo[
   url.searchParams.set("per_page", "100");
   url.searchParams.set("sort", "updated");
   url.searchParams.set("affiliation", "owner,collaborator,organization_member");
+  url.searchParams.set("visibility", "all");
 
   const response = await fetch(url, {
     headers: {

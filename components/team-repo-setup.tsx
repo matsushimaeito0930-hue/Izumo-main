@@ -11,6 +11,7 @@ import type { Team } from "@/lib/types";
  */
 export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void }) {
   const [repos, setRepos] = useState<{ fullName: string }[]>([]);
+  const [canListPrivate, setCanListPrivate] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [manual, setManual] = useState(false);
   const [githubRepo, setGithubRepo] = useState("");
@@ -24,6 +25,7 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
           repos?: { fullName: string }[];
+          canListPrivate?: boolean;
         };
         if (cancelled) return;
 
@@ -33,6 +35,7 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
           return;
         }
 
+        setCanListPrivate(Boolean(payload.canListPrivate));
         setRepos(payload.repos);
         setState("ready");
         if (payload.repos.length === 0) setManual(true);
@@ -112,16 +115,27 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
         )}
 
         {state === "ready" && (
-          <button
-            type="button"
-            onClick={() => {
-              setManual((current) => !current);
-              setGithubRepo("");
-            }}
-            className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
-          >
-            {manual ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
-          </button>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <button
+              type="button"
+              onClick={() => {
+                setManual((current) => !current);
+                setGithubRepo("");
+              }}
+              className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
+            >
+              {manual ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
+            </button>
+
+            {!canListPrivate && (
+              <a
+                href="/api/auth/github?private=1"
+                className="text-xs text-pulse underline underline-offset-2"
+              >
+                プライベートも表示する
+              </a>
+            )}
+          </div>
         )}
 
         <button
