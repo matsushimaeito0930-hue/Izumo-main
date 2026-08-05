@@ -1,16 +1,21 @@
 import { OnboardingClient } from "@/components/onboarding-client";
 import { getAuthStatus } from "@/lib/session";
-import { getHackVerseState, getTeamInvites } from "@/lib/store";
+import { getEvent, getHackVerseState, getTeamInvites } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const [invites, state] = await Promise.all([getTeamInvites(), getHackVerseState()]);
+  const [invites, state, hackEvent] = await Promise.all([
+    getTeamInvites(),
+    getHackVerseState(),
+    getEvent()
+  ]);
   const { isConfigured, identity } = getAuthStatus();
 
   return (
     <OnboardingClient
       initialInvites={invites}
+      initialEvent={hackEvent}
       initialTeams={state.teams}
       authConfigured={isConfigured}
       viewer={

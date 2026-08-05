@@ -9,10 +9,17 @@ create table if not exists public.users (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.events (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  join_code text not null unique,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.teams (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  github_repo text not null unique,
+  github_repo text unique,
   score integer not null default 0,
   commit_count integer not null default 0,
   house_level integer not null default 1 check (house_level between 1 and 4),
@@ -21,6 +28,12 @@ create table if not exists public.teams (
 
 alter table public.teams
   add column if not exists commit_count integer not null default 0;
+
+-- リポジトリは参加者があとから紐づけるため、未設定を許す。
+alter table public.teams
+  alter column github_repo drop not null;
+
+create unique index if not exists teams_name_idx on public.teams(name);
 
 create unique index if not exists teams_name_lower_idx
   on public.teams (lower(name));
@@ -110,6 +123,7 @@ create index if not exists chat_messages_channel_team_idx on public.chat_message
 
 grant select on public.users to anon;
 grant select on public.teams to anon;
+grant select on public.events to anon;
 grant select on public.activities to anon;
 grant select on public.help_posts to anon;
 grant select, insert on public.help_replies to anon;

@@ -10,6 +10,7 @@ import { HelpComposer } from "@/components/help-composer";
 import { MentorList } from "@/components/mentor-list";
 import { RankingPanel } from "@/components/ranking-panel";
 import { RealtimeStatusBadge } from "@/components/realtime-status-badge";
+import { TeamRepoSetup } from "@/components/team-repo-setup";
 import { useHackVerseState } from "@/components/use-hackverse-state";
 import type { HackVerseState, UserRole } from "@/lib/types";
 
@@ -37,6 +38,7 @@ export function DashboardClient({
     isRefreshing,
     realtimeStatus,
     lastActivityId,
+    refresh,
     triggerDemoEvent,
     createHelp,
     createHelpReply,
@@ -58,6 +60,8 @@ export function DashboardClient({
       setMyTeamId(null);
     }
   }, []);
+
+  const myTeam = state.teams.find((team) => team.id === myTeamId) ?? null;
 
   if (view === "help") {
     return (
@@ -100,6 +104,10 @@ export function DashboardClient({
           )}
         </div>
       </header>
+
+      {myTeam && !myTeam.github_repo && (
+        <TeamRepoSetup team={myTeam} onDone={refresh} />
+      )}
 
       <DevelopmentOverview
         teams={state.teams}

@@ -77,7 +77,7 @@ export function DevelopmentOverview({
             <li className="px-5 py-10 text-center">
               <p className="text-sm font-bold text-ink">まだチームがありません</p>
               <p className="mt-1 text-xs leading-5 text-muted">
-                運営がチーム名とGitHubリポジトリを登録すると、ここに表示されます。
+                運営がチームを登録し、参加者が参加すると、ここに表示されます。
               </p>
             </li>
           ) : teams.map((team, index) => {
@@ -111,7 +111,9 @@ export function DevelopmentOverview({
                         )}
                       </p>
                       <p className="truncate text-xs text-muted">
-                        {latestActivity?.message ?? "まだ活動がありません"}
+                        {team.github_repo
+                          ? latestActivity?.message ?? "まだ活動がありません"
+                          : "リポジトリ未設定"}
                       </p>
                     </div>
                   </div>

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { HackRadarLogo } from "@/components/hackradar-logo";
 import {
   ChevronDown,
+  Clipboard,
   LoaderCircle,
   DoorOpen,
   Github,
@@ -14,7 +15,13 @@ import {
   Plus,
   TriangleAlert
 } from "lucide-react";
-import type { AppSession, Team, TeamInviteView, UserRole } from "@/lib/types";
+import type {
+  AppSession,
+  HackEvent,
+  Team,
+  TeamInviteView,
+  UserRole
+} from "@/lib/types";
 
 type Viewer = {
   login: string;
@@ -85,11 +92,13 @@ function Collapsible({
 
 export function OnboardingClient({
   initialInvites,
+  initialEvent,
   initialTeams,
   authConfigured,
   viewer
 }: {
   initialInvites: TeamInviteView[];
+  initialEvent: HackEvent | null;
   initialTeams: Team[];
   authConfigured: boolean;
   viewer: Viewer | null;
@@ -97,6 +106,10 @@ export function OnboardingClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [invites, setInvites] = useState(initialInvites);
+  const [teams, setTeams] = useState(initialTeams);
+  const [hackEvent, setHackEvent] = useState(initialEvent);
+  const [eventName, setEventName] = useState(initialEvent?.name ?? "");
+  const [joinCode, setJoinCode] = useState("");
   const [teamName, setTeamName] = useState(initialTeams[0]?.name ?? "");
   const [newTeamName, setNewTeamName] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
@@ -196,6 +209,59 @@ export function OnboardingClient({
     }
   }
 
+  async function saveEventName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/admin/event", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: eventName })
+      });
+      const payload = (await response.json()) as { event?: HackEvent; error?: string };
+
+      if (!response.ok || !payload.event) {
+        throw new Error(payload.error ?? "イベントを保存できませんでした。");
+      }
+
+      setHackEvent(payload.event);
+      setMessage(`参加コード ${payload.event.join_code} を発行しました。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "保存に失敗しました。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function addTeam(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/admin/event", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ teamName: newTeamName })
+      });
+      const payload = (await response.json()) as { team?: Team; error?: string };
+
+      if (!response.ok || !payload.team) {
+        throw new Error(payload.error ?? "チームを登録できませんでした。");
+      }
+
+      setTeams((current) => [...current, payload.team as Team]);
+      setMessage(`チーム「${payload.team.name}」を登録しました。`);
+      setNewTeamName("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "登録に失敗しました。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function joinTeam(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsBusy(true);
@@ -207,14 +273,28 @@ export function OnboardingClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           teamName,
+          joinCode,
+          githubRepo: githubRepo || undefined,
           displayName: manualEntry ? displayName : undefined
         })
       });
-      const payload = (await response.json()) as { session: AppSession; error?: string };
+      const payload = (await response.json()) as {
+        session: AppSession;
+        repoWarning?: string;
+        error?: string;
+      };
 
       if (!response.ok) throw new Error(payload.error ?? "チームに参加できませんでした。");
 
       saveSession(payload.session);
+
+      if (payload.repoWarning) {
+        // 参加はできているので、リポジトリだけダッシュボードで設定してもらう。
+        setMessage(`${payload.repoWarning} 参加は完了しています。`);
+        setIsBusy(false);
+        return;
+      }
+
       router.push("/dashboard");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "参加に失敗しました。");
@@ -303,22 +383,94 @@ export function OnboardingClient({
               </div>
 
               <form onSubmit={joinTeam} className="space-y-4">
-                <Field label="チーム名">
+                <Field label="参加コード">
                   <input
-                    list="registered-team-names"
-                    value={teamName}
-                    onChange={(event) => setTeamName(event.target.value)}
+                    value={joinCode}
+                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
                     className={inputClass}
-                    placeholder="例）Team Aurora"
-                    required
+                    placeholder="ABCD-2345"
+                    required={Boolean(hackEvent)}
                   />
-                  <datalist id="registered-team-names">
-                    {initialTeams.map((team) => (
-                      <option key={team.id} value={team.name} />
-                    ))}
-                  </datalist>
+                  <p className="mt-1.5 text-xs leading-5 text-muted">
+                    運営がDiscordなどで配ったコードを入力してください。
+                  </p>
                 </Field>
-                <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+
+                <Field label="チーム名">
+                  {teams.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-lineStrong bg-sand/60 px-3 py-2.5 text-xs leading-5 text-muted shadow-inset">
+                      まだチームが登録されていません。運営がチームを登録するのを待ってください。
+                    </p>
+                  ) : (
+                    <select
+                      value={teamName}
+                      onChange={(event) => setTeamName(event.target.value)}
+                      className={inputClass}
+                      required
+                    >
+                      <option value="">選んでください</option>
+                      {teams.map((team) => (
+                        <option key={team.id} value={team.name}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+
+                <Field label="自分のGitHubリポジトリ（あとからでも可）">
+                  {reposState === "loading" ? (
+                    <p className="flex h-11 items-center gap-2 rounded-xl border border-line bg-paper px-3 text-sm text-muted shadow-inset">
+                      <LoaderCircle className="size-4 animate-spin" />
+                      リポジトリを読み込んでいます...
+                    </p>
+                  ) : manualRepo ? (
+                    <input
+                      value={githubRepo}
+                      onChange={(event) => setGithubRepo(event.target.value)}
+                      className={inputClass}
+                      placeholder="owner/repository"
+                    />
+                  ) : (
+                    <select
+                      value={githubRepo}
+                      onChange={(event) => setGithubRepo(event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">あとで設定する</option>
+                      {repos.map((repo) => (
+                        <option key={repo.fullName} value={repo.fullName}>
+                          {repo.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {reposState === "ready" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualRepo((current) => !current);
+                        setGithubRepo("");
+                      }}
+                      className="mt-1.5 text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
+                    >
+                      {manualRepo ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
+                    </button>
+                  )}
+
+                  {reposState === "error" && (
+                    <p className="mt-1.5 text-xs leading-5 text-muted">
+                      リポジトリ一覧を取得できませんでした。手入力するか、あとから設定できます。
+                    </p>
+                  )}
+                </Field>
+
+                <button
+                  type="submit"
+                  disabled={isBusy || teams.length === 0}
+                  className={primaryButtonClass}
+                >
                   <DoorOpen className="size-4" />
                   チームに参加する
                 </button>
@@ -329,8 +481,8 @@ export function OnboardingClient({
               <ol className="mb-5 space-y-2.5 text-sm text-ink2">
                 {[
                   "GitHubでログインする",
-                  "参加するチーム名を選ぶ",
-                  "あとはいつも通り開発するだけ"
+                  "運営から配られた参加コードを入れる",
+                  "チームと自分のリポジトリを選ぶ"
                 ].map((step, index) => (
                   <li key={step} className="flex items-start gap-2.5">
                     <span className="grid size-5 shrink-0 place-items-center rounded-full bg-paper2 text-xs font-medium text-muted shadow-inset">
@@ -395,9 +547,48 @@ export function OnboardingClient({
         </div>
 
         {canJoin && (
-          <Collapsible title="運営の方：チームを登録する">
-            <form onSubmit={createInvite} className="space-y-4">
-              <Field label="チーム名">
+          <Collapsible title="運営の方：イベントとチームを登録する">
+            <form onSubmit={saveEventName} className="space-y-4">
+              <Field label="イベント名">
+                <input
+                  value={eventName}
+                  onChange={(event) => setEventName(event.target.value)}
+                  className={inputClass}
+                  placeholder="例）出雲ハッカソン 2026"
+                  required
+                />
+              </Field>
+              <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+                <Plus className="size-4" />
+                {hackEvent ? "イベント名を更新する" : "イベントを作る"}
+              </button>
+            </form>
+
+            {hackEvent && (
+              <div className="mt-4 rounded-xl border border-line/70 bg-sand/60 p-4 shadow-inset">
+                <p className="text-xs font-medium text-ink2">参加コード</p>
+                <p className="mt-1 font-mono text-2xl font-bold tracking-widest text-pulse">
+                  {hackEvent.join_code}
+                </p>
+                <p className="mt-1.5 text-xs leading-5 text-muted">
+                  このコードをDiscordなど参加者が集まる場所に共有してください。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(hackEvent.join_code);
+                    setMessage("参加コードをコピーしました。");
+                  }}
+                  className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface text-sm font-medium text-ink2 shadow-soft transition-[box-shadow,color,transform] hover:text-ink active:translate-y-px active:shadow-pressed"
+                >
+                  <Clipboard className="size-4" />
+                  コードをコピー
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={addTeam} className="mt-5 space-y-4 border-t border-line pt-5">
+              <Field label="チーム名を追加">
                 <input
                   value={newTeamName}
                   onChange={(event) => setNewTeamName(event.target.value)}
@@ -405,74 +596,27 @@ export function OnboardingClient({
                   placeholder="例）Team Aurora"
                   required
                 />
-              </Field>
-              <Field label="GitHubリポジトリ">
-                {reposState === "loading" ? (
-                  <p className="flex h-11 items-center gap-2 rounded-xl border border-line bg-paper px-3 text-sm text-muted shadow-inset">
-                    <LoaderCircle className="size-4 animate-spin" />
-                    リポジトリを読み込んでいます...
-                  </p>
-                ) : manualRepo ? (
-                  <input
-                    value={githubRepo}
-                    onChange={(event) => setGithubRepo(event.target.value)}
-                    className={inputClass}
-                    placeholder="owner/repository"
-                    required
-                  />
-                ) : (
-                  <select
-                    value={githubRepo}
-                    onChange={(event) => setGithubRepo(event.target.value)}
-                    className={inputClass}
-                    required
-                  >
-                    <option value="">選んでください</option>
-                    {repos.map((repo) => (
-                      <option key={repo.fullName} value={repo.fullName}>
-                        {repo.fullName}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {reposState === "ready" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManualRepo((current) => !current);
-                      setGithubRepo("");
-                    }}
-                    className="mt-1.5 text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
-                  >
-                    {manualRepo ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
-                  </button>
-                )}
-
-                {reposState === "error" && (
-                  <p className="mt-1.5 text-xs leading-5 text-muted">
-                    リポジトリ一覧を取得できませんでした。ログインし直すと取得できることがあります。
-                    そのまま手入力でも登録できます。
-                  </p>
-                )}
+                <p className="mt-1.5 text-xs leading-5 text-muted">
+                  リポジトリは参加者が自分で選ぶので、ここでは入力しません。
+                </p>
               </Field>
               <button type="submit" disabled={isBusy} className={primaryButtonClass}>
                 <Plus className="size-4" />
-                招待コードを作る
+                チームを登録する
               </button>
             </form>
 
-            {invites.length > 0 && (
+            {teams.length > 0 && (
               <ul className="mt-4 space-y-2 border-t border-line pt-4">
-                {invites.slice(0, 4).map((invite) => (
+                {teams.map((team) => (
                   <li
-                    key={invite.id}
+                    key={team.id}
                     className="flex items-center justify-between gap-3 text-xs"
                   >
-                    <span className="min-w-0 truncate text-ink2">{invite.team_name}</span>
-                    <code className="shrink-0 rounded-lg bg-paper px-2 py-1 font-mono font-bold text-pulse shadow-inset">
-                      {invite.code}
-                    </code>
+                    <span className="min-w-0 truncate text-ink2">{team.name}</span>
+                    <span className="shrink-0 font-mono text-muted">
+                      {team.github_repo ?? "リポジトリ未設定"}
+                    </span>
                   </li>
                 ))}
               </ul>

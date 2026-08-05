@@ -24,6 +24,7 @@ import type {
   HackVerseState,
   HelpPost,
   HelpPostView,
+  HackEvent,
   HelpReply,
   HelpStatus,
   Mentor,
@@ -45,6 +46,7 @@ type MemoryStore = {
   messages: ChatMessage[];
   teamMembers: TeamMember[];
   teamInvites: TeamInvite[];
+  event: HackEvent | null;
 };
 
 const MEMORY_STORE_VERSION = "empty-teams-v1";
@@ -71,7 +73,8 @@ function cloneStore(): MemoryStore {
     helpReplies: structuredClone(seedHelpReplies),
     mentors: structuredClone(seedMentors),
     teamMembers: structuredClone(seedTeamMembers),
-    teamInvites: structuredClone(seedTeamInvites)
+    teamInvites: structuredClone(seedTeamInvites),
+    event: null
   };
 }
 
@@ -796,6 +799,181 @@ export async function acceptHelpReply(input: {
 export async function getHelpPostById(id: string): Promise<HelpPostView | null> {
   const state = await getHackVerseState();
   return state.helpPosts.find((post) => post.id === id) ?? null;
+}
+
+function makeJoinCode(): string {
+  // 読み上げやすいよう、紛らわしい文字（0/O/1/I）を除いた8桁。
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const raw = randomUUID().replace(/-/g, "");
+  let code = "";
+  for (let index = 0; index < 8; index += 1) {
+    code += alphabet[parseInt(raw.slice(index * 2, index * 2 + 2), 16) % alphabet.length];
+  }
+  return `${code.slice(0, 4)}-${code.slice(4)}`;
+}
+
+/** 開催中のイベント（1件のみ運用）。未設定なら null。 */
+export async function getEvent(): Promise<HackEvent | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data } = await supabase
+        .from("events")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) return data as HackEvent;
+    }
+  }
+
+  return getMemoryStore().event;
+}
+
+/** イベント名を保存する。参加コードは初回に発行し、以降は変わらない。 */
+export async function saveEvent(input: { name: string }): Promise<HackEvent> {
+  const name = input.name.trim();
+  if (!name) throw new Error("イベント名を入力してください。");
+
+  const existing = await getEvent();
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      if (existing) {
+        const { data, error } = await supabase
+          .from("events")
+          .update({ name })
+          .eq("id", existing.id)
+          .select("*")
+          .single();
+        if (!error && data) return data as HackEvent;
+      } else {
+        const event: HackEvent = {
+          id: randomUUID(),
+          name,
+          join_code: makeJoinCode(),
+          created_at: new Date().toISOString()
+        };
+        const { data, error } = await supabase
+          .from("events")
+          .insert(event)
+          .select("*")
+          .single();
+        if (!error && data) return data as HackEvent;
+      }
+    }
+  }
+
+  const store = getMemoryStore();
+  store.event = {
+    id: existing?.id ?? randomUUID(),
+    name,
+    join_code: existing?.join_code ?? makeJoinCode(),
+    created_at: existing?.created_at ?? new Date().toISOString()
+  };
+  return store.event;
+}
+
+/** 参加コードの照合。イベント未設定ならコード無しで通す（ローカルデモ用）。 */
+export async function verifyJoinCode(code: string | undefined): Promise<boolean> {
+  const event = await getEvent();
+  if (!event) return true;
+  return (code ?? "").trim().toUpperCase() === event.join_code.toUpperCase();
+}
+
+/** 運営がチーム名だけ登録する。リポジトリは参加者があとから紐づける。 */
+export async function createTeamByName(input: { name: string }): Promise<Team> {
+  const name = input.name.trim();
+  if (!name) throw new Error("チーム名を入力してください。");
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: existing } = await supabase
+        .from("teams")
+        .select("*")
+        .eq("name", name)
+        .maybeSingle();
+      if (existing) throw new Error("同じ名前のチームがすでにあります。");
+
+      const team: Team = {
+        id: randomUUID(),
+        name,
+        github_repo: null,
+        score: 0,
+        commit_count: 0,
+        house_level: 1,
+        created_at: new Date().toISOString()
+      };
+      const { data, error } = await supabase.from("teams").insert(team).select("*").single();
+      if (error) throw error;
+      return normalizeTeam(data as Team);
+    }
+  }
+
+  const store = getMemoryStore();
+  if (store.teams.some((team) => team.name === name)) {
+    throw new Error("同じ名前のチームがすでにあります。");
+  }
+
+  const team: Team = {
+    id: randomUUID(),
+    name,
+    github_repo: null,
+    score: 0,
+    commit_count: 0,
+    house_level: 1,
+    created_at: new Date().toISOString()
+  };
+  store.teams.push(team);
+  return team;
+}
+
+/** チームにGitHubリポジトリを紐づける。既に他チームが使っていれば拒否する。 */
+export async function setTeamRepo(input: {
+  teamId: string;
+  githubRepo: string;
+}): Promise<Team> {
+  const githubRepo = input.githubRepo.trim();
+  if (!/^[^/\s]+\/[^/\s]+$/.test(githubRepo)) {
+    throw new Error("リポジトリは owner/repository の形式で指定してください。");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: taken } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("github_repo", githubRepo)
+        .maybeSingle();
+      if (taken && (taken as { id: string }).id !== input.teamId) {
+        throw new Error("そのリポジトリは別のチームが使っています。");
+      }
+
+      const { data, error } = await supabase
+        .from("teams")
+        .update({ github_repo: githubRepo })
+        .eq("id", input.teamId)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return normalizeTeam(data as Team);
+    }
+  }
+
+  const store = getMemoryStore();
+  const taken = store.teams.find(
+    (team) => team.github_repo === githubRepo && team.id !== input.teamId
+  );
+  if (taken) throw new Error("そのリポジトリは別のチームが使っています。");
+
+  const team = store.teams.find((candidate) => candidate.id === input.teamId);
+  if (!team) throw new Error("チームが見つかりません。");
+
+  team.github_repo = githubRepo;
+  return team;
 }
 
 function makeInviteCode(teamName: string): string {

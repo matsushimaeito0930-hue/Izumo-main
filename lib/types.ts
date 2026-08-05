@@ -24,7 +24,8 @@ export type User = {
 export type Team = {
   id: string;
   name: string;
-  github_repo: string;
+  /** 参加者があとから紐づけるため、未設定（null）を許す。 */
+  github_repo: string | null;
   score: number;
   commit_count: number;
   house_level: number;
@@ -35,6 +36,14 @@ export type TeamMember = {
   id: string;
   team_id: string;
   user_id: string;
+};
+
+/** ハッカソン1回分。参加コードはこのイベント全体で共通。 */
+export type HackEvent = {
+  id: string;
+  name: string;
+  join_code: string;
+  created_at: string;
 };
 
 export type TeamInvite = {
@@ -132,7 +141,7 @@ export type HackVerseState = {
 
 export type TeamInviteView = TeamInvite & {
   team_name: string;
-  github_repo: string;
+  github_repo: string | null;
 };
 
 export type DemoEventInput = {
