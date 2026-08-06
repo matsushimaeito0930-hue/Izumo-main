@@ -806,12 +806,34 @@ export async function getEvent(): Promise<HackEvent | null> {
   return getMemoryStore().event;
 }
 
-/** イベント名を保存する。参加コードは初回に発行し、以降は変わらない。 */
+function resetMemoryEventData(store: MemoryStore) {
+  store.teams = [];
+  store.teamMembers = [];
+  store.teamInvites = [];
+  store.activities = [];
+  store.helpPosts = [];
+  store.helpReplies = [];
+  store.messages = [];
+}
+
+async function resetSupabaseEventData(
+  supabase: NonNullable<ReturnType<typeof createServerSupabaseClient>>
+) {
+  // teamsの削除は外部キーのcascadeで、チームに紐づく履歴もまとめて初期化する。
+  const { error } = await supabase
+    .from("teams")
+    .delete()
+    .not("id", "is", null);
+  if (error) throw error;
+}
+
+/** イベント名を保存する。名前を変更したときはチームと進捗を新イベント用に初期化する。 */
 export async function saveEvent(input: { name: string }): Promise<HackEvent> {
   const name = input.name.trim();
   if (!name) throw new Error("イベント名を入力してください。");
 
   const existing = await getEvent();
+  const shouldReset = Boolean(existing && existing.name !== name);
 
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
@@ -823,7 +845,10 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
           .eq("id", existing.id)
           .select("*")
           .single();
-        if (!error && data) return data as HackEvent;
+        if (!error && data) {
+          if (shouldReset) await resetSupabaseEventData(supabase);
+          return data as HackEvent;
+        }
       } else {
         const event: HackEvent = {
           id: randomUUID(),
@@ -842,6 +867,7 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
   }
 
   const store = getMemoryStore();
+  if (shouldReset) resetMemoryEventData(store);
   store.event = {
     id: existing?.id ?? randomUUID(),
     name,
