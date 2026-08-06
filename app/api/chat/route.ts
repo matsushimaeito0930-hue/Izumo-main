@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       teamId: body.teamId,
       // ログイン済みなら投稿者名はcookieの本人情報で固定する。
       authorName: identity?.displayName ?? (body.authorName?.trim() || "HackRadar user"),
-      authorRole: identity?.role ?? "participant",
+      authorRole: identity?.role ?? body.authorRole ?? "participant",
       body: body.body
     });
 

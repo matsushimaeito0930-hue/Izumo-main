@@ -17,6 +17,7 @@ type Viewer = {
 
 const roleLabels: Record<UserRole, string> = {
   participant: "参加者",
+  mentor: "メンター",
   admin: "運営"
 };
 

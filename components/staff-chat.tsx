@@ -28,13 +28,13 @@ export function StaffChat({
     body: string;
   }) => Promise<void>;
 }) {
-  const isAdmin = viewer?.role === "admin";
+  const isStaff = viewer?.role === "admin" || viewer?.role === "mentor";
 
-  // 参加者は自分のチーム固定。運営だけがチームを選べる。
+  // 参加者は自分のチーム固定。メンターと運営はチームを切り替えて確認できる。
   const [selectedId, setSelectedId] = useState(
-    () => myTeamId ?? (isAdmin ? (teams[0]?.id ?? "") : "")
+    () => myTeamId ?? (isStaff ? (teams[0]?.id ?? "") : "")
   );
-  const activeId = isAdmin ? selectedId : (myTeamId ?? "");
+  const activeId = isStaff ? selectedId : (myTeamId ?? "");
   const activeTeam = teams.find((team) => team.id === activeId) ?? null;
 
   const [message, setMessage] = useState("");
@@ -72,7 +72,7 @@ export function StaffChat({
   }
 
   // 参加者がまだチームに入っていないときは、案内だけ出す。
-  if (!isAdmin && !activeTeam) {
+  if (!isStaff && !activeTeam) {
     return (
       <Panel
         title="運営に相談する"
@@ -89,12 +89,12 @@ export function StaffChat({
     <Panel
       title="運営に相談する"
       description={
-        isAdmin
+        isStaff
           ? "各チームからの相談がここに届きます。チームを切り替えて返信してください。"
           : "掲示板に書きにくいことは、ここで運営に直接聞けます。"
       }
       action={
-        isAdmin ? (
+        isStaff ? (
           <label className="flex items-center gap-2 text-xs text-muted">
             チーム
             <select
@@ -128,7 +128,13 @@ export function StaffChat({
                 <div className={`max-w-[85%] ${isOwnMessage ? "text-right" : ""}`}>
                   <div className="mb-1 flex items-center gap-2 text-xs text-muted">
                     {!isOwnMessage && <span>{item.author_name}</span>}
-                    <span>{item.author_role === "admin" ? "運営" : "メンバー"}</span>
+                    <span>
+                      {item.author_role === "admin"
+                        ? "運営"
+                        : item.author_role === "mentor"
+                          ? "メンター"
+                          : "メンバー"}
+                    </span>
                     {isOwnMessage && <span>{item.author_name}</span>}
                   </div>
                   <p
@@ -158,7 +164,7 @@ export function StaffChat({
                 まだメッセージはありません
               </p>
               <p className="mt-1 text-xs text-muted">
-                {isAdmin
+                {isStaff
                   ? "このチームからの相談はまだありません。"
                   : "困っていることを書けば、運営が返信します。"}
               </p>
@@ -173,7 +179,7 @@ export function StaffChat({
           onChange={(event) => setMessage(event.target.value)}
           maxLength={500}
           disabled={!activeTeam}
-          placeholder={isAdmin ? "チームに返信する" : "運営に聞きたいことを書く"}
+          placeholder={isStaff ? "チームに返信する" : "運営に聞きたいことを書く"}
           className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-paper px-3 text-sm text-ink shadow-inset outline-none transition-colors placeholder:text-muted/70 hover:border-lineStrong focus:border-pulse"
         />
         <button

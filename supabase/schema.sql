@@ -5,7 +5,8 @@ create table if not exists public.users (
   github_username text not null unique,
   display_name text not null,
   avatar_url text,
-  role text not null default 'participant' check (role in ('participant', 'admin')),
+  role text not null default 'participant' check (role in ('participant', 'mentor', 'admin')),
+  specialty text,
   created_at timestamptz not null default now()
 );
 
@@ -32,6 +33,9 @@ alter table public.teams
 -- リポジトリは参加者があとから紐づけるため、未設定を許す。
 alter table public.teams
   alter column github_repo drop not null;
+
+alter table public.users
+  add column if not exists specialty text;
 
 create unique index if not exists teams_name_idx on public.teams(name);
 
@@ -87,7 +91,7 @@ create table if not exists public.help_replies (
   help_post_id uuid not null references public.help_posts(id) on delete cascade,
   author_name text not null,
   author_github text,
-  author_role text not null default 'participant' check (author_role in ('participant', 'admin')),
+  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin')),
   body text not null check (char_length(body) between 1 and 1000),
   is_accepted boolean not null default false,
   created_at timestamptz not null default now()
@@ -98,7 +102,7 @@ create table if not exists public.chat_messages (
   channel text not null check (channel in ('staff')),
   team_id uuid references public.teams(id) on delete cascade,
   author_name text not null,
-  author_role text not null default 'participant' check (author_role in ('participant', 'admin')),
+  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin')),
   body text not null check (char_length(body) between 1 and 500),
   created_at timestamptz not null default now()
 );
@@ -162,20 +166,25 @@ end $$;
 -- ここから下は、以前のスキーマで作ったDBを新しい形に合わせるための移行です。
 -- 新規作成なら実行しても何も起きません。
 
--- メンターは廃止したので、既存のメンターは参加者に戻す。
-update public.users set role = 'participant' where role = 'mentor';
-update public.help_replies set author_role = 'participant' where author_role = 'mentor';
-
 -- 相談チャットのチャンネル名を 'mentor' から 'staff' に統一する。
 alter table public.chat_messages drop constraint if exists chat_messages_channel_check;
 update public.chat_messages set channel = 'staff' where channel in ('mentor', 'team');
-update public.chat_messages set author_role = 'participant' where author_role = 'mentor';
 alter table public.chat_messages
   add constraint chat_messages_channel_check check (channel in ('staff'));
 
 -- ロールの制約を貼り直す。
 alter table public.users drop constraint if exists users_role_check;
 alter table public.users
-  add constraint users_role_check check (role in ('participant', 'admin'));
+  add constraint users_role_check check (role in ('participant', 'mentor', 'admin'));
+
+alter table public.help_replies drop constraint if exists help_replies_author_role_check;
+alter table public.help_replies
+  add constraint help_replies_author_role_check
+  check (author_role in ('participant', 'mentor', 'admin'));
+
+alter table public.chat_messages drop constraint if exists chat_messages_author_role_check;
+alter table public.chat_messages
+  add constraint chat_messages_author_role_check
+  check (author_role in ('participant', 'mentor', 'admin'));
 
 drop table if exists public.mentors;

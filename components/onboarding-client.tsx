@@ -33,6 +33,7 @@ type Viewer = {
 
 const roleLabels: Record<UserRole, string> = {
   participant: "参加者",
+  mentor: "メンター",
   admin: "運営"
 };
 
@@ -163,6 +164,10 @@ export function OnboardingClient({
   );
   const [manualRepo, setManualRepo] = useState(false);
   const [displayName, setDisplayName] = useState("");
+  const [specialty, setSpecialty] = useState("");
+  const [onboardingMode, setOnboardingMode] = useState<"participant" | "mentor">(
+    "participant"
+  );
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [webhook, setWebhook] = useState<WebhookResult | null>(null);
@@ -362,6 +367,36 @@ export function OnboardingClient({
     }
   }
 
+  async function joinMentor(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/mentors/join", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          code: joinCode,
+          displayName: displayName || viewer?.displayName,
+          specialty
+        })
+      });
+      const payload = (await response.json()) as { session?: AppSession; error?: string };
+
+      if (!response.ok || !payload.session) {
+        throw new Error(payload.error ?? "メンター登録に失敗しました。");
+      }
+
+      saveSession(payload.session);
+      router.push("/dashboard");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "メンター登録に失敗しました。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.localStorage.removeItem("hackverse-session");
@@ -414,6 +449,72 @@ export function OnboardingClient({
                 </button>
               </div>
 
+              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-line bg-paper2 p-1">
+                <button
+                  type="button"
+                  onClick={() => setOnboardingMode("participant")}
+                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                    onboardingMode === "participant"
+                      ? "bg-surface text-ink shadow-soft"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  参加者として参加
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnboardingMode("mentor")}
+                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                    onboardingMode === "mentor"
+                      ? "bg-surface text-ink shadow-soft"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  メンターとして登録
+                </button>
+              </div>
+
+              {onboardingMode === "mentor" ? (
+                <form onSubmit={joinMentor} className="space-y-4">
+                  <Field label="招待コード">
+                    <input
+                      value={joinCode}
+                      onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                      className={inputClass}
+                      placeholder="ABCD-2345"
+                      required
+                    />
+                    <p className="mt-1.5 text-xs leading-5 text-muted">
+                      運営から配られたメンター用のコードを入力してください。
+                    </p>
+                  </Field>
+
+                  <Field label="名前">
+                    <input
+                      value={displayName}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                      className={inputClass}
+                      placeholder={viewer.displayName}
+                      required
+                    />
+                  </Field>
+
+                  <Field label="得意なこと">
+                    <input
+                      value={specialty}
+                      onChange={(event) => setSpecialty(event.target.value)}
+                      className={inputClass}
+                      placeholder="例）Next.js / UI設計 / Firebase"
+                      required
+                    />
+                  </Field>
+
+                  <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+                    <DoorOpen className="size-4" />
+                    ダッシュボードに参加する
+                  </button>
+                </form>
+              ) : (
               <form onSubmit={joinTeam} className="space-y-4">
                 <Field label="参加コード">
                   <input
@@ -520,6 +621,7 @@ export function OnboardingClient({
                   チームに参加する
                 </button>
               </form>
+              )}
             </>
           ) : authConfigured ? (
             <>
@@ -543,6 +645,73 @@ export function OnboardingClient({
               </a>
             </>
           ) : (
+            <>
+              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-line bg-paper2 p-1">
+                <button
+                  type="button"
+                  onClick={() => setOnboardingMode("participant")}
+                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                    onboardingMode === "participant"
+                      ? "bg-surface text-ink shadow-soft"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  参加者として参加
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnboardingMode("mentor")}
+                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                    onboardingMode === "mentor"
+                      ? "bg-surface text-ink shadow-soft"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  メンターとして登録
+                </button>
+              </div>
+
+              {onboardingMode === "mentor" ? (
+                <form onSubmit={joinMentor} className="space-y-4">
+                  <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
+                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                    <span>
+                      GitHubログインは未設定です。招待コードがあればメンターとして参加できます。
+                    </span>
+                  </div>
+                  <Field label="招待コード">
+                    <input
+                      value={joinCode}
+                      onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                      className={inputClass}
+                      placeholder="ABCD-2345"
+                      required
+                    />
+                  </Field>
+                  <Field label="名前">
+                    <input
+                      value={displayName}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                      className={inputClass}
+                      placeholder="表示名"
+                      required
+                    />
+                  </Field>
+                  <Field label="得意なこと">
+                    <input
+                      value={specialty}
+                      onChange={(event) => setSpecialty(event.target.value)}
+                      className={inputClass}
+                      placeholder="例）Next.js / UI設計 / Firebase"
+                      required
+                    />
+                  </Field>
+                  <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+                    <DoorOpen className="size-4" />
+                    ダッシュボードに参加する
+                  </button>
+                </form>
+              ) : (
             <form onSubmit={joinTeam} className="space-y-4">
               <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -579,6 +748,8 @@ export function OnboardingClient({
                 チームに参加する
               </button>
             </form>
+              )}
+            </>
           )}
 
           {webhook && (

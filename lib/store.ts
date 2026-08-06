@@ -30,7 +30,8 @@ import type {
   TeamInvite,
   TeamInviteView,
   TeamMember,
-  User
+  User,
+  UserRole
 } from "@/lib/types";
 
 type MemoryStore = {
@@ -857,6 +858,90 @@ export async function verifyJoinCode(code: string | undefined): Promise<boolean>
   return (code ?? "").trim().toUpperCase() === event.join_code.toUpperCase();
 }
 
+/** 運営が配った招待コードでメンターとして登録する。メンターはチームに所属しない。 */
+export async function joinMentorByCode(input: {
+  code: string;
+  displayName: string;
+  specialty: string;
+  githubUsername?: string;
+  role?: UserRole;
+}): Promise<AppSession> {
+  const code = input.code.trim().toUpperCase();
+  const displayName = input.displayName.trim();
+  const specialty = input.specialty.trim();
+  const githubUsername =
+    input.githubUsername?.trim() || `mentor-${randomUUID().slice(0, 8)}`;
+
+  if (!code || !displayName || !specialty) {
+    throw new Error("招待コード、名前、得意なことを入力してください。");
+  }
+
+  if (!(await verifyJoinCode(code))) {
+    throw new Error("招待コードが違います。運営から配られたコードを確認してください。");
+  }
+
+  const role: UserRole = input.role === "admin" ? "admin" : "mentor";
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("users")
+        .upsert(
+          {
+            github_username: githubUsername,
+            display_name: displayName,
+            role,
+            specialty
+          },
+          { onConflict: "github_username" }
+        )
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      return {
+        role,
+        displayName: data.display_name,
+        githubUsername: data.github_username,
+        specialty,
+        inviteCode: code
+      };
+    }
+  }
+
+  const store = getMemoryStore();
+  let user = store.users.find(
+    (candidate) => candidate.github_username === githubUsername
+  );
+
+  if (!user) {
+    user = {
+      id: randomUUID(),
+      github_username: githubUsername,
+      display_name: displayName,
+      avatar_url: null,
+      role,
+      specialty,
+      created_at: new Date().toISOString()
+    };
+    store.users.push(user);
+  } else {
+    user.display_name = displayName;
+    user.role = role;
+    user.specialty = specialty;
+  }
+
+  return {
+    role,
+    displayName,
+    githubUsername,
+    specialty,
+    inviteCode: code
+  };
+}
+
 /** 運営がチーム名だけ登録する。リポジトリは参加者があとから紐づける。 */
 export async function createTeamByName(input: { name: string }): Promise<Team> {
   const name = input.name.trim();
@@ -1280,4 +1365,3 @@ export async function joinTeamByName(input: {
     teamName: team.name
   };
 }
-

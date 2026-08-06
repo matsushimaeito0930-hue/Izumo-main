@@ -18,6 +18,7 @@ const statusClasses = {
 
 const roleLabels: Record<UserRole, string> = {
   participant: "参加者",
+  mentor: "メンター",
   admin: "運営"
 };
 
@@ -49,7 +50,7 @@ export function HelpThread({
   const canAccept =
     !viewerGithub ||
     post.author_github === viewerGithub ||
-    viewerRole === "admin";
+    viewerRole === "admin" || viewerRole === "mentor";
 
   async function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

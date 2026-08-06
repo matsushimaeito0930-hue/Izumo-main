@@ -10,8 +10,8 @@ export type HelpStatus = "open" | "helping" | "solved";
 /** 相談チャットは「チーム ↔ 運営」の1本だけ。 */
 export type ChatChannel = "staff";
 
-/** メンターは廃止し、運営と参加者の2種類だけにした。 */
-export type UserRole = "participant" | "admin";
+/** 参加者・メンター・運営で、ダッシュボード上の権限と表示を分ける。 */
+export type UserRole = "participant" | "mentor" | "admin";
 
 export type User = {
   id: string;
@@ -19,6 +19,7 @@ export type User = {
   display_name: string;
   avatar_url: string | null;
   role: UserRole;
+  specialty?: string | null;
   created_at: string;
 };
 
@@ -62,6 +63,7 @@ export type AppSession = {
   teamId?: string;
   teamName?: string;
   inviteCode?: string;
+  specialty?: string;
 };
 
 export type Activity = {

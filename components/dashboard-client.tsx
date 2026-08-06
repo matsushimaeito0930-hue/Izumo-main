@@ -49,20 +49,37 @@ export function DashboardClient({
 
   // 参加時に保存したセッションから自分のチームを拾い、一覧で目印を付ける。
   const [myTeamId, setMyTeamId] = useState<string | null>(null);
+  const [sessionViewer, setSessionViewer] = useState<Viewer | null>(null);
 
   useEffect(() => {
     const raw = window.localStorage.getItem("hackverse-session");
     if (!raw) return;
 
     try {
-      const session = JSON.parse(raw) as { teamId?: string };
+      const session = JSON.parse(raw) as {
+        teamId?: string;
+        role?: UserRole;
+        displayName?: string;
+        githubUsername?: string;
+      };
       setMyTeamId(session.teamId ?? null);
+      if (session.role && session.displayName) {
+        setSessionViewer({
+          login: session.githubUsername ?? "local-user",
+          displayName: session.displayName,
+          role: session.role
+        });
+      }
     } catch {
       setMyTeamId(null);
+      setSessionViewer(null);
     }
-  }, []);
+  }, [viewer]);
 
-  const isAdmin = viewer?.role === "admin";
+  const activeViewer = viewer ?? sessionViewer;
+  const isAdmin = activeViewer?.role === "admin";
+  const isMentor = activeViewer?.role === "mentor";
+  const isStaff = isAdmin || isMentor;
   const myTeam = state.teams.find((team) => team.id === myTeamId) ?? null;
   // state.teams はスコアの降順。順位はその並びから取る。
   const myRank = myTeam ? state.teams.findIndex((team) => team.id === myTeam.id) + 1 : 0;
@@ -75,8 +92,8 @@ export function DashboardClient({
         <HelpComposer teams={state.teams} onSubmit={createHelp} />
         <HelpBoard
           posts={state.helpPosts}
-          viewerGithub={viewer?.login ?? null}
-          viewerRole={viewer?.role}
+          viewerGithub={activeViewer?.login ?? null}
+          viewerRole={activeViewer?.role}
           onReply={createHelpReply}
           onAccept={acceptHelpReply}
         />
@@ -84,7 +101,7 @@ export function DashboardClient({
           teams={state.teams}
           messages={state.messages}
           myTeamId={myTeamId}
-          viewer={viewer}
+          viewer={activeViewer}
           onSend={createChatMessage}
         />
       </div>
@@ -117,7 +134,7 @@ export function DashboardClient({
       )}
 
       {/* 参加者は自分のチームを先に見せる。運営は全チームをフラットに見る。 */}
-      {!isAdmin && myTeam && (
+      {!isStaff && myTeam && (
         <MyTeamCard
           team={myTeam}
           rank={myRank}
@@ -131,7 +148,7 @@ export function DashboardClient({
       <DevelopmentOverview
         teams={state.teams}
         activities={state.activities}
-        myTeamId={myTeamId}
+        myTeamId={isStaff ? null : myTeamId}
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
