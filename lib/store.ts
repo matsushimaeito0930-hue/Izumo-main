@@ -884,6 +884,17 @@ export async function verifyJoinCode(code: string | undefined): Promise<boolean>
   return (code ?? "").trim().toUpperCase() === event.join_code.toUpperCase();
 }
 
+/** イベント参加コードまたはチーム招待コードを検証する。 */
+export async function verifyMentorInviteCode(code: string | undefined): Promise<boolean> {
+  if (await verifyJoinCode(code)) return true;
+
+  const normalized = (code ?? "").trim().toUpperCase();
+  if (!normalized) return false;
+
+  const invites = await getTeamInvites();
+  return invites.some((invite) => invite.code.toUpperCase() === normalized);
+}
+
 /** 運営が配った招待コードでメンターとして登録する。メンターはチームに所属しない。 */
 export async function joinMentorByCode(input: {
   code: string;
@@ -902,8 +913,10 @@ export async function joinMentorByCode(input: {
     throw new Error("招待コード、名前、得意なことを入力してください。");
   }
 
-  if (!(await verifyJoinCode(code))) {
-    throw new Error("招待コードが違います。運営から配られたコードを確認してください。");
+  if (!(await verifyMentorInviteCode(code))) {
+    throw new Error(
+      "招待コードが違います。イベント参加コードまたはチーム招待コードを確認してください。"
+    );
   }
 
   const role: UserRole = input.role === "admin" ? "admin" : "mentor";
@@ -1058,6 +1071,74 @@ export async function setTeamRepo(input: {
   const team = store.teams.find((candidate) => candidate.id === input.teamId);
   if (!team) throw new Error("チームが見つかりません。");
 
+  team.github_repo = githubRepo;
+  return team;
+}
+
+/** 運営が登録済みチームの名前とリポジトリを編集する。 */
+export async function updateTeam(input: {
+  teamId: string;
+  name: string;
+  githubRepo?: string | null;
+}): Promise<Team> {
+  const name = input.name.trim();
+  const githubRepo = input.githubRepo?.trim() || null;
+
+  if (!name) throw new Error("チーム名を入力してください。");
+  if (githubRepo && !/^[^/\s]+\/[^/\s]+$/.test(githubRepo)) {
+    throw new Error("リポジトリは owner/repository の形式で指定してください。");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: duplicateName } = await supabase
+        .from("teams")
+        .select("id")
+        .ilike("name", name)
+        .neq("id", input.teamId)
+        .maybeSingle();
+      if (duplicateName) throw new Error("同じ名前のチームがすでにあります。");
+
+      if (githubRepo) {
+        const { data: duplicateRepo } = await supabase
+          .from("teams")
+          .select("id")
+          .eq("github_repo", githubRepo)
+          .neq("id", input.teamId)
+          .maybeSingle();
+        if (duplicateRepo) throw new Error("そのリポジトリは別のチームが使っています。");
+      }
+
+      const { data, error } = await supabase
+        .from("teams")
+        .update({ name, github_repo: githubRepo })
+        .eq("id", input.teamId)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return normalizeTeam(data as Team);
+    }
+  }
+
+  const store = getMemoryStore();
+  const team = store.teams.find((candidate) => candidate.id === input.teamId);
+  if (!team) throw new Error("チームが見つかりません。");
+
+  const duplicateName = store.teams.find(
+    (candidate) =>
+      candidate.id !== input.teamId && candidate.name.trim().toLowerCase() === name.toLowerCase()
+  );
+  if (duplicateName) throw new Error("同じ名前のチームがすでにあります。");
+
+  const duplicateRepo = githubRepo
+    ? store.teams.find(
+        (candidate) => candidate.id !== input.teamId && candidate.github_repo === githubRepo
+      )
+    : undefined;
+  if (duplicateRepo) throw new Error("そのリポジトリは別のチームが使っています。");
+
+  team.name = name;
   team.github_repo = githubRepo;
   return team;
 }

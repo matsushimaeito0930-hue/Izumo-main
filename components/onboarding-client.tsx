@@ -14,6 +14,9 @@ import {
   Github,
   LogOut,
   Plus,
+  Pencil,
+  Save,
+  X,
   TriangleAlert
 } from "lucide-react";
 import type {
@@ -156,6 +159,9 @@ export function OnboardingClient({
   const [joinCode, setJoinCode] = useState("");
   const [teamName, setTeamName] = useState(initialTeams[0]?.name ?? "");
   const [newTeamName, setNewTeamName] = useState("");
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editingTeamName, setEditingTeamName] = useState("");
+  const [editingGithubRepo, setEditingGithubRepo] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [canListPrivate, setCanListPrivate] = useState(false);
@@ -313,6 +319,56 @@ export function OnboardingClient({
       setNewTeamName("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "登録に失敗しました。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  function startEditingTeam(team: Team) {
+    setEditingTeamId(team.id);
+    setEditingTeamName(team.name);
+    setEditingGithubRepo(team.github_repo ?? "");
+  }
+
+  function cancelEditingTeam() {
+    setEditingTeamId(null);
+    setEditingTeamName("");
+    setEditingGithubRepo("");
+  }
+
+  async function updateRegisteredTeam(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingTeamId) return;
+
+    const previousTeamName = teams.find((team) => team.id === editingTeamId)?.name;
+
+    setIsBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/admin/teams/${editingTeamId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: editingTeamName,
+          githubRepo: editingGithubRepo.trim() || null
+        })
+      });
+      const payload = (await response.json()) as { team?: Team; error?: string };
+
+      if (!response.ok || !payload.team) {
+        throw new Error(payload.error ?? "チームを更新できませんでした。");
+      }
+
+      const updatedTeam = payload.team;
+      setTeams((current) =>
+        current.map((team) => (team.id === updatedTeam.id ? updatedTeam : team))
+      );
+      if (teamName === previousTeamName) setTeamName(updatedTeam.name);
+      setMessage(`チーム「${updatedTeam.name}」を更新しました。`);
+      cancelEditingTeam();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "チームを更新できませんでした。");
     } finally {
       setIsBusy(false);
     }
@@ -855,14 +911,64 @@ export function OnboardingClient({
             {teams.length > 0 && (
               <ul className="mt-4 space-y-2 border-t border-line pt-4">
                 {teams.map((team) => (
-                  <li
-                    key={team.id}
-                    className="flex items-center justify-between gap-3 text-xs"
-                  >
-                    <span className="min-w-0 truncate text-ink2">{team.name}</span>
-                    <span className="shrink-0 font-mono text-muted">
-                      {team.github_repo ?? "リポジトリ未設定"}
-                    </span>
+                  <li key={team.id} className="rounded-xl border border-line/70 bg-paper p-3">
+                    {editingTeamId === team.id ? (
+                      <form onSubmit={updateRegisteredTeam} className="space-y-2.5">
+                        <input
+                          value={editingTeamName}
+                          onChange={(event) => setEditingTeamName(event.target.value)}
+                          className={inputClass}
+                          aria-label={`${team.name}のチーム名`}
+                          placeholder="チーム名"
+                          required
+                        />
+                        <input
+                          value={editingGithubRepo}
+                          onChange={(event) => setEditingGithubRepo(event.target.value)}
+                          className={inputClass}
+                          aria-label={`${team.name}のGitHubリポジトリ`}
+                          placeholder="owner/repository（任意）"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={cancelEditingTeam}
+                            className="grid size-9 place-items-center rounded-xl border border-line bg-surface text-muted shadow-soft transition-colors hover:text-ink"
+                            aria-label="編集をキャンセル"
+                            title="キャンセル"
+                          >
+                            <X className="size-4" />
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isBusy}
+                            className="grid size-9 place-items-center rounded-xl bg-ink text-white shadow-btn transition-colors hover:bg-ink2 disabled:opacity-40"
+                            aria-label="チームを保存"
+                            title="保存"
+                          >
+                            <Save className="size-4" />
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-ink2">{team.name}</p>
+                          <p className="mt-1 truncate font-mono text-[11px] text-muted">
+                            {team.github_repo ?? "リポジトリ未設定"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => startEditingTeam(team)}
+                          className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted shadow-soft transition-colors hover:text-ink"
+                          aria-label={`${team.name}を編集`}
+                          title="チームを編集"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
