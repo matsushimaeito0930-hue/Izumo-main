@@ -11,6 +11,7 @@ import {
   SESSION_MAX_AGE,
   buildAuthorizeUrl,
   canListPrivateRepos,
+  canManageWebhooks,
   isGitHubAuthConfigured,
   parseIdentity,
   resolveRole,
@@ -279,7 +280,11 @@ console.log("\n[5] 認可URLの組み立て");
     url.searchParams.get("redirect_uri"),
     "http://localhost:3000/api/auth/github/callback"
   );
-  check("既定のscopeはread:userのみ", url.searchParams.get("scope"), "read:user");
+  check(
+    "既定scopeにadmin:repo_hookを含む",
+    url.searchParams.get("scope"),
+    "read:user admin:repo_hook"
+  );
 
   const privateUrl = new URL(
     buildAuthorizeUrl({
@@ -291,11 +296,15 @@ console.log("\n[5] 認可URLの組み立て");
   check(
     "private=1ならrepoを追加",
     privateUrl.searchParams.get("scope"),
-    "read:user repo"
+    "read:user admin:repo_hook repo"
   );
   check("repo付与でプライベート可", canListPrivateRepos("read:user, repo"), true);
   check("read:userのみは不可", canListPrivateRepos("read:user"), false);
   check("スコープ未設定は不可", canListPrivateRepos(undefined), false);
+  check("hook権限あり", canManageWebhooks("read:user, admin:repo_hook"), true);
+  check("repoはhook権限を含む", canManageWebhooks("read:user, repo"), true);
+  check("read:userのみはhook不可", canManageWebhooks("read:user"), false);
+  check("未設定はhook不可", canManageWebhooks(undefined), false);
   check("設定ありと判定", isGitHubAuthConfigured(), true);
   delete process.env.GITHUB_CLIENT_SECRET;
   check("secretが無ければ無効", isGitHubAuthConfigured(), false);

@@ -3,6 +3,7 @@ import {
   SESSION_MAX_AGE,
   buildAuthorizeUrl,
   canListPrivateRepos,
+  canManageWebhooks,
   isGitHubAuthConfigured,
   parseIdentity,
   resolveRole,
@@ -148,8 +149,8 @@ describe("認可URLの組み立て", () => {
     expect(url.searchParams.get("redirect_uri")).toBe(
       "http://localhost:3000/api/auth/github/callback"
     );
-    // 既定ではリポジトリへのアクセス権限を要求しない。
-    expect(url.searchParams.get("scope")).toBe("read:user");
+    // コードは読ませず、Webhookの管理だけを既定で要求する。
+    expect(url.searchParams.get("scope")).toBe("read:user admin:repo_hook");
   });
 
   it("プライベートを見たいときだけrepoスコープを足す", () => {
@@ -163,7 +164,14 @@ describe("認可URLの組み立て", () => {
       })
     );
 
-    expect(url.searchParams.get("scope")).toBe("read:user repo");
+    expect(url.searchParams.get("scope")).toBe("read:user admin:repo_hook repo");
+  });
+
+  it("Webhookを張れるスコープかどうかを判定する", () => {
+    expect(canManageWebhooks("read:user, admin:repo_hook")).toBe(true);
+    expect(canManageWebhooks("read:user, repo")).toBe(true);
+    expect(canManageWebhooks("read:user")).toBe(false);
+    expect(canManageWebhooks(undefined)).toBe(false);
   });
 
   it("付与スコープからプライベート表示の可否を判定する", () => {

@@ -195,8 +195,12 @@ export function getCallbackUrl(request: Request): string {
 }
 
 /**
- * 既定は `read:user` のみ。プライベートリポジトリも一覧に出したい人だけ
- * includePrivate で `repo` を追加する（許可画面が重くなるため既定では要求しない）。
+ * 既定は `read:user admin:repo_hook`。
+ * `admin:repo_hook` はWebhookの管理だけを許す狭いスコープで、コードは読めない。
+ * これがあると、参加者がリポジトリを選んだ時点でアプリ側がWebhookを自動登録できる。
+ *
+ * プライベートリポジトリも一覧に出したい人だけ includePrivate で `repo` を追加する
+ * （こちらは読み書き全部を含む重い権限なので、既定では要求しない）。
  */
 export function buildAuthorizeUrl({
   state,
@@ -210,17 +214,33 @@ export function buildAuthorizeUrl({
   const url = new URL("https://github.com/login/oauth/authorize");
   url.searchParams.set("client_id", process.env.GITHUB_CLIENT_ID ?? "");
   url.searchParams.set("redirect_uri", callbackUrl);
-  url.searchParams.set("scope", includePrivate ? "read:user repo" : "read:user");
+  url.searchParams.set(
+    "scope",
+    includePrivate ? "read:user admin:repo_hook repo" : "read:user admin:repo_hook"
+  );
   url.searchParams.set("state", state);
   return url.toString();
 }
 
-/** 付与されたスコープにプライベート閲覧が含まれるか。 */
-export function canListPrivateRepos(scopes: string | undefined): boolean {
+function scopeList(scopes: string | undefined): string[] {
   return (scopes ?? "")
     .split(",")
     .map((scope) => scope.trim())
-    .includes("repo");
+    .filter(Boolean);
+}
+
+/** 付与されたスコープにプライベート閲覧が含まれるか。 */
+export function canListPrivateRepos(scopes: string | undefined): boolean {
+  return scopeList(scopes).includes("repo");
+}
+
+/**
+ * Webhookを自動登録できるか。
+ * `repo` は `admin:repo_hook` を内包するため、どちらかがあればよい。
+ */
+export function canManageWebhooks(scopes: string | undefined): boolean {
+  const granted = scopeList(scopes);
+  return granted.includes("admin:repo_hook") || granted.includes("repo");
 }
 
 export async function exchangeCodeForToken({

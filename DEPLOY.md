@@ -72,6 +72,7 @@ git push
 | `GITHUB_CLIENT_SECRET` | ● | 手順4で発行 |
 | `AUTH_SECRET` | ● | `openssl rand -hex 32` で生成した値 |
 | `GITHUB_OAUTH_CALLBACK_URL` | ● | `本番URL/api/auth/github/callback` |
+| `APP_BASE_URL` | ✅ | Webhookの自動登録先にするドメイン（例 `https://izumo-main.vercel.app`、末尾スラッシュなし） |
 | `GITHUB_WEBHOOK_SECRET` | ● | 自分で決めた長い文字列（手順5で使う） |
 | `ADMIN_GITHUB_LOGINS` | ● | 運営のGitHubユーザー名（カンマ区切り） |
 | `ENABLE_DEMO_MODE` | | `false`（審査でデモ操作を見せたい場合のみ `true`） |

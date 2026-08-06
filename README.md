@@ -186,7 +186,29 @@ Realtime接続が切れてもデモが止まらないよう、低頻度の再取
 
 GitHubのWebhookは「GitHubへプッシュしたとき」に発火します。ローカルコミットだけでは発火しません。
 
-Webhook設定:
+### 自動登録（既定）
+
+参加者がリポジトリを選んだ時点で、アプリがGitHub APIを叩いてWebhookを自動登録します。
+参加者側の作業は**一覧から選ぶだけ**で、Settings → Webhooks を触る必要はありません。
+
+そのためにログイン時のスコープへ `admin:repo_hook` を含めています。
+これはWebhookの読み書きだけを許す狭いスコープで、コードの読み取り権限は含みません。
+
+運営側で必要な設定:
+
+| 環境変数 | 用途 |
+| --- | --- |
+| `GITHUB_WEBHOOK_SECRET` | 署名検証に使う共通の秘密。これが未設定だと自動登録も検証も動きません |
+| `APP_BASE_URL` | Webhookの宛先にするドメイン（例 `https://your-domain.example`）。未設定ならリクエストのオリジンを使います |
+
+自動登録が働かないのは次の場合です。UI側に理由と手動手順が表示されます。
+
+- そのリポジトリの管理者権限が無い（他人のリポジトリに招待されているだけ、など）
+- `GITHUB_WEBHOOK_SECRET` が未設定
+- ローカル開発（`localhost` にはGitHubから届かないため、自動登録をスキップします）
+- `admin:repo_hook` を付ける前の古いセッションのままログインしている（ログインし直すと解決します）
+
+### 手動で設定する場合
 
 - Payload URL: `https://your-domain.example/api/github/webhook`
 - Content type: `application/json`

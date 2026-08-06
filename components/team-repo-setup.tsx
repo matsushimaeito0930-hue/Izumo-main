@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { GitBranch, LoaderCircle } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { RepoOptions, type RepoOption } from "@/components/onboarding-client";
+import { WebhookNotice, type WebhookResult } from "@/components/webhook-notice";
 import type { Team } from "@/lib/types";
 
 /**
@@ -18,6 +19,9 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
   const [githubRepo, setGithubRepo] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState("");
+  // 自動連携に失敗したときだけ、手動手順をこの場に出す。
+  const [webhook, setWebhook] = useState<WebhookResult | null>(null);
+  const [savedRepo, setSavedRepo] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -65,9 +69,19 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ teamId: team.id, githubRepo })
       });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        webhook?: WebhookResult;
+      };
 
       if (!response.ok) throw new Error(payload.error ?? "設定できませんでした。");
+
+      // 自動連携できたときだけ即座に閉じる。失敗時は手順を読ませてから閉じる。
+      if (payload.webhook && payload.webhook.status === "skipped") {
+        setSavedRepo(githubRepo);
+        setWebhook(payload.webhook);
+        return;
+      }
 
       onDone();
     } catch (submitError) {
@@ -79,6 +93,26 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
 
   const fieldClass =
     "h-11 w-full rounded-xl border border-line bg-paper px-3 text-sm text-ink shadow-inset outline-none transition-colors placeholder:text-muted/70 hover:border-lineStrong focus:border-pulse";
+
+  if (webhook) {
+    return (
+      <Panel
+        title="リポジトリを設定しました"
+        description={`「${team.name}」に ${savedRepo} を紐づけました。`}
+      >
+        <div className="space-y-3">
+          <WebhookNotice result={webhook} githubRepo={savedRepo} />
+          <button
+            type="button"
+            onClick={onDone}
+            className="flex h-11 w-full items-center justify-center rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed"
+          >
+            閉じる
+          </button>
+        </div>
+      </Panel>
+    );
+  }
 
   return (
     <Panel

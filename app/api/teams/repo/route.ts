@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isDemoModeEnabled } from "@/lib/env";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
+import { ensureRepoWebhook } from "@/lib/github-webhook-setup";
 import { getCurrentIdentity } from "@/lib/session";
 import { setTeamRepo } from "@/lib/store";
 
@@ -34,7 +35,17 @@ export async function POST(request: Request) {
       teamId: body.teamId,
       githubRepo: body.githubRepo
     });
-    return NextResponse.json({ team });
+
+    // 参加者に手作業でWebhookを張らせないため、ここで自動登録する。
+    // 失敗してもリポジトリ設定は成功のままにして、理由だけ返す。
+    const webhook = await ensureRepoWebhook({
+      accessToken: identity?.accessToken,
+      scopes: identity?.scopes,
+      githubRepo: body.githubRepo,
+      requestUrl: request.url
+    });
+
+    return NextResponse.json({ team, webhook });
   } catch (error) {
     return NextResponse.json(
       {

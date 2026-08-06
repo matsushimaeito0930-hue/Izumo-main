@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HackRadarLogo } from "@/components/hackradar-logo";
+import { WebhookNotice, type WebhookResult } from "@/components/webhook-notice";
 import {
   ChevronDown,
   Clipboard,
@@ -164,6 +165,7 @@ export function OnboardingClient({
   const [displayName, setDisplayName] = useState("");
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const [webhook, setWebhook] = useState<WebhookResult | null>(null);
 
   // GitHubログイン未設定のローカル環境だけ、手入力での参加を許す。
   const manualEntry = !authConfigured;
@@ -330,6 +332,7 @@ export function OnboardingClient({
       const payload = (await response.json()) as {
         session: AppSession;
         repoWarning?: string;
+        webhook?: WebhookResult;
         error?: string;
       };
 
@@ -340,6 +343,13 @@ export function OnboardingClient({
       if (payload.repoWarning) {
         // 参加はできているので、リポジトリだけダッシュボードで設定してもらう。
         setMessage(`${payload.repoWarning} 参加は完了しています。`);
+        setIsBusy(false);
+        return;
+      }
+
+      // Webhookを自動で張れなかったときは、手順を読ませてから進んでもらう。
+      if (payload.webhook && payload.webhook.status === "skipped") {
+        setWebhook(payload.webhook);
         setIsBusy(false);
         return;
       }
@@ -569,6 +579,19 @@ export function OnboardingClient({
                 チームに参加する
               </button>
             </form>
+          )}
+
+          {webhook && (
+            <div className="mt-4 space-y-3">
+              <WebhookNotice result={webhook} githubRepo={githubRepo} />
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="flex h-11 w-full items-center justify-center rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed"
+              >
+                ダッシュボードへ進む
+              </button>
+            </div>
           )}
 
           {message && (
