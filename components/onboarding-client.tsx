@@ -158,7 +158,10 @@ export function OnboardingClient({
   const [teams, setTeams] = useState(initialTeams);
   const [hackEvent, setHackEvent] = useState(initialEvent);
   const [eventName, setEventName] = useState(initialEvent?.name ?? "");
+  // joinCode はイベントの招待コード、roomCode はチームの部屋番号。
+  // 複数のハッカソンを動かしたときに部屋番号が衝突しないよう、参加時は両方もらう。
   const [joinCode, setJoinCode] = useState("");
+  const [roomCode, setRoomCode] = useState("");
   const [newTeamName, setNewTeamName] = useState("");
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState("");
@@ -187,9 +190,12 @@ export function OnboardingClient({
   const needsLogin = authConfigured && !viewer && pickedRole !== "mentor";
 
   useEffect(() => {
-    // 招待URL（/?code=XXXX-XXXX）で来た人は参加コードを自動で埋める。
+    // 招待URL（/?code=イベント&room=部屋番号）で来た人は、入力欄を自動で埋める。
     const sharedCode = searchParams.get("code");
     if (sharedCode) setJoinCode(sharedCode.trim().toUpperCase());
+
+    const sharedRoom = searchParams.get("room");
+    if (sharedRoom) setRoomCode(sharedRoom.trim().toUpperCase());
 
     const authError = searchParams.get("auth_error");
     if (authError) {
@@ -389,7 +395,8 @@ export function OnboardingClient({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          joinCode,
+          eventCode: joinCode,
+          joinCode: roomCode,
           githubRepo: githubRepo || undefined,
           displayName: manualEntry ? displayName : undefined
         })
@@ -608,7 +615,7 @@ export function OnboardingClient({
                     </div>
                   )}
 
-                  <Field label="チーム招待コード（部屋番号）">
+                  <Field label="招待コード（イベント）">
                     <input
                       value={joinCode}
                       onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
@@ -617,8 +624,20 @@ export function OnboardingClient({
                       required
                     />
                     <p className="mt-1.5 text-xs leading-5 text-muted">
-                      運営から渡された、自分のチーム専用のコードを入力してください。
-                      イベント全体のコードでは参加できません。
+                      どのハッカソンに参加するかを決めるコードです。参加者全員で同じものを使います。
+                    </p>
+                  </Field>
+
+                  <Field label="部屋番号（チーム）">
+                    <input
+                      value={roomCode}
+                      onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
+                      className={inputClass}
+                      placeholder="WXYZ-6789"
+                      required
+                    />
+                    <p className="mt-1.5 text-xs leading-5 text-muted">
+                      自分のチーム専用のコードです。チームごとに違うものが配られます。
                     </p>
                   </Field>
 
@@ -747,12 +766,15 @@ export function OnboardingClient({
 
             {hackEvent && (
               <div className="mt-4 rounded-xl border border-line/70 bg-sand/60 p-4 shadow-inset">
-                <p className="text-xs font-medium text-ink2">全体コード（メンター・運営用）</p>
+                <p className="text-xs font-medium text-ink2">招待コード（イベント共通）</p>
                 <p className="mt-1 font-mono text-2xl font-bold tracking-widest text-pulse">
                   {hackEvent.join_code}
                 </p>
                 <p className="mt-1.5 text-xs leading-5 text-muted">
-                  メンターや運営向けの全体コードです。参加者には下のチームごとの部屋番号を共有してください。
+                  どのハッカソンかを表すコードです。参加者にはこれと、下のチームごとの
+                  部屋番号の<strong className="font-bold">2つ</strong>を渡します。
+                  各チームの「招待URL」を使えば両方が自動で入るので、そちらが確実です。
+                  メンター登録にはこのコードだけを使います。
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <button
@@ -873,6 +895,27 @@ export function OnboardingClient({
                                   <Clipboard className="size-3" />
                                   コピー
                                 </button>
+
+                                {/* 2つのコードを別々に伝えるのは間違いのもとなので、
+                                    両方入ったURLをそのまま配れるようにする。 */}
+                                {hackEvent && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const url = `${window.location.origin}/?code=${encodeURIComponent(
+                                        hackEvent.join_code
+                                      )}&room=${encodeURIComponent(invite.code)}`;
+                                      void navigator.clipboard?.writeText(url);
+                                      setMessage(
+                                        `「${team.name}」の招待URLをコピーしました。このチームにだけ送ってください。`
+                                      );
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-pulse underline underline-offset-2"
+                                  >
+                                    <Link2 className="size-3" />
+                                    招待URL
+                                  </button>
+                                )}
                               </>
                             ) : (
                               <button

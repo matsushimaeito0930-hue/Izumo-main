@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { ensureRepoWebhook, type WebhookSetupResult } from "@/lib/github-webhook-setup";
 import { getCurrentIdentity } from "@/lib/session";
-import { getEvent, joinTeamWithInvite, setTeamRepo } from "@/lib/store";
+import {
+  getEvent,
+  joinTeamWithInvite,
+  setTeamRepo,
+  verifyJoinCode
+} from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +22,9 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => ({}))) as {
+    /** イベントの招待コード。どのハッカソンかを決める。 */
+    eventCode?: string;
+    /** チームの部屋番号。そのイベントの中のどのチームかを決める。 */
     joinCode?: string;
     displayName?: string;
     githubRepo?: string;
@@ -27,21 +35,39 @@ export async function POST(request: Request) {
 
   if (!body.joinCode?.trim() || !displayName) {
     return NextResponse.json(
-      { error: "チーム招待コードと表示名を入力してください。" },
+      { error: "部屋番号と表示名を入力してください。" },
       { status: 400 }
     );
   }
 
-  // 全体コードは運営・メンター用。参加者が間違えて入れやすいので専用の案内を出す。
   const event = await getEvent();
-  if (
-    event?.join_code &&
-    body.joinCode.trim().toUpperCase() === event.join_code.toUpperCase()
-  ) {
+  const roomCode = body.joinCode.trim().toUpperCase();
+  const eventCode = body.eventCode?.trim().toUpperCase() ?? "";
+
+  // 招待コードでイベントを特定する。将来ハッカソンを複数動かしたときに、
+  // 部屋番号だけでは別イベントの部屋に入れてしまうため、ここで先に絞る。
+  if (event) {
+    if (!eventCode) {
+      return NextResponse.json(
+        { error: "招待コードを入力してください。運営から配られたイベントのコードです。" },
+        { status: 400 }
+      );
+    }
+
+    if (!(await verifyJoinCode(eventCode))) {
+      return NextResponse.json(
+        { error: "招待コードが違います。運営から配られたコードを確認してください。" },
+        { status: 403 }
+      );
+    }
+  }
+
+  // 2つの欄を取り違えたときは、その場で気づけるようにする。
+  if (event?.join_code && roomCode === event.join_code.toUpperCase()) {
     return NextResponse.json(
       {
         error:
-          "それは運営・メンター用の全体コードです。参加者は、運営から配られたチームごとの部屋番号を入力してください。"
+          "部屋番号の欄に招待コードが入っています。部屋番号は、運営から配られたチームごとのコードです。"
       },
       { status: 400 }
     );
