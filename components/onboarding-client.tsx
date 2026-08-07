@@ -4,9 +4,11 @@ import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HackRadarLogo } from "@/components/hackradar-logo";
+import { RolePicker, type OnboardingRole } from "@/components/role-picker";
 import { WebhookNotice, type WebhookResult } from "@/components/webhook-notice";
 import {
   ChevronDown,
+  ChevronLeft,
   Clipboard,
   Link2,
   LoaderCircle,
@@ -170,9 +172,8 @@ export function OnboardingClient({
   const [manualRepo, setManualRepo] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [specialty, setSpecialty] = useState("");
-  const [onboardingMode, setOnboardingMode] = useState<"participant" | "mentor">(
-    "participant"
-  );
+  // 最初は立場未選択。選ぶまでその立場の入口を出さない。
+  const [pickedRole, setPickedRole] = useState<OnboardingRole | null>(null);
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [webhook, setWebhook] = useState<WebhookResult | null>(null);
@@ -182,6 +183,8 @@ export function OnboardingClient({
   // 運営セクションは運営ロールのときだけ出す。参加者の視界に入れない。
   const isStaff = viewer?.role === "admin";
   const canManage = manualEntry || isStaff;
+  // メンターはGitHubログイン不要。参加者と運営だけログインを求める。
+  const needsLogin = authConfigured && !viewer && pickedRole !== "mentor";
 
   useEffect(() => {
     // 招待URL（/?code=XXXX-XXXX）で来た人は参加コードを自動で埋める。
@@ -472,248 +475,90 @@ export function OnboardingClient({
         </div>
 
         <div className="rounded-2xl border border-line/70 bg-surface p-5 shadow-card">
-          {viewer ? (
-            <>
-              <div className="mb-4 flex items-center gap-3 rounded-xl border border-line/70 bg-sand/60 p-3 shadow-inset">
-                {viewer.avatarUrl ? (
-                  <Image
-                    src={viewer.avatarUrl}
-                    alt=""
-                    width={36}
-                    height={36}
-                    className="size-9 rounded-full"
-                  />
-                ) : (
-                  <span className="grid size-9 place-items-center rounded-full bg-paper2 text-sm text-muted">
-                    {viewer.displayName.slice(0, 1)}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-ink">
-                    {viewer.displayName}
-                  </p>
-                  <p className="truncate font-mono text-xs text-muted">
-                    @{viewer.login}・{roleLabels[viewer.role]}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={logout}
-                  aria-label="ログアウト"
-                  className="grid size-8 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted shadow-soft transition-colors hover:text-ink"
-                >
-                  <LogOut className="size-3.5" />
-                </button>
-              </div>
-
-              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-line bg-paper2 p-1">
-                <button
-                  type="button"
-                  onClick={() => setOnboardingMode("participant")}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                    onboardingMode === "participant"
-                      ? "bg-surface text-ink shadow-soft"
-                      : "text-muted hover:text-ink"
-                  }`}
-                >
-                  参加者として参加
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOnboardingMode("mentor")}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                    onboardingMode === "mentor"
-                      ? "bg-surface text-ink shadow-soft"
-                      : "text-muted hover:text-ink"
-                  }`}
-                >
-                  メンターとして登録
-                </button>
-              </div>
-
-              {onboardingMode === "mentor" ? (
-                <form onSubmit={joinMentor} className="space-y-4">
-                  <Field label="招待コード">
-                    <input
-                      value={joinCode}
-                      onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                      className={inputClass}
-                      placeholder="ABCD-2345"
-                      required
-                    />
-                    <p className="mt-1.5 text-xs leading-5 text-muted">
-                      運営から配られたメンター用のコードを入力してください。
-                    </p>
-                  </Field>
-
-                  <Field label="名前">
-                    <input
-                      value={displayName}
-                      onChange={(event) => setDisplayName(event.target.value)}
-                      className={inputClass}
-                      placeholder={viewer.displayName}
-                      required
-                    />
-                  </Field>
-
-                  <Field label="得意なこと">
-                    <input
-                      value={specialty}
-                      onChange={(event) => setSpecialty(event.target.value)}
-                      className={inputClass}
-                      placeholder="例）Next.js / UI設計 / Firebase"
-                      required
-                    />
-                  </Field>
-
-                  <button type="submit" disabled={isBusy} className={primaryButtonClass}>
-                    <DoorOpen className="size-4" />
-                    ダッシュボードに参加する
-                  </button>
-                </form>
+          {viewer && (
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-line/70 bg-sand/60 p-3 shadow-inset">
+              {viewer.avatarUrl ? (
+                <Image
+                  src={viewer.avatarUrl}
+                  alt=""
+                  width={36}
+                  height={36}
+                  className="size-9 rounded-full"
+                />
               ) : (
-              <form onSubmit={joinTeam} className="space-y-4">
-                <Field label="チーム招待コード（部屋番号）">
-                  <input
-                    value={joinCode}
-                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                    className={inputClass}
-                    placeholder="ABCD-2345"
-                    required
-                  />
-                  <p className="mt-1.5 text-xs leading-5 text-muted">
-                    運営から渡された、自分のチーム専用のコードを入力してください。
-                  </p>
-                </Field>
-
-                <Field label="チームのGitHubリポジトリ（あとからでも可）">
-                  {reposState === "loading" ? (
-                    <p className="flex h-11 items-center gap-2 rounded-xl border border-line bg-paper px-3 text-sm text-muted shadow-inset">
-                      <LoaderCircle className="size-4 animate-spin" />
-                      リポジトリを読み込んでいます...
-                    </p>
-                  ) : manualRepo ? (
-                    <input
-                      value={githubRepo}
-                      onChange={(event) => setGithubRepo(event.target.value)}
-                      className={inputClass}
-                      placeholder="owner/repository"
-                    />
-                  ) : (
-                    <select
-                      value={githubRepo}
-                      onChange={(event) => setGithubRepo(event.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">あとで設定する</option>
-                      <RepoOptions repos={repos} />
-                    </select>
-                  )}
-
-                  {reposState === "ready" && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setManualRepo((current) => !current);
-                          setGithubRepo("");
-                        }}
-                        className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
-                      >
-                        {manualRepo ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
-                      </button>
-
-                      {!canListPrivate && (
-                        <a
-                          href="/api/auth/github?private=1"
-                          className="text-xs text-pulse underline underline-offset-2"
-                        >
-                          プライベートも表示する
-                        </a>
-                      )}
-                    </div>
-                  )}
-
-                  {reposState === "ready" && !canListPrivate && (
-                    <p className="mt-1.5 text-xs leading-5 text-muted">
-                      いまはパブリックリポジトリだけが表示されています。
-                    </p>
-                  )}
-
-                  {reposState === "error" && (
-                    <p className="mt-1.5 text-xs leading-5 text-muted">
-                      リポジトリ一覧を取得できませんでした。手入力するか、あとから設定できます。
-                    </p>
-                  )}
-                </Field>
-
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className={primaryButtonClass}
-                >
-                  <DoorOpen className="size-4" />
-                  チームに参加する
-                </button>
-              </form>
+                <span className="grid size-9 place-items-center rounded-full bg-paper2 text-sm text-muted">
+                  {viewer.displayName.slice(0, 1)}
+                </span>
               )}
-            </>
-          ) : authConfigured ? (
-            <>
-              <ol className="mb-5 space-y-2.5 text-sm text-ink2">
-                {[
-                  "GitHubでログインする",
-                  "運営から配られたチームの部屋番号を入れる",
-                  "自分のリポジトリを選ぶ"
-                ].map((step, index) => (
-                  <li key={step} className="flex items-start gap-2.5">
-                    <span className="grid size-5 shrink-0 place-items-center rounded-full bg-paper2 text-xs font-medium text-muted shadow-inset">
-                      {index + 1}
-                    </span>
-                    <span className="leading-5">{step}</span>
-                  </li>
-                ))}
-              </ol>
-              <a href="/api/auth/github" className={primaryButtonClass}>
-                <Github className="size-5" />
-                GitHubでログイン
-              </a>
-            </>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-ink">
+                  {viewer.displayName}
+                </p>
+                <p className="truncate font-mono text-xs text-muted">
+                  @{viewer.login}・{roleLabels[viewer.role]}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={logout}
+                aria-label="ログアウト"
+                className="grid size-8 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted shadow-soft transition-colors hover:text-ink"
+              >
+                <LogOut className="size-3.5" />
+              </button>
+            </div>
+          )}
+
+          {pickedRole === null ? (
+            <RolePicker onSelect={setPickedRole} />
           ) : (
             <>
-              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-line bg-paper2 p-1">
-                <button
-                  type="button"
-                  onClick={() => setOnboardingMode("participant")}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                    onboardingMode === "participant"
-                      ? "bg-surface text-ink shadow-soft"
-                      : "text-muted hover:text-ink"
-                  }`}
-                >
-                  参加者として参加
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOnboardingMode("mentor")}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                    onboardingMode === "mentor"
-                      ? "bg-surface text-ink shadow-soft"
-                      : "text-muted hover:text-ink"
-                  }`}
-                >
-                  メンターとして登録
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPickedRole(null);
+                  setMessage("");
+                  setWebhook(null);
+                }}
+                className="mb-4 flex items-center gap-1 text-xs text-muted transition-colors hover:text-ink"
+              >
+                <ChevronLeft className="size-3.5" />
+                立場を選び直す
+              </button>
 
-              {onboardingMode === "mentor" ? (
-                <form onSubmit={joinMentor} className="space-y-4">
+              {needsLogin ? (
+                <>
+                  <p className="mb-4 text-sm leading-6 text-ink2">
+                    {pickedRole === "admin"
+                      ? "運営はGitHubログインが必要です。イベントの作成やリセットができるため、本人確認をしています。"
+                      : "参加者はGitHubログインが必要です。リポジトリの選択とWebhookの自動設定に使います。"}
+                  </p>
+                  <a href="/api/auth/github" className={primaryButtonClass}>
+                    <Github className="size-5" />
+                    GitHubでログイン
+                  </a>
+                </>
+              ) : pickedRole === "admin" ? (
+                canManage ? (
+                  <p className="rounded-xl border border-line bg-paper px-3 py-4 text-xs leading-5 text-muted shadow-inset">
+                    下の「運営の方：イベントとチームを登録する」から操作してください。
+                  </p>
+                ) : (
                   <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
                     <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
                     <span>
-                      GitHubログインは未設定です。招待コードがあればメンターとして参加できます。
+                      このGitHubアカウントは運営として登録されていません。
+                      運営に <code className="font-mono">ADMIN_GITHUB_LOGINS</code> へ
+                      @{viewer?.login} を追加してもらってください。
                     </span>
                   </div>
+                )
+              ) : pickedRole === "mentor" ? (
+                <form onSubmit={joinMentor} className="space-y-4">
+                  <p className="text-xs leading-5 text-muted">
+                    メンターはGitHubログイン不要です。運営から配られたコードで入れます。
+                  </p>
+
                   <Field label="招待コード">
                     <input
                       value={joinCode}
@@ -722,16 +567,21 @@ export function OnboardingClient({
                       placeholder="ABCD-2345"
                       required
                     />
+                    <p className="mt-1.5 text-xs leading-5 text-muted">
+                      運営から配られたメンター用の全体コードを入力してください。
+                    </p>
                   </Field>
+
                   <Field label="名前">
                     <input
                       value={displayName}
                       onChange={(event) => setDisplayName(event.target.value)}
                       className={inputClass}
-                      placeholder="表示名"
+                      placeholder={viewer?.displayName ?? "表示名"}
                       required
                     />
                   </Field>
+
                   <Field label="得意なこと">
                     <input
                       value={specialty}
@@ -741,45 +591,115 @@ export function OnboardingClient({
                       required
                     />
                   </Field>
+
                   <button type="submit" disabled={isBusy} className={primaryButtonClass}>
                     <DoorOpen className="size-4" />
                     ダッシュボードに参加する
                   </button>
                 </form>
               ) : (
-            <form onSubmit={joinTeam} className="space-y-4">
-              <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
-                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
-                <span>
-                  GitHubログインは未設定です。いまは名前を入れて参加できます。
-                </span>
-              </div>
-              <Field label="チーム招待コード（部屋番号）">
-                <input
-                  value={joinCode}
-                  onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                  className={inputClass}
-                  placeholder="ABCD-2345"
-                  required
-                />
-                <p className="mt-1.5 text-xs leading-5 text-muted">
-                  運営から渡された、自分のチーム専用のコードを入力してください。
-                </p>
-              </Field>
-              <Field label="表示名">
-                <input
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  className={inputClass}
-                  placeholder="例）山田太郎"
-                  required
-                />
-              </Field>
-              <button type="submit" disabled={isBusy} className={primaryButtonClass}>
-                <DoorOpen className="size-4" />
-                チームに参加する
-              </button>
-            </form>
+                <form onSubmit={joinTeam} className="space-y-4">
+                  {manualEntry && (
+                    <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
+                      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                      <span>
+                        GitHubログインは未設定です。いまは名前を入れて参加できます。
+                      </span>
+                    </div>
+                  )}
+
+                  <Field label="チーム招待コード（部屋番号）">
+                    <input
+                      value={joinCode}
+                      onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                      className={inputClass}
+                      placeholder="ABCD-2345"
+                      required
+                    />
+                    <p className="mt-1.5 text-xs leading-5 text-muted">
+                      運営から渡された、自分のチーム専用のコードを入力してください。
+                      イベント全体のコードでは参加できません。
+                    </p>
+                  </Field>
+
+                  {manualEntry && !viewer && (
+                    <Field label="表示名">
+                      <input
+                        value={displayName}
+                        onChange={(event) => setDisplayName(event.target.value)}
+                        className={inputClass}
+                        placeholder="表示名"
+                        required
+                      />
+                    </Field>
+                  )}
+
+                  <Field label="チームのGitHubリポジトリ（あとからでも可）">
+                    {reposState === "loading" ? (
+                      <p className="flex h-11 items-center gap-2 rounded-xl border border-line bg-paper px-3 text-sm text-muted shadow-inset">
+                        <LoaderCircle className="size-4 animate-spin" />
+                        リポジトリを読み込んでいます...
+                      </p>
+                    ) : manualRepo ? (
+                      <input
+                        value={githubRepo}
+                        onChange={(event) => setGithubRepo(event.target.value)}
+                        className={inputClass}
+                        placeholder="owner/repository"
+                      />
+                    ) : (
+                      <select
+                        value={githubRepo}
+                        onChange={(event) => setGithubRepo(event.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">あとで設定する</option>
+                        <RepoOptions repos={repos} />
+                      </select>
+                    )}
+
+                    {reposState === "ready" && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManualRepo((current) => !current);
+                            setGithubRepo("");
+                          }}
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-ink"
+                        >
+                          {manualRepo ? "一覧から選ぶ" : "一覧に無い（手入力する）"}
+                        </button>
+
+                        {!canListPrivate && (
+                          <a
+                            href="/api/auth/github?private=1"
+                            className="text-xs text-pulse underline underline-offset-2"
+                          >
+                            プライベートも表示する
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {reposState === "ready" && !canListPrivate && (
+                      <p className="mt-1.5 text-xs leading-5 text-muted">
+                        いまはパブリックリポジトリだけが表示されています。
+                      </p>
+                    )}
+
+                    {reposState === "error" && (
+                      <p className="mt-1.5 text-xs leading-5 text-muted">
+                        リポジトリ一覧を取得できませんでした。手入力するか、あとから設定できます。
+                      </p>
+                    )}
+                  </Field>
+
+                  <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+                    <DoorOpen className="size-4" />
+                    チームに参加する
+                  </button>
+                </form>
               )}
             </>
           )}
@@ -807,7 +727,7 @@ export function OnboardingClient({
           )}
         </div>
 
-        {canManage && (
+        {canManage && pickedRole === "admin" && (
           <Collapsible title="運営の方：イベントとチームを登録する">
             <form onSubmit={saveEventName} className="space-y-4">
               <Field label="イベント名">

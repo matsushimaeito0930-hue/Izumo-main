@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { ensureRepoWebhook, type WebhookSetupResult } from "@/lib/github-webhook-setup";
 import { getCurrentIdentity } from "@/lib/session";
-import { joinTeamWithInvite, setTeamRepo } from "@/lib/store";
+import { getEvent, joinTeamWithInvite, setTeamRepo } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +28,21 @@ export async function POST(request: Request) {
   if (!body.joinCode?.trim() || !displayName) {
     return NextResponse.json(
       { error: "チーム招待コードと表示名を入力してください。" },
+      { status: 400 }
+    );
+  }
+
+  // 全体コードは運営・メンター用。参加者が間違えて入れやすいので専用の案内を出す。
+  const event = await getEvent();
+  if (
+    event?.join_code &&
+    body.joinCode.trim().toUpperCase() === event.join_code.toUpperCase()
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "それは運営・メンター用の全体コードです。参加者は、運営から配られたチームごとの部屋番号を入力してください。"
+      },
       { status: 400 }
     );
   }

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE,
-  isGitHubAuthConfigured,
   serializeIdentity
 } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
@@ -14,12 +14,8 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const identity = getCurrentIdentity();
 
-  if (isGitHubAuthConfigured() && !identity) {
-    return NextResponse.json(
-      { error: "GitHubでログインしてからメンター登録をしてください。" },
-      { status: 401 }
-    );
-  }
+  // メンターはリポジトリを持たないので、GitHubログインを必須にしない。
+  // 招待コードを知っていることが唯一の関門になる。
 
   const body = (await request.json().catch(() => ({}))) as {
     code?: string;
@@ -48,15 +44,36 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ session });
 
-    // GitHubログイン済みの参加者がメンター登録した場合も、以後の投稿権限を維持する。
+    const cookieOptions = {
+      httpOnly: true,
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: SESSION_MAX_AGE
+    };
+
     if (identity && identity.role !== "admin") {
-      response.cookies.set(SESSION_COOKIE, serializeIdentity({ ...identity, role: "mentor" }), {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        maxAge: SESSION_MAX_AGE
-      });
+      // GitHubログイン済みの人がメンター登録した場合は、そのまま権限だけ変える。
+      response.cookies.set(
+        SESSION_COOKIE,
+        serializeIdentity({ ...identity, role: "mentor" }),
+        cookieOptions
+      );
+    } else if (!identity) {
+      // GitHubログインなしのメンター。名乗った名前をcookieに焼き込むことで、
+      // 以後の投稿でも本人の申告ではなくこのcookieの値が使われる。
+      response.cookies.set(
+        SESSION_COOKIE,
+        serializeIdentity({
+          githubId: 0,
+          login: session.githubUsername ?? `mentor-${randomUUID().slice(0, 8)}`,
+          displayName,
+          avatarUrl: null,
+          role: "mentor",
+          issuedAt: Math.floor(Date.now() / 1000)
+        }),
+        cookieOptions
+      );
     }
 
     return response;

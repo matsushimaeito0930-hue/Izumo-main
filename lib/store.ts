@@ -1336,7 +1336,7 @@ export async function joinTeamWithInvite(input: {
     input.githubUsername?.trim() || `guest-${randomUUID().slice(0, 8)}`;
 
   if (!code || !displayName) {
-    throw new Error("Invite code and display name are required.");
+    throw new Error("招待コードと名前を入力してください。");
   }
 
   if (isSupabaseConfigured()) {
@@ -1349,7 +1349,7 @@ export async function joinTeamWithInvite(input: {
         .maybeSingle();
 
       if (inviteError) throw inviteError;
-      if (!invite) throw new Error("Invite code was not found.");
+      if (!invite) throw new Error("招待コードが見つかりません。運営から配られたコードを確認してください。");
 
       const { data: team, error: teamError } = await supabase
         .from("teams")
@@ -1423,12 +1423,12 @@ export async function joinTeamWithInvite(input: {
   const store = getMemoryStore();
   const invite = store.teamInvites.find((candidate) => candidate.code === code);
   if (!invite) {
-    throw new Error("Invite code was not found.");
+    throw new Error("招待コードが見つかりません。運営から配られたコードを確認してください。");
   }
 
   const team = store.teams.find((candidate) => candidate.id === invite.team_id);
   if (!team) {
-    throw new Error("Invited team was not found.");
+    throw new Error("このコードに対応するチームが見つかりません。運営に確認してください。");
   }
 
   const role = input.role ?? "participant";
@@ -1506,7 +1506,7 @@ export async function joinTeamByName(input: {
         .maybeSingle();
 
       if (teamError) throw teamError;
-      if (!team) throw new Error("Team name was not found.");
+      if (!team) throw new Error("チームが見つかりません。運営に確認してください。");
 
       const { data: user, error: userError } = await supabase
         .from("users")
@@ -1549,7 +1549,7 @@ export async function joinTeamByName(input: {
   );
 
   if (!team) {
-    throw new Error("Team name was not found.");
+    throw new Error("チームが見つかりません。運営に確認してください。");
   }
 
   let user = store.users.find(
