@@ -1,5 +1,6 @@
 import { GitCommitHorizontal, Trophy } from "lucide-react";
-import type { ActivityView, Team } from "@/lib/types";
+import { TeamMembers } from "@/components/team-members";
+import type { ActivityView, Team, TeamMemberView } from "@/lib/types";
 
 function barWidth(value: number, maximum: number) {
   if (value <= 0) return "0%";
@@ -9,16 +10,25 @@ function barWidth(value: number, maximum: number) {
 export function DevelopmentOverview({
   teams,
   activities,
-  myTeamId = null
+  myTeamId = null,
+  members = []
 }: {
   teams: Team[];
   activities: ActivityView[];
   myTeamId?: string | null;
+  members?: TeamMemberView[];
 }) {
   const maxScore = Math.max(...teams.map((team) => team.score), 1);
   const totalCommits = teams.reduce((total, team) => total + team.commit_count, 0);
   const topTeam = teams[0];
   const latestByTeam = new Map<string, ActivityView>();
+  const membersByTeam = new Map<string, TeamMemberView[]>();
+
+  for (const member of members) {
+    const bucket = membersByTeam.get(member.team_id) ?? [];
+    bucket.push(member);
+    membersByTeam.set(member.team_id, bucket);
+  }
 
   for (const activity of activities) {
     if (!latestByTeam.has(activity.team_id)) {
@@ -115,6 +125,9 @@ export function DevelopmentOverview({
                           ? latestActivity?.message ?? "まだ活動がありません"
                           : "リポジトリ未設定"}
                       </p>
+                      <div className="mt-1">
+                        <TeamMembers members={membersByTeam.get(team.id) ?? []} compact />
+                      </div>
                     </div>
                   </div>
 

@@ -1,5 +1,6 @@
 import { GitBranch, GitCommitHorizontal, Trophy } from "lucide-react";
-import type { ActivityView, Team } from "@/lib/types";
+import { TeamMembers } from "@/components/team-members";
+import type { ActivityView, Team, TeamMemberView } from "@/lib/types";
 
 /**
  * 参加者の画面のいちばん上。自分のチームの状態だけを大きく出す。
@@ -9,12 +10,16 @@ export function MyTeamCard({
   team,
   rank,
   totalTeams,
-  latestActivity
+  latestActivity,
+  members,
+  viewerLogin = null
 }: {
   team: Team;
   rank: number;
   totalTeams: number;
   latestActivity: ActivityView | null;
+  members: TeamMemberView[];
+  viewerLogin?: string | null;
 }) {
   return (
     <section className="rounded-2xl border border-pulse/25 bg-surface p-5 shadow-card sm:p-6">
@@ -24,6 +29,9 @@ export function MyTeamCard({
           <h2 className="mt-0.5 truncate text-2xl font-bold tracking-tight text-ink sm:text-3xl">
             {team.name}
           </h2>
+          <div className="mt-2.5">
+            <TeamMembers members={members} viewerLogin={viewerLogin} />
+          </div>
         </div>
         <span className="shrink-0 rounded-xl bg-sun/10 px-3 py-1.5 text-sm font-bold text-sun shadow-soft">
           <Trophy className="mr-1.5 inline size-4 align-[-2px]" />

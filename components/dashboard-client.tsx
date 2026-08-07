@@ -149,6 +149,8 @@ export function DashboardClient({
           rank={myRank}
           totalTeams={state.teams.length}
           latestActivity={myLatestActivity}
+          members={state.members.filter((member) => member.team_id === myTeam.id)}
+          viewerLogin={activeViewer?.login ?? null}
         />
       )}
 
@@ -158,6 +160,7 @@ export function DashboardClient({
         teams={state.teams}
         activities={state.activities}
         myTeamId={isStaff ? null : myTeamId}
+        members={state.members}
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">

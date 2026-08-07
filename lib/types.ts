@@ -116,6 +116,14 @@ export type HelpPostView = HelpPost & {
   replies: HelpReply[];
 };
 
+/** チームに誰が入っているか。同じ部屋番号で複数人が参加するため一覧で見せる。 */
+export type TeamMemberView = {
+  team_id: string;
+  github_username: string;
+  display_name: string;
+  avatar_url: string | null;
+};
+
 export type ActivityView = Activity & {
   team_name: string;
 };
@@ -124,6 +132,7 @@ export type HackVerseState = {
   teams: Team[];
   activities: ActivityView[];
   helpPosts: HelpPostView[];
+  members: TeamMemberView[];
   messages: ChatMessage[];
   updatedAt: string;
 };

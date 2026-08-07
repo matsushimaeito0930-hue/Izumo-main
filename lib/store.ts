@@ -30,6 +30,7 @@ import type {
   TeamInvite,
   TeamInviteView,
   TeamMember,
+  TeamMemberView,
   User,
   UserRole
 } from "@/lib/types";
@@ -90,7 +91,8 @@ function withViews(
   activities: Activity[],
   helpPosts: HelpPost[],
   helpReplies: HelpReply[],
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  teamMembers: TeamMember[] = []
 ): HackVerseState {
   const teamsById = new Map(teams.map((team) => [team.id, team]));
   const usersById = new Map(users.map((user) => [user.id, user]));
@@ -123,10 +125,26 @@ function withViews(
     }))
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 
+  // 誰がどのチームに入っているか。GitHubユーザー名が分かる人だけ載せる。
+  const memberViews: TeamMemberView[] = teamMembers
+    .map((member) => {
+      const user = usersById.get(member.user_id);
+      if (!user) return null;
+      return {
+        team_id: member.team_id,
+        github_username: user.github_username,
+        display_name: user.display_name,
+        avatar_url: user.avatar_url
+      };
+    })
+    .filter((member): member is TeamMemberView => member !== null)
+    .sort((a, b) => a.github_username.localeCompare(b.github_username));
+
   return {
     teams: teams.map(normalizeTeam).sort((a, b) => b.score - a.score),
     activities: activityViews,
     helpPosts: helpPostViews,
+    members: memberViews,
     messages: messages
       .slice()
       .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
@@ -146,7 +164,8 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
     activitiesResult,
     helpPostsResult,
     helpRepliesResult,
-    messagesResult
+    messagesResult,
+    teamMembersResult
   ] =
     await Promise.all([
       supabase.from("users").select("*"),
@@ -164,7 +183,8 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
         .select("*")
         .order("created_at", { ascending: true })
         .limit(200),
-      supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).limit(80)
+      supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).limit(80),
+      supabase.from("team_members").select("*")
     ]);
 
   if (teamsResult.error || activitiesResult.error) {
@@ -181,7 +201,8 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
       : (helpRepliesResult.data ?? seedHelpReplies)) as HelpReply[],
     (messagesResult.error
       ? []
-      : (messagesResult.data ?? seedChatMessages)) as ChatMessage[]
+      : (messagesResult.data ?? seedChatMessages)) as ChatMessage[],
+    (teamMembersResult.error ? [] : (teamMembersResult.data ?? [])) as TeamMember[]
   );
 }
 
@@ -201,7 +222,8 @@ export async function getHackVerseState(): Promise<HackVerseState> {
     store.activities,
     store.helpPosts,
     store.helpReplies,
-    store.messages
+    store.messages,
+    store.teamMembers
   );
 }
 
