@@ -27,6 +27,10 @@ npm run build
 1. https://supabase.com でプロジェクトを作る（無料枠でよい）
 2. 左メニューの **SQL Editor** を開く
 3. このリポジトリの `supabase/schema.sql` の中身を貼り付けて実行する
+
+既存のSupabaseプロジェクトを使っている場合は、メンター登録を有効にするために
+`supabase/mentor-migration.sql` もSQL Editorで1回だけ実行してください。
+この更新を行わないと、メンター登録時に `specialty` 列または `mentor` ロールの制約で失敗します。
 4. **Settings → API** から次の3つを控える
 
 | 控える値 | 環境変数名 |

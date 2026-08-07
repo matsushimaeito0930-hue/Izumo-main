@@ -7,6 +7,7 @@ import {
 } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
 import { joinMentorByCode } from "@/lib/store";
+import { getMentorJoinErrorMessage } from "@/lib/mentor-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -60,8 +61,9 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    console.error("[mentor-join] failed", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "メンター登録に失敗しました。" },
+      { error: getMentorJoinErrorMessage(error) },
       { status: 400 }
     );
   }
