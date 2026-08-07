@@ -40,7 +40,7 @@ export function RolePicker({ onSelect }: { onSelect: (role: OnboardingRole) => v
   return (
     <div className="space-y-3">
       <p className="text-center text-sm leading-6 text-ink2">
-        どの立場で入りますか？
+        役割を選択してください
       </p>
 
       {roleCards.map((card) => {
