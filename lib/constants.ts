@@ -32,7 +32,7 @@ export const HOUSE_LEVELS = [
 ] as const;
 
 export const SCORE_BY_ACTIVITY: Record<ActivityType, number> = {
-  push: 5,
+  push: 1,
   pull_request_opened: 10,
   pull_request_merged: 20,
   issue_closed: 8,
