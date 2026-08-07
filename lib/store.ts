@@ -336,6 +336,13 @@ function findOrCreateMemoryTeam(githubRepo: string, fallbackName: string): Team 
   return newTeam;
 }
 
+/**
+ * 活動を1件記録する。
+ *
+ * リポジトリ名が渡されたのにどのチームとも一致しない場合は `null` を返して何もしない。
+ * 以前は「先頭のチーム」に紐づけていたため、どのチームにも登録されていないリポジトリの
+ * プッシュが無関係なチームのスコアに加算されてしまっていた。
+ */
 export async function recordActivity(input: {
   type: ActivityType;
   teamId?: string;
@@ -343,7 +350,7 @@ export async function recordActivity(input: {
   fallbackTeamName?: string;
   githubDeliveryId?: string;
   metadata?: Record<string, unknown>;
-}): Promise<ActivityView> {
+}): Promise<ActivityView | null> {
   const metadata: Record<string, unknown> = {
     ...(input.metadata ?? {}),
     ...(input.githubDeliveryId ? { githubDeliveryId: input.githubDeliveryId } : {})
@@ -370,16 +377,17 @@ export async function recordActivity(input: {
 
       if (!team && input.githubRepo) {
         team = await findSupabaseTeam(input.githubRepo);
+
+        // 登録されていないリポジトリからの通知は、他チームに混ぜず捨てる。
+        if (!team) return null;
       }
 
       if (!team) {
-        const { data } = await supabase.from("teams").select("*").limit(1).single();
+        const { data } = await supabase.from("teams").select("*").limit(1).maybeSingle();
         team = data as Team | null;
       }
 
-      if (!team) {
-        throw new Error("No team is available for this activity.");
-      }
+      if (!team) return null;
 
       team = normalizeTeam(team);
 
@@ -467,17 +475,19 @@ export async function recordActivity(input: {
   }
 
   const store = getMemoryStore();
-  let team =
-    (input.teamId
-      ? store.teams.find((candidate) => candidate.id === input.teamId)
-      : undefined) ??
-    (input.githubRepo
-      ? store.teams.find((candidate) => candidate.github_repo === input.githubRepo)
-      : store.teams[0]);
+  let team = input.teamId
+    ? store.teams.find((candidate) => candidate.id === input.teamId)
+    : undefined;
 
-  if (!team) {
-    throw new Error("No team is available for this activity.");
+  if (!team && input.githubRepo) {
+    team = store.teams.find((candidate) => candidate.github_repo === input.githubRepo);
+    // Supabase側と同じく、未登録リポジトリの通知は捨てる。
+    if (!team) return null;
   }
+
+  team ??= store.teams[0];
+
+  if (!team) return null;
 
   const duplicateActivity = store.activities.find((activity) => {
     const activityMetadata = activity.metadata ?? {};

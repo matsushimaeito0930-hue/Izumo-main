@@ -45,6 +45,19 @@ export async function POST(request: Request) {
       ...parsedActivity,
       githubDeliveryId: request.headers.get("x-github-delivery") ?? undefined
     });
+
+    if (!activity) {
+      // どのチームにも登録されていないリポジトリ。200で返して配信は成功扱いにする。
+      return NextResponse.json({
+        ok: true,
+        ignored: true,
+        reason: "unregistered_repository",
+        githubRepo: parsedActivity.githubRepo,
+        message:
+          "このリポジトリはどのチームにも登録されていないため、記録しませんでした。"
+      });
+    }
+
     return NextResponse.json({ ok: true, eventName, activity });
   } catch (error) {
     return NextResponse.json(

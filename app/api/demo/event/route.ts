@@ -63,5 +63,12 @@ export async function POST(request: Request) {
     metadata: demoMetadata(body.type)
   });
 
+  if (!activity) {
+    return NextResponse.json(
+      { error: "チームが登録されていないため、デモイベントを作れませんでした。" },
+      { status: 400 }
+    );
+  }
+
   return NextResponse.json({ activity });
 }
