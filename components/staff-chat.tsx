@@ -14,7 +14,8 @@ export function StaffChat({
   messages,
   myTeamId,
   viewer = null,
-  onSend
+  onSend,
+  announcementOnly = false
 }: {
   teams: Team[];
   messages: ChatMessage[];
@@ -27,6 +28,7 @@ export function StaffChat({
     authorRole: UserRole;
     body: string;
   }) => Promise<void>;
+  announcementOnly?: boolean;
 }) {
   const isStaff = viewer?.role === "admin" || viewer?.role === "mentor";
 
@@ -34,7 +36,7 @@ export function StaffChat({
   const [selectedId, setSelectedId] = useState(
     () => myTeamId ?? (isStaff ? (teams[0]?.id ?? "") : "")
   );
-  const activeId = isStaff ? selectedId : (myTeamId ?? "");
+  const activeId = announcementOnly ? "" : isStaff ? selectedId : (myTeamId ?? "");
   const activeTeam = teams.find((team) => team.id === activeId) ?? null;
 
   const [message, setMessage] = useState("");
@@ -44,21 +46,25 @@ export function StaffChat({
   const visibleMessages = useMemo(
     () =>
       messages
-        .filter((item) => item.channel === "staff" && item.team_id === activeTeam?.id)
+        .filter(
+          (item) =>
+            item.channel === "staff" &&
+            (announcementOnly ? item.team_id === null : item.team_id === activeTeam?.id)
+        )
         .slice(-14),
-    [messages, activeTeam?.id]
+    [announcementOnly, messages, activeTeam?.id]
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!message.trim() || !activeTeam) return;
+    if (!message.trim() || (!announcementOnly && !activeTeam)) return;
 
     setIsSending(true);
     setError("");
     try {
       await onSend({
         channel: "staff",
-        teamId: activeTeam.id,
+        teamId: announcementOnly ? undefined : activeTeam?.id,
         authorName: viewer?.displayName ?? "参加者",
         authorRole: viewer?.role ?? "participant",
         body: message
@@ -72,7 +78,7 @@ export function StaffChat({
   }
 
   // 参加者がまだチームに入っていないときは、案内だけ出す。
-  if (!isStaff && !activeTeam) {
+  if (!announcementOnly && !isStaff && !activeTeam) {
     return (
       <Panel
         title="運営に相談する"
@@ -87,14 +93,16 @@ export function StaffChat({
 
   return (
     <Panel
-      title="運営に相談する"
+      title={announcementOnly ? "お知らせ" : "運営に相談する"}
       description={
-        isStaff
+        announcementOnly
+          ? "運営から全チームに共有するメッセージです。"
+          : isStaff
           ? "各チームからの相談がここに届きます。チームを切り替えて返信してください。"
           : "掲示板に書きにくいことは、ここで運営に直接聞けます。"
       }
       action={
-        isStaff ? (
+        announcementOnly ? null : isStaff ? (
           <label className="flex items-center gap-2 text-xs text-muted">
             チーム
             <select
@@ -164,7 +172,9 @@ export function StaffChat({
                 まだメッセージはありません
               </p>
               <p className="mt-1 text-xs text-muted">
-                {isStaff
+                {announcementOnly
+                  ? "運営からのお知らせがここに表示されます。"
+                  : isStaff
                   ? "このチームからの相談はまだありません。"
                   : "困っていることを書けば、運営が返信します。"}
               </p>
@@ -178,13 +188,13 @@ export function StaffChat({
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           maxLength={500}
-          disabled={!activeTeam}
-          placeholder={isStaff ? "チームに返信する" : "運営に聞きたいことを書く"}
+          disabled={!announcementOnly && !activeTeam}
+          placeholder={announcementOnly ? "全チームへのお知らせを書く" : isStaff ? "チームに返信する" : "運営に聞きたいことを書く"}
           className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-paper px-3 text-sm text-ink shadow-inset outline-none transition-colors placeholder:text-muted/70 hover:border-lineStrong focus:border-pulse"
         />
         <button
           type="submit"
-          disabled={isSending || !message.trim() || !activeTeam}
+          disabled={isSending || !message.trim() || (!announcementOnly && !activeTeam)}
           className="flex h-11 shrink-0 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
         >
           <Send className="size-4" />

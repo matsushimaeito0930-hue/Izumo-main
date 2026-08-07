@@ -8,6 +8,13 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const identity = getCurrentIdentity();
 
+  if (identity?.role === "admin") {
+    return NextResponse.json(
+      { error: "運営はお知らせチャットのみ利用できます。" },
+      { status: 403 }
+    );
+  }
+
   const body = (await request.json().catch(() => ({}))) as {
     helpPostId?: string;
     replyId?: string;
@@ -36,9 +43,7 @@ export async function POST(request: Request) {
     }
 
     const isAuthor = post.author_github === identity.login;
-    const isStaff = identity.role === "admin";
-
-    if (!isAuthor && !isStaff) {
+    if (!isAuthor) {
       return NextResponse.json(
         { error: "ベストアンサーを選べるのは質問者本人か運営だけです。" },
         { status: 403 }

@@ -46,7 +46,8 @@ export async function POST(request: Request) {
     const session = await joinTeamByName({
       teamName,
       displayName,
-      githubUsername
+      githubUsername,
+      role: identity?.role
     });
 
     // リポジトリは任意。指定があればこの場で紐づけ、Webhookも自動登録する。

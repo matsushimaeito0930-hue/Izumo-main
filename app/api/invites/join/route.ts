@@ -39,7 +39,8 @@ export async function POST(request: Request) {
     const session = await joinTeamWithInvite({
       code: body.code,
       displayName,
-      githubUsername
+      githubUsername,
+      role: identity?.role
     });
 
     return NextResponse.json({

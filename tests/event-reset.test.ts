@@ -9,12 +9,13 @@ import {
 
 describe("event reset", () => {
   it("clears registered teams and repositories when the event name changes", async () => {
-    await saveEvent({ name: "Before Reset" });
+    const before = await saveEvent({ name: "Before Reset" });
     const team = await createTeamByName({ name: "Reset Team" });
     await setTeamRepo({ teamId: team.id, githubRepo: "demo/reset-team" });
 
-    await saveEvent({ name: "After Reset" });
+    const after = await saveEvent({ name: "After Reset" });
 
+    expect(after.join_code).not.toBe(before.join_code);
     const state = await getHackVerseState();
     expect(state.teams).toEqual([]);
     expect(state.activities).toEqual([]);

@@ -512,14 +512,16 @@ export async function createChatMessage(input: {
   }
 
   // 運営への相談はチームごとのスレッドなので、必ずチームが要る。
-  if (!input.teamId) {
+  if (input.channel === "staff" && input.teamId === undefined) {
+    // A null team_id is reserved for operator-wide announcements.
+  } else if (!input.teamId) {
     throw new Error("チームを選択してください。");
   }
 
   const message: ChatMessage = {
     id: randomUUID(),
     channel: input.channel,
-    team_id: input.teamId,
+    team_id: input.teamId ?? null,
     author_name: authorName,
     author_role: input.authorRole,
     body,
@@ -834,6 +836,7 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
 
   const existing = await getEvent();
   const shouldReset = Boolean(existing && existing.name !== name);
+  const joinCode = shouldReset ? makeJoinCode() : existing?.join_code ?? makeJoinCode();
 
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
@@ -841,7 +844,7 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
       if (existing) {
         const { data, error } = await supabase
           .from("events")
-          .update({ name })
+          .update({ name, join_code: joinCode })
           .eq("id", existing.id)
           .select("*")
           .single();
@@ -871,7 +874,7 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
   store.event = {
     id: existing?.id ?? randomUUID(),
     name,
-    join_code: existing?.join_code ?? makeJoinCode(),
+    join_code: joinCode,
     created_at: existing?.created_at ?? new Date().toISOString()
   };
   return store.event;
@@ -1255,6 +1258,7 @@ export async function joinTeamWithInvite(input: {
   code: string;
   displayName: string;
   githubUsername?: string;
+  role?: UserRole;
 }): Promise<AppSession> {
   const code = input.code.trim().toUpperCase();
   const displayName = input.displayName.trim();
@@ -1291,7 +1295,7 @@ export async function joinTeamWithInvite(input: {
           {
             github_username: githubUsername,
             display_name: displayName,
-            role: "participant"
+            role: input.role ?? "participant"
           },
           { onConflict: "github_username" }
         )
@@ -1309,7 +1313,7 @@ export async function joinTeamWithInvite(input: {
       );
 
       return {
-        role: "participant",
+        role: input.role ?? "participant",
         displayName,
         githubUsername,
         teamId: team.id,
@@ -1339,7 +1343,7 @@ export async function joinTeamWithInvite(input: {
       github_username: githubUsername,
       display_name: displayName,
       avatar_url: null,
-      role: "participant",
+      role: input.role ?? "participant",
       created_at: new Date().toISOString()
     };
     store.users.push(user);
@@ -1358,7 +1362,7 @@ export async function joinTeamWithInvite(input: {
   }
 
   return {
-    role: "participant",
+    role: input.role ?? "participant",
     displayName,
     githubUsername,
     teamId: team.id,
@@ -1371,6 +1375,7 @@ export async function joinTeamByName(input: {
   teamName: string;
   displayName: string;
   githubUsername?: string;
+  role?: UserRole;
 }): Promise<AppSession> {
   const teamName = input.teamName.trim();
   const displayName = input.displayName.trim();
@@ -1399,7 +1404,7 @@ export async function joinTeamByName(input: {
           {
             github_username: githubUsername,
             display_name: displayName,
-            role: "participant"
+            role: input.role ?? "participant"
           },
           { onConflict: "github_username" }
         )
@@ -1419,7 +1424,7 @@ export async function joinTeamByName(input: {
       if (memberError) throw memberError;
 
       return {
-        role: "participant",
+        role: input.role ?? "participant",
         displayName,
         githubUsername,
         teamId: team.id,
@@ -1446,7 +1451,7 @@ export async function joinTeamByName(input: {
       github_username: githubUsername,
       display_name: displayName,
       avatar_url: null,
-      role: "participant",
+      role: input.role ?? "participant",
       created_at: new Date().toISOString()
     };
     store.users.push(user);
@@ -1465,7 +1470,7 @@ export async function joinTeamByName(input: {
   }
 
   return {
-    role: "participant",
+    role: input.role ?? "participant",
     displayName,
     githubUsername,
     teamId: team.id,

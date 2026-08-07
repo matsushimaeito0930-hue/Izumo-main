@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CircleHelp, Github, LayoutDashboard, LogOut } from "lucide-react";
 import { HackRadarLogo } from "@/components/hackradar-logo";
-import { InviteBadge } from "@/components/invite-badge";
 import type { UserRole } from "@/lib/types";
 
 type Viewer = {
@@ -81,7 +80,6 @@ export function Nav({
 
         {viewer ? (
           <div className="flex shrink-0 items-center gap-2">
-            {viewer.role === "admin" && joinCode && <InviteBadge joinCode={joinCode} />}
             <span className="hidden items-center gap-2 rounded-xl border border-line/70 bg-surface py-1 pl-1.5 pr-3 shadow-soft sm:flex">
               {viewer.avatarUrl ? (
                 <Image

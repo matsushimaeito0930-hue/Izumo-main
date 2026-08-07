@@ -89,19 +89,24 @@ export function DashboardClient({
   if (view === "help") {
     return (
       <div className="space-y-5">
-        <HelpComposer teams={state.teams} onSubmit={createHelp} />
-        <HelpBoard
-          posts={state.helpPosts}
-          viewerGithub={activeViewer?.login ?? null}
-          viewerRole={activeViewer?.role}
-          onReply={createHelpReply}
-          onAccept={acceptHelpReply}
-        />
+        {!isAdmin && (
+          <>
+            <HelpComposer teams={state.teams} onSubmit={createHelp} />
+            <HelpBoard
+              posts={state.helpPosts}
+              viewerGithub={activeViewer?.login ?? null}
+              viewerRole={activeViewer?.role}
+              onReply={createHelpReply}
+              onAccept={acceptHelpReply}
+            />
+          </>
+        )}
         <StaffChat
           teams={state.teams}
           messages={state.messages}
           myTeamId={myTeamId}
           viewer={activeViewer}
+          announcementOnly={isAdmin}
           onSend={createChatMessage}
         />
       </div>

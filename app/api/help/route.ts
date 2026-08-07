@@ -16,6 +16,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (identity?.role === "admin") {
+    return NextResponse.json(
+      { error: "運営はお知らせチャットのみ利用できます。" },
+      { status: 403 }
+    );
+  }
+
   const body = (await request.json().catch(() => ({}))) as {
     teamId?: string;
     title?: string;

@@ -36,8 +36,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "メッセージを入力してください。" }, { status: 400 });
   }
 
-  if (!body.teamId) {
-    return NextResponse.json({ error: "チームを選択してください。" }, { status: 400 });
+  const isAnnouncement = !body.teamId;
+
+  if (identity?.role === "admin" && !isAnnouncement) {
+    return NextResponse.json(
+      { error: "運営はお知らせチャットのみ利用できます。" },
+      { status: 403 }
+    );
+  }
+
+  if (isAnnouncement && identity?.role !== "admin") {
+    return NextResponse.json(
+      { error: "お知らせを投稿できるのは運営のみです。" },
+      { status: 403 }
+    );
   }
 
   try {
