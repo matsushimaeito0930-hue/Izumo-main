@@ -157,7 +157,6 @@ export function OnboardingClient({
   const [hackEvent, setHackEvent] = useState(initialEvent);
   const [eventName, setEventName] = useState(initialEvent?.name ?? "");
   const [joinCode, setJoinCode] = useState("");
-  const [teamName, setTeamName] = useState(initialTeams[0]?.name ?? "");
   const [newTeamName, setNewTeamName] = useState("");
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState("");
@@ -180,22 +179,14 @@ export function OnboardingClient({
 
   // GitHubログイン未設定のローカル環境だけ、手入力での参加を許す。
   const manualEntry = !authConfigured;
-  const canJoin = manualEntry || Boolean(viewer);
   // 運営セクションは運営ロールのときだけ出す。参加者の視界に入れない。
   const isStaff = viewer?.role === "admin";
+  const canManage = manualEntry || isStaff;
 
   useEffect(() => {
     // 招待URL（/?code=XXXX-XXXX）で来た人は参加コードを自動で埋める。
     const sharedCode = searchParams.get("code");
     if (sharedCode) setJoinCode(sharedCode.trim().toUpperCase());
-
-    const inviteCode = searchParams.get("invite");
-    if (inviteCode) {
-      const invite = initialInvites.find(
-        (candidate) => candidate.code === inviteCode.toUpperCase()
-      );
-      if (invite) setTeamName(invite.team_name);
-    }
 
     const authError = searchParams.get("auth_error");
     if (authError) {
@@ -241,8 +232,7 @@ export function OnboardingClient({
     };
   }, [viewer]);
 
-  async function createInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function issueTeamInvite(teamId: string) {
     setIsBusy(true);
     setMessage("");
 
@@ -250,7 +240,7 @@ export function OnboardingClient({
       const response = await fetch("/api/admin/invites", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ teamName: newTeamName, githubRepo })
+        body: JSON.stringify({ teamId })
       });
       const payload = (await response.json()) as {
         invite: TeamInviteView;
@@ -260,10 +250,7 @@ export function OnboardingClient({
       if (!response.ok) throw new Error(payload.error ?? "招待コードを作成できませんでした。");
 
       setInvites((current) => [payload.invite, ...current]);
-      setTeamName(payload.invite.team_name);
-      setNewTeamName("");
-      setGithubRepo("");
-      setMessage(`招待コード ${payload.invite.code} を作成しました。`);
+      setMessage(`「${payload.invite.team_name}」の部屋番号 ${payload.invite.code} を発行しました。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "作成に失敗しました。");
     } finally {
@@ -308,14 +295,25 @@ export function OnboardingClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ teamName: newTeamName })
       });
-      const payload = (await response.json()) as { team?: Team; error?: string };
+      const payload = (await response.json()) as {
+        team?: Team;
+        invite?: TeamInviteView;
+        error?: string;
+      };
 
       if (!response.ok || !payload.team) {
         throw new Error(payload.error ?? "チームを登録できませんでした。");
       }
 
       setTeams((current) => [...current, payload.team as Team]);
-      setMessage(`チーム「${payload.team.name}」を登録しました。`);
+      if (payload.invite) {
+        setInvites((current) => [payload.invite as TeamInviteView, ...current]);
+        setMessage(
+          `チーム「${payload.team.name}」を登録しました。部屋番号は ${payload.invite.code} です。`
+        );
+      } else {
+        setMessage(`チーム「${payload.team.name}」を登録しました。`);
+      }
       setNewTeamName("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "登録に失敗しました。");
@@ -340,8 +338,6 @@ export function OnboardingClient({
     event.preventDefault();
     if (!editingTeamId) return;
 
-    const previousTeamName = teams.find((team) => team.id === editingTeamId)?.name;
-
     setIsBusy(true);
     setMessage("");
 
@@ -364,7 +360,13 @@ export function OnboardingClient({
       setTeams((current) =>
         current.map((team) => (team.id === updatedTeam.id ? updatedTeam : team))
       );
-      if (teamName === previousTeamName) setTeamName(updatedTeam.name);
+      setInvites((current) =>
+        current.map((invite) =>
+          invite.team_id === updatedTeam.id
+            ? { ...invite, team_name: updatedTeam.name, github_repo: updatedTeam.github_repo }
+            : invite
+        )
+      );
       setMessage(`チーム「${updatedTeam.name}」を更新しました。`);
       cancelEditingTeam();
     } catch (error) {
@@ -384,7 +386,6 @@ export function OnboardingClient({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          teamName,
           joinCode,
           githubRepo: githubRepo || undefined,
           displayName: manualEntry ? displayName : undefined
@@ -572,39 +573,17 @@ export function OnboardingClient({
                 </form>
               ) : (
               <form onSubmit={joinTeam} className="space-y-4">
-                <Field label="参加コード">
+                <Field label="チーム招待コード（部屋番号）">
                   <input
                     value={joinCode}
                     onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
                     className={inputClass}
                     placeholder="ABCD-2345"
-                    required={Boolean(hackEvent)}
+                    required
                   />
                   <p className="mt-1.5 text-xs leading-5 text-muted">
-                    運営がDiscordなどで配ったコードを入力してください。
+                    運営から渡された、自分のチーム専用のコードを入力してください。
                   </p>
-                </Field>
-
-                <Field label="チーム名">
-                  {teams.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-lineStrong bg-sand/60 px-3 py-2.5 text-xs leading-5 text-muted shadow-inset">
-                      まだチームが登録されていません。運営がチームを登録するのを待ってください。
-                    </p>
-                  ) : (
-                    <select
-                      value={teamName}
-                      onChange={(event) => setTeamName(event.target.value)}
-                      className={inputClass}
-                      required
-                    >
-                      <option value="">選んでください</option>
-                      {teams.map((team) => (
-                        <option key={team.id} value={team.name}>
-                          {team.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
                 </Field>
 
                 <Field label="チームのGitHubリポジトリ（あとからでも可）">
@@ -670,7 +649,7 @@ export function OnboardingClient({
 
                 <button
                   type="submit"
-                  disabled={isBusy || teams.length === 0}
+                  disabled={isBusy}
                   className={primaryButtonClass}
                 >
                   <DoorOpen className="size-4" />
@@ -684,8 +663,8 @@ export function OnboardingClient({
               <ol className="mb-5 space-y-2.5 text-sm text-ink2">
                 {[
                   "GitHubでログインする",
-                  "運営から配られた参加コードを入れる",
-                  "チームと自分のリポジトリを選ぶ"
+                  "運営から配られたチームの部屋番号を入れる",
+                  "自分のリポジトリを選ぶ"
                 ].map((step, index) => (
                   <li key={step} className="flex items-start gap-2.5">
                     <span className="grid size-5 shrink-0 place-items-center rounded-full bg-paper2 text-xs font-medium text-muted shadow-inset">
@@ -775,20 +754,17 @@ export function OnboardingClient({
                   GitHubログインは未設定です。いまは名前を入れて参加できます。
                 </span>
               </div>
-              <Field label="チーム名">
+              <Field label="チーム招待コード（部屋番号）">
                 <input
-                  list="registered-team-names"
-                  value={teamName}
-                  onChange={(event) => setTeamName(event.target.value)}
+                  value={joinCode}
+                  onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
                   className={inputClass}
-                  placeholder="例）Team Aurora"
+                  placeholder="ABCD-2345"
                   required
                 />
-                <datalist id="registered-team-names">
-                  {initialTeams.map((team) => (
-                    <option key={team.id} value={team.name} />
-                  ))}
-                </datalist>
+                <p className="mt-1.5 text-xs leading-5 text-muted">
+                  運営から渡された、自分のチーム専用のコードを入力してください。
+                </p>
               </Field>
               <Field label="表示名">
                 <input
@@ -831,7 +807,7 @@ export function OnboardingClient({
           )}
         </div>
 
-        {canJoin && (
+        {canManage && (
           <Collapsible title="運営の方：イベントとチームを登録する">
             <form onSubmit={saveEventName} className="space-y-4">
               <Field label="イベント名">
@@ -851,13 +827,12 @@ export function OnboardingClient({
 
             {hackEvent && (
               <div className="mt-4 rounded-xl border border-line/70 bg-sand/60 p-4 shadow-inset">
-                <p className="text-xs font-medium text-ink2">参加コード</p>
+                <p className="text-xs font-medium text-ink2">全体コード（メンター・運営用）</p>
                 <p className="mt-1 font-mono text-2xl font-bold tracking-widest text-pulse">
                   {hackEvent.join_code}
                 </p>
                 <p className="mt-1.5 text-xs leading-5 text-muted">
-                  Discordなど参加者が集まる場所に共有してください。
-                  招待URLを貼れば、参加コードが自動で入力された状態で開きます。
+                  メンターや運営向けの全体コードです。参加者には下のチームごとの部屋番号を共有してください。
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <button
@@ -883,7 +858,7 @@ export function OnboardingClient({
                     className="flex h-10 items-center justify-center gap-2 rounded-xl bg-ink text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed"
                   >
                     <Link2 className="size-4" />
-                    招待URLをコピー
+                    全体コードURLをコピー
                   </button>
                 </div>
               </div>
@@ -910,7 +885,10 @@ export function OnboardingClient({
 
             {teams.length > 0 && (
               <ul className="mt-4 space-y-2 border-t border-line pt-4">
-                {teams.map((team) => (
+                {teams.map((team) => {
+                  const invite = invites.find((candidate) => candidate.team_id === team.id);
+
+                  return (
                   <li key={team.id} className="rounded-xl border border-line/70 bg-paper p-3">
                     {editingTeamId === team.id ? (
                       <form onSubmit={updateRegisteredTeam} className="space-y-2.5">
@@ -957,6 +935,36 @@ export function OnboardingClient({
                           <p className="mt-1 truncate font-mono text-[11px] text-muted">
                             {team.github_repo ?? "リポジトリ未設定"}
                           </p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-[11px] text-muted">部屋番号</span>
+                            {invite ? (
+                              <>
+                                <code className="font-mono text-xs font-bold tracking-wide text-pulse">
+                                  {invite.code}
+                                </code>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void navigator.clipboard?.writeText(invite.code);
+                                    setMessage(`「${team.name}」の部屋番号をコピーしました。`);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] text-muted underline underline-offset-2 hover:text-ink"
+                                >
+                                  <Clipboard className="size-3" />
+                                  コピー
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void issueTeamInvite(team.id)}
+                                disabled={isBusy}
+                                className="text-[11px] font-medium text-pulse underline underline-offset-2 disabled:opacity-40"
+                              >
+                                発行する
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <button
                           type="button"
@@ -970,7 +978,8 @@ export function OnboardingClient({
                       </div>
                     )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </Collapsible>

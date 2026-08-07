@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isDemoModeEnabled } from "@/lib/env";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { createChatMessage } from "@/lib/store";
+import { createChatMessage, isTeamMember } from "@/lib/store";
 import type { ChatChannel, ChatMessage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +50,22 @@ export async function POST(request: Request) {
       { error: "お知らせを投稿できるのは運営のみです。" },
       { status: 403 }
     );
+  }
+
+  if (identity?.role === "participant" && body.teamId) {
+    try {
+      if (!(await isTeamMember({ githubUsername: identity.login, teamId: body.teamId }))) {
+        return NextResponse.json(
+          { error: "自分が所属しているチームの相談だけ送信できます。" },
+          { status: 403 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "チーム所属を確認できませんでした。" },
+        { status: 403 }
+      );
+    }
   }
 
   try {

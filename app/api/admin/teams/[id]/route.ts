@@ -12,7 +12,7 @@ function requireAdmin() {
   if (!identity) {
     return NextResponse.json({ error: "GitHubでログインしてください。" }, { status: 401 });
   }
-  if (process.env.ADMIN_GITHUB_LOGINS && identity.role !== "admin") {
+  if (identity.role !== "admin") {
     return NextResponse.json({ error: "この操作は運営のみです。" }, { status: 403 });
   }
   return null;

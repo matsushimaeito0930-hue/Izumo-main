@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { createTeamByName, getEvent, saveEvent } from "@/lib/store";
+import {
+  createTeamByName,
+  createTeamInviteForTeam,
+  getEvent,
+  saveEvent
+} from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +22,7 @@ function requireAdmin() {
     );
   }
 
-  if (process.env.ADMIN_GITHUB_LOGINS && identity.role !== "admin") {
+  if (identity.role !== "admin") {
     return NextResponse.json(
       { error: "この操作は運営のみです。" },
       { status: 403 }
@@ -36,7 +41,7 @@ export async function GET() {
   return NextResponse.json({ event });
 }
 
-/** イベント名を登録・変更する。参加コードは初回に発行され、以降は変わらない。 */
+/** イベント名を登録・変更する。イベント名を変えると全体コードも更新する。 */
 export async function POST(request: Request) {
   const denied = requireAdmin();
   if (denied) return denied;
@@ -50,7 +55,11 @@ export async function POST(request: Request) {
     // チーム名だけを追加する用途にも同じ入口を使う。
     if (body.teamName) {
       const team = await createTeamByName({ name: body.teamName });
-      return NextResponse.json({ team });
+      const invite = await createTeamInviteForTeam({
+        teamId: team.id,
+        invitedBy: getCurrentIdentity()?.displayName ?? "HackRadar 運営"
+      });
+      return NextResponse.json({ team, invite });
     }
 
     if (!body.name) {

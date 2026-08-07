@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { ensureRepoWebhook, type WebhookSetupResult } from "@/lib/github-webhook-setup";
 import { getCurrentIdentity } from "@/lib/session";
-import { joinTeamByName, setTeamRepo, verifyJoinCode } from "@/lib/store";
+import { joinTeamWithInvite, setTeamRepo } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -18,33 +18,23 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as {
     joinCode?: string;
-    teamName?: string;
     displayName?: string;
     githubRepo?: string;
   };
 
-  const teamName = body.teamName?.trim();
   const displayName = identity?.displayName ?? body.displayName?.trim();
   const githubUsername = identity?.login;
 
-  if (!teamName || !displayName) {
+  if (!body.joinCode?.trim() || !displayName) {
     return NextResponse.json(
-      { error: "チーム名と表示名を入力してください。" },
+      { error: "チーム招待コードと表示名を入力してください。" },
       { status: 400 }
     );
   }
 
-  // イベントが登録されているときだけ、参加コードを照合する。
-  if (!(await verifyJoinCode(body.joinCode))) {
-    return NextResponse.json(
-      { error: "参加コードが違います。運営から配られたコードを確認してください。" },
-      { status: 403 }
-    );
-  }
-
   try {
-    const session = await joinTeamByName({
-      teamName,
+    const session = await joinTeamWithInvite({
+      code: body.joinCode,
       displayName,
       githubUsername,
       role: identity?.role

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Send } from "lucide-react";
 import { Panel } from "@/components/panel";
 import type { Team } from "@/lib/types";
@@ -12,9 +12,11 @@ const labelClass = "mb-1.5 block text-xs font-medium text-ink2";
 
 export function HelpComposer({
   teams,
+  lockedTeamId,
   onSubmit
 }: {
   teams: Team[];
+  lockedTeamId?: string | null;
   onSubmit: (input: {
     teamId: string;
     title: string;
@@ -22,11 +24,19 @@ export function HelpComposer({
     category: string;
   }) => Promise<void>;
 }) {
-  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
+  const [teamId, setTeamId] = useState(lockedTeamId ?? teams[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("フロントエンド");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (lockedTeamId) {
+      setTeamId(lockedTeamId);
+    } else if (!teamId && teams[0]) {
+      setTeamId(teams[0].id);
+    }
+  }, [lockedTeamId, teamId, teams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,19 +59,25 @@ export function HelpComposer({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className={labelClass}>自分のチーム</span>
-            <select
-              value={teamId}
-              onChange={(event) => setTeamId(event.target.value)}
-              disabled={teams.length === 0}
-              className={`h-10 ${fieldClass}`}
-            >
-              {teams.length === 0 && <option value="">チーム未登録</option>}
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
+            {lockedTeamId ? (
+              <div className={`flex h-10 items-center ${fieldClass} text-ink2`}>
+                {teams.find((team) => team.id === lockedTeamId)?.name ?? "自分のチーム"}
+              </div>
+            ) : (
+              <select
+                value={teamId}
+                onChange={(event) => setTeamId(event.target.value)}
+                disabled={teams.length === 0}
+                className={`h-10 ${fieldClass}`}
+              >
+                {teams.length === 0 && <option value="">チーム未登録</option>}
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
           <label className="block">
             <span className={labelClass}>カテゴリ</span>

@@ -91,7 +91,11 @@ export function DashboardClient({
       <div className="space-y-5">
         {!isAdmin && (
           <>
-            <HelpComposer teams={state.teams} onSubmit={createHelp} />
+            <HelpComposer
+              teams={isMentor ? state.teams : myTeam ? [myTeam] : []}
+              lockedTeamId={isMentor ? null : myTeamId}
+              onSubmit={createHelp}
+            />
             <HelpBoard
               posts={state.helpPosts}
               viewerGithub={activeViewer?.login ?? null}
@@ -128,7 +132,7 @@ export function DashboardClient({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <RealtimeStatusBadge status={realtimeStatus} isRefreshing={isRefreshing} />
-          {demoEnabled && (
+          {demoEnabled && (isAdmin || !viewer && !sessionViewer) && (
             <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
           )}
         </div>

@@ -1209,14 +1209,38 @@ export async function createTeamInvite(input: {
   }
 
   if (isSupabaseConfigured()) {
+    const team = await findOrCreateSupabaseTeam(githubRepo, teamName);
+    if (team) {
+      return createTeamInviteForTeam({ teamId: team.id, invitedBy });
+    }
+  }
+
+  const team = findOrCreateMemoryTeam(githubRepo, teamName);
+  return createTeamInviteForTeam({ teamId: team.id, invitedBy });
+}
+
+/** 既に登録されているチームに、部屋番号として使う招待コードを発行する。 */
+export async function createTeamInviteForTeam(input: {
+  teamId: string;
+  invitedBy: string;
+}): Promise<TeamInviteView> {
+  const invitedBy = input.invitedBy.trim() || "HackRadar Admin";
+
+  if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
-      const team = normalizeTeam(
-        (await findOrCreateSupabaseTeam(githubRepo, teamName)) as Team
-      );
+      const { data: team, error: teamError } = await supabase
+        .from("teams")
+        .select("*")
+        .eq("id", input.teamId)
+        .single();
+
+      if (teamError) throw teamError;
+
+      const normalizedTeam = normalizeTeam(team as Team);
       const invite: Omit<TeamInvite, "id" | "created_at"> = {
-        code: makeInviteCode(teamName),
-        team_id: team.id,
+        code: makeInviteCode(normalizedTeam.name),
+        team_id: normalizedTeam.id,
         invited_by: invitedBy
       };
       const { data, error } = await supabase
@@ -1229,14 +1253,16 @@ export async function createTeamInvite(input: {
 
       return {
         ...(data as TeamInvite),
-        team_name: team.name,
-        github_repo: team.github_repo
+        team_name: normalizedTeam.name,
+        github_repo: normalizedTeam.github_repo
       };
     }
   }
 
   const store = getMemoryStore();
-  const team = findOrCreateMemoryTeam(githubRepo, teamName);
+  const team = store.teams.find((candidate) => candidate.id === input.teamId);
+  if (!team) throw new Error("チームが見つかりません。");
+
   const invite: TeamInvite = {
     id: randomUUID(),
     code: makeInviteCode(team.name),
@@ -1252,6 +1278,50 @@ export async function createTeamInvite(input: {
     team_name: team.name,
     github_repo: team.github_repo
   };
+}
+
+/** GitHubユーザーが指定チームのメンバーかをサーバー側で確認する。 */
+export async function isTeamMember(input: {
+  githubUsername?: string;
+  teamId: string;
+}): Promise<boolean> {
+  const githubUsername = input.githubUsername?.trim();
+  if (!githubUsername) return false;
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("github_username", githubUsername)
+        .maybeSingle();
+
+      if (userError) throw userError;
+      if (!user) return false;
+
+      const { data: membership, error: memberError } = await supabase
+        .from("team_members")
+        .select("id")
+        .eq("team_id", input.teamId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (memberError) throw memberError;
+      return Boolean(membership);
+    }
+  }
+
+  const store = getMemoryStore();
+  const user = store.users.find(
+    (candidate) => candidate.github_username === githubUsername
+  );
+  return Boolean(
+    user &&
+      store.teamMembers.some(
+        (member) => member.team_id === input.teamId && member.user_id === user.id
+      )
+  );
 }
 
 export async function joinTeamWithInvite(input: {
@@ -1289,13 +1359,38 @@ export async function joinTeamWithInvite(input: {
 
       if (teamError) throw teamError;
 
+      const role = input.role ?? "participant";
+      const { data: existingUser, error: existingUserError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("github_username", githubUsername)
+        .maybeSingle();
+
+      if (existingUserError) throw existingUserError;
+
+      if (existingUser && role !== "admin") {
+        const { data: existingMemberships, error: membershipError } = await supabase
+          .from("team_members")
+          .select("team_id")
+          .eq("user_id", existingUser.id);
+
+        if (membershipError) throw membershipError;
+        const belongsToAnotherTeam = (existingMemberships ?? []).some(
+          (membership) => membership.team_id !== team.id
+        );
+
+        if (belongsToAnotherTeam) {
+          throw new Error("このGitHubアカウントはすでに別のチームに所属しています。");
+        }
+      }
+
       const { data: user, error: userError } = await supabase
         .from("users")
         .upsert(
           {
             github_username: githubUsername,
             display_name: displayName,
-            role: input.role ?? "participant"
+            role
           },
           { onConflict: "github_username" }
         )
@@ -1304,7 +1399,7 @@ export async function joinTeamWithInvite(input: {
 
       if (userError) throw userError;
 
-      await supabase.from("team_members").upsert(
+      const { error: memberError } = await supabase.from("team_members").upsert(
         {
           team_id: invite.team_id,
           user_id: user.id
@@ -1312,8 +1407,10 @@ export async function joinTeamWithInvite(input: {
         { onConflict: "team_id,user_id" }
       );
 
+      if (memberError) throw memberError;
+
       return {
-        role: input.role ?? "participant",
+        role,
         displayName,
         githubUsername,
         teamId: team.id,
@@ -1334,16 +1431,29 @@ export async function joinTeamWithInvite(input: {
     throw new Error("Invited team was not found.");
   }
 
+  const role = input.role ?? "participant";
   let user = store.users.find(
     (candidate) => candidate.github_username === githubUsername
   );
+
+  if (user && role !== "admin") {
+    const userId = user.id;
+    const belongsToAnotherTeam = store.teamMembers.some(
+      (member) => member.user_id === userId && member.team_id !== team.id
+    );
+
+    if (belongsToAnotherTeam) {
+      throw new Error("このGitHubアカウントはすでに別のチームに所属しています。");
+    }
+  }
+
   if (!user) {
     user = {
       id: randomUUID(),
       github_username: githubUsername,
       display_name: displayName,
       avatar_url: null,
-      role: input.role ?? "participant",
+      role,
       created_at: new Date().toISOString()
     };
     store.users.push(user);
@@ -1362,7 +1472,7 @@ export async function joinTeamWithInvite(input: {
   }
 
   return {
-    role: input.role ?? "participant",
+    role,
     displayName,
     githubUsername,
     teamId: team.id,

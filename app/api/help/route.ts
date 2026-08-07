@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isDemoModeEnabled } from "@/lib/env";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { createHelpPost } from "@/lib/store";
+import { createHelpPost, isTeamMember } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +35,22 @@ export async function POST(request: Request) {
       { error: "チーム・タイトル・詳細・カテゴリを入力してください。" },
       { status: 400 }
     );
+  }
+
+  if (identity?.role === "participant") {
+    try {
+      if (!(await isTeamMember({ githubUsername: identity.login, teamId: body.teamId }))) {
+        return NextResponse.json(
+          { error: "自分が所属しているチームにだけ質問を投稿できます。" },
+          { status: 403 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "チーム所属を確認できませんでした。" },
+        { status: 403 }
+      );
+    }
   }
 
   const post = await createHelpPost({

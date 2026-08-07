@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { createTeamInvite, joinTeamByName } from "@/lib/store";
+import { createTeamInvite, joinTeamWithInvite } from "@/lib/store";
 
-describe("team name onboarding", () => {
-  it("joins a registered team with a GitHub identity", async () => {
-    await createTeamInvite({
+describe("team invite onboarding", () => {
+  it("joins the team resolved by its room code", async () => {
+    const invite = await createTeamInvite({
       teamName: "Aurora Lab",
       githubRepo: "demo/aurora-lab",
       invitedBy: "HackRadar Admin"
     });
 
-    const session = await joinTeamByName({
-      teamName: "aurora lab",
+    const session = await joinTeamWithInvite({
+      code: invite.code,
       displayName: "Join Test",
       githubUsername: "join-test"
     });
@@ -20,13 +20,30 @@ describe("team name onboarding", () => {
     expect(session.role).toBe("participant");
   });
 
-  it("rejects a team name that is not registered", async () => {
+  it("rejects a participant from joining a second team", async () => {
+    const firstInvite = await createTeamInvite({
+      teamName: "First Invite Team",
+      githubRepo: "demo/first-invite-team",
+      invitedBy: "HackRadar Admin"
+    });
+    const secondInvite = await createTeamInvite({
+      teamName: "Second Invite Team",
+      githubRepo: "demo/second-invite-team",
+      invitedBy: "HackRadar Admin"
+    });
+
+    await joinTeamWithInvite({
+      code: firstInvite.code,
+      displayName: "Single Team User",
+      githubUsername: "single-team-user"
+    });
+
     await expect(
-      joinTeamByName({
-        teamName: "Unknown Team",
-        displayName: "Join Test",
-        githubUsername: "join-test-unknown"
+      joinTeamWithInvite({
+        code: secondInvite.code,
+        displayName: "Single Team User",
+        githubUsername: "single-team-user"
       })
-    ).rejects.toThrow("Team name was not found.");
+    ).rejects.toThrow("すでに別のチームに所属");
   });
 });

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { isDemoModeEnabled } from "@/lib/env";
+import { isGitHubAuthConfigured } from "@/lib/github-auth";
+import { getCurrentIdentity } from "@/lib/session";
 import { recordActivity } from "@/lib/store";
 import type { ActivityType } from "@/lib/types";
 
@@ -32,6 +34,13 @@ export async function POST(request: Request) {
   if (!isDemoModeEnabled()) {
     return NextResponse.json(
       { error: "Demo Mode is disabled." },
+      { status: 403 }
+    );
+  }
+
+  if (isGitHubAuthConfigured() && getCurrentIdentity()?.role !== "admin") {
+    return NextResponse.json(
+      { error: "デモイベントを実行できるのは運営だけです。" },
       { status: 403 }
     );
   }

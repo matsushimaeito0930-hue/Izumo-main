@@ -5,12 +5,13 @@ import { getEvent, getHackVerseState, getTeamInvites } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
+  const { isConfigured, identity } = getAuthStatus();
   const [invites, state, hackEvent] = await Promise.all([
-    getTeamInvites(),
+    // チームの部屋番号は運営だけが一覧で確認できるようにする。
+    identity?.role === "admin" ? getTeamInvites() : Promise.resolve([]),
     getHackVerseState(),
     getEvent()
   ]);
-  const { isConfigured, identity } = getAuthStatus();
 
   return (
     <OnboardingClient
