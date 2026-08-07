@@ -5,12 +5,11 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HackRadarLogo } from "@/components/hackradar-logo";
 import { RolePicker, type OnboardingRole } from "@/components/role-picker";
+import { ShareLinkButton } from "@/components/share-link-button";
 import { WebhookNotice, type WebhookResult } from "@/components/webhook-notice";
 import {
   ChevronDown,
   ChevronLeft,
-  Clipboard,
-  Link2,
   LoaderCircle,
   DoorOpen,
   Github,
@@ -776,32 +775,14 @@ export function OnboardingClient({
                   各チームの「招待URL」を使えば両方が自動で入るので、そちらが確実です。
                   メンター登録にはこのコードだけを使います。
                 </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(hackEvent.join_code);
-                      setMessage("参加コードをコピーしました。");
-                    }}
-                    className="flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-surface text-sm font-medium text-ink2 shadow-soft transition-[box-shadow,color,transform] hover:text-ink active:translate-y-px active:shadow-pressed"
-                  >
-                    <Clipboard className="size-4" />
-                    コードをコピー
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const inviteUrl = `${window.location.origin}/?code=${encodeURIComponent(
-                        hackEvent.join_code
-                      )}`;
-                      void navigator.clipboard?.writeText(inviteUrl);
-                      setMessage("招待URLをコピーしました。Discordにそのまま貼れます。");
-                    }}
-                    className="flex h-10 items-center justify-center gap-2 rounded-xl bg-ink text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed"
-                  >
-                    <Link2 className="size-4" />
-                    全体コードURLをコピー
-                  </button>
+                <div className="mt-3">
+                  <ShareLinkButton
+                    url={`/?code=${encodeURIComponent(hackEvent.join_code)}`}
+                    label="メンター用の招待URLを送る"
+                    title="HackRadar にメンターとして参加"
+                    text="このリンクからメンター登録できます。"
+                    onDone={setMessage}
+                  />
                 </div>
               </div>
             )}
@@ -884,37 +865,17 @@ export function OnboardingClient({
                                 <code className="font-mono text-xs font-bold tracking-wide text-pulse">
                                   {invite.code}
                                 </code>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    void navigator.clipboard?.writeText(invite.code);
-                                    setMessage(`「${team.name}」の部屋番号をコピーしました。`);
-                                  }}
-                                  className="inline-flex items-center gap-1 text-[11px] text-muted underline underline-offset-2 hover:text-ink"
-                                >
-                                  <Clipboard className="size-3" />
-                                  コピー
-                                </button>
-
-                                {/* 2つのコードを別々に伝えるのは間違いのもとなので、
-                                    両方入ったURLをそのまま配れるようにする。 */}
                                 {hackEvent && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const url = `${window.location.origin}/?code=${encodeURIComponent(
-                                        hackEvent.join_code
-                                      )}&room=${encodeURIComponent(invite.code)}`;
-                                      void navigator.clipboard?.writeText(url);
-                                      setMessage(
-                                        `「${team.name}」の招待URLをコピーしました。このチームにだけ送ってください。`
-                                      );
-                                    }}
-                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-pulse underline underline-offset-2"
-                                  >
-                                    <Link2 className="size-3" />
-                                    招待URL
-                                  </button>
+                                  <ShareLinkButton
+                                    variant="quiet"
+                                    label="招待URLを送る"
+                                    title={`HackRadar「${team.name}」への招待`}
+                                    text="このリンクを開くとチームに参加できます。"
+                                    url={`/?code=${encodeURIComponent(
+                                      hackEvent.join_code
+                                    )}&room=${encodeURIComponent(invite.code)}`}
+                                    onDone={setMessage}
+                                  />
                                 )}
                               </>
                             ) : (
