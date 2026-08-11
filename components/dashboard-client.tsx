@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "@/components/activity-feed";
 import { markAnnouncementsSeen } from "@/components/announcement-badge";
+import { ContributorPanel } from "@/components/contributor-panel";
 import { AdminRepoStatus } from "@/components/admin-repo-status";
 import { DemoControls } from "@/components/demo-controls";
 import { DevelopmentOverview } from "@/components/development-overview";
@@ -200,6 +201,19 @@ export function DashboardClient({
         <ActivityFeed activities={state.activities} highlightId={lastActivityId} />
         <RankingPanel teams={state.teams} myTeamId={myTeamId} />
       </div>
+
+      {/* 合計だけだと、一人が全部やったチームと分担したチームが同じに見える。 */}
+      <ContributorPanel
+        contributors={state.contributors}
+        teams={state.teams}
+        teamId={isStaff || isJudge ? null : myTeamId}
+        title={isStaff || isJudge ? "メンバー別の動き（全チーム）" : "チーム内の動き"}
+        description={
+          isStaff || isJudge
+            ? "GitHubの操作をアカウントごとに集計しています。誰が動いているかの確認に使えます。"
+            : "チームの中で誰がどれだけ動いたかです。GitHubの記録がもとになっています。"
+        }
+      />
     </div>
   );
 }

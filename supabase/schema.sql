@@ -71,9 +71,22 @@ create table if not exists public.activities (
   ),
   message text not null,
   score_delta integer not null default 0,
+  actor_login text,
+  actor_avatar_url text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+
+-- 誰がやったかの記録。あとから足したので、既存テーブルにも列を用意する。
+alter table public.activities
+  add column if not exists actor_login text;
+
+alter table public.activities
+  add column if not exists actor_avatar_url text;
+
+-- 配点はイベントごとに変えられるようにする。null なら既定値を使う。
+alter table public.events
+  add column if not exists score_config jsonb;
 
 create table if not exists public.help_posts (
   id uuid primary key default gen_random_uuid(),
@@ -109,6 +122,7 @@ create table if not exists public.chat_messages (
 
 create index if not exists activities_created_at_idx on public.activities(created_at desc);
 create index if not exists activities_team_id_idx on public.activities(team_id);
+create index if not exists activities_actor_idx on public.activities(team_id, actor_login);
 create index if not exists help_posts_status_idx on public.help_posts(status);
 create index if not exists help_replies_post_idx on public.help_replies(help_post_id, created_at);
 create index if not exists teams_score_idx on public.teams(score desc);

@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { ACTIVITY_LABELS, SCORE_BY_ACTIVITY } from "@/lib/constants";
+import {
+  ACTIVITY_LABELS,
+  DEFAULT_SCORE_BY_ACTIVITY,
+  normalizeScoreConfig
+} from "@/lib/constants";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getHouseLevel } from "@/lib/house";
 import {
@@ -20,7 +24,9 @@ import type {
   AppSession,
   ChatChannel,
   ChatMessage,
+  ContributorView,
   HackVerseState,
+  ScoreConfig,
   HelpPost,
   HelpPostView,
   HackEvent,
@@ -85,6 +91,62 @@ function getMemoryStore(): MemoryStore {
   return globalThis.hackVerseMemoryStore;
 }
 
+/**
+ * チーム内の誰がどれだけ動いたかを集計する。
+ *
+ * 実行者はGitHubのアカウント名で入ってくるので、チームのメンバー一覧と
+ * 突き合わせて表示名に直す。突き合わない場合（メンバー登録していない人の
+ * pushなど）はアカウント名をそのまま出す。
+ */
+function buildContributors(
+  activities: Activity[],
+  members: TeamMemberView[]
+): ContributorView[] {
+  const memberByLogin = new Map(
+    members.map((member) => [member.github_username.toLowerCase(), member])
+  );
+  const byKey = new Map<string, ContributorView>();
+
+  for (const activity of activities) {
+    const login = activity.actor_login?.trim();
+    if (!login) continue;
+
+    const key = `${activity.team_id}::${login.toLowerCase()}`;
+    const member = memberByLogin.get(login.toLowerCase());
+    const commits =
+      activity.type === "push" && typeof activity.metadata?.commitCount === "number"
+        ? activity.metadata.commitCount
+        : 0;
+
+    const current = byKey.get(key);
+    if (current) {
+      current.score += activity.score_delta;
+      current.activity_count += 1;
+      current.commit_count += commits;
+      if (Date.parse(activity.created_at) > Date.parse(current.last_active_at)) {
+        current.last_active_at = activity.created_at;
+      }
+      continue;
+    }
+
+    byKey.set(key, {
+      team_id: activity.team_id,
+      github_username: login,
+      display_name: member?.display_name ?? login,
+      avatar_url: member?.avatar_url ?? activity.actor_avatar_url ?? null,
+      score: activity.score_delta,
+      activity_count: 1,
+      commit_count: commits,
+      last_active_at: activity.created_at
+    });
+  }
+
+  return [...byKey.values()].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.activity_count - a.activity_count;
+  });
+}
+
 function withViews(
   users: User[],
   teams: Team[],
@@ -92,7 +154,9 @@ function withViews(
   helpPosts: HelpPost[],
   helpReplies: HelpReply[],
   messages: ChatMessage[],
-  teamMembers: TeamMember[] = []
+  teamMembers: TeamMember[] = [],
+  /** 集計用。フィードは直近だけを出すので、集計には別の全件を渡す。 */
+  contributorActivities: Activity[] = activities
 ): HackVerseState {
   const teamsById = new Map(teams.map((team) => [team.id, team]));
   const usersById = new Map(users.map((user) => [user.id, user]));
@@ -145,6 +209,7 @@ function withViews(
     activities: activityViews,
     helpPosts: helpPostViews,
     members: memberViews,
+    contributors: buildContributors(contributorActivities, memberViews),
     messages: messages
       .slice()
       .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
@@ -165,7 +230,8 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
     helpPostsResult,
     helpRepliesResult,
     messagesResult,
-    teamMembersResult
+    teamMembersResult,
+    contributorResult
   ] =
     await Promise.all([
       supabase.from("users").select("*"),
@@ -174,7 +240,9 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
         .select("id,name,github_repo,score,commit_count,house_level,created_at"),
       supabase
         .from("activities")
-        .select("id,team_id,type,message,score_delta,metadata,created_at")
+        .select(
+          "id,team_id,type,message,score_delta,actor_login,actor_avatar_url,metadata,created_at"
+        )
         .order("created_at", { ascending: false })
         .limit(30),
       supabase.from("help_posts").select("*").order("created_at", { ascending: false }).limit(30),
@@ -184,7 +252,14 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
         .order("created_at", { ascending: true })
         .limit(200),
       supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).limit(80),
-      supabase.from("team_members").select("*")
+      supabase.from("team_members").select("*"),
+      // 貢献の集計は全期間が要るので、フィードとは別に軽い列だけを取る。
+      supabase
+        .from("activities")
+        .select("id,team_id,type,score_delta,actor_login,actor_avatar_url,metadata,created_at")
+        .not("actor_login", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(3000)
     ]);
 
   if (teamsResult.error || activitiesResult.error) {
@@ -202,7 +277,8 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
     (messagesResult.error
       ? []
       : (messagesResult.data ?? seedChatMessages)) as ChatMessage[],
-    (teamMembersResult.error ? [] : (teamMembersResult.data ?? [])) as TeamMember[]
+    (teamMembersResult.error ? [] : (teamMembersResult.data ?? [])) as TeamMember[],
+    (contributorResult.error ? [] : (contributorResult.data ?? [])) as Activity[]
   );
 }
 
@@ -225,6 +301,14 @@ export async function getHackVerseState(): Promise<HackVerseState> {
     store.messages,
     store.teamMembers
   );
+}
+
+/**
+ * 文の主語。実行者が分かればその人、分からなければチーム名にする。
+ * 「誰がやったか」を先頭に出すことで、フィードを流し見しても動きが追える。
+ */
+function activitySubject(teamName: string, actorLogin: string | null): string {
+  return actorLogin?.trim() || teamName;
 }
 
 function makeActivityMessage(
@@ -349,13 +433,19 @@ export async function recordActivity(input: {
   githubRepo?: string;
   fallbackTeamName?: string;
   githubDeliveryId?: string;
+  actorLogin?: string;
+  actorAvatarUrl?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<ActivityView | null> {
   const metadata: Record<string, unknown> = {
     ...(input.metadata ?? {}),
     ...(input.githubDeliveryId ? { githubDeliveryId: input.githubDeliveryId } : {})
   };
-  const scoreDelta = SCORE_BY_ACTIVITY[input.type];
+  const actorLogin = input.actorLogin?.trim() || null;
+  const actorAvatarUrl = input.actorAvatarUrl ?? null;
+  // 配点はイベントごとに変えられる。読めなければ既定値で動かす。
+  const scoreConfig = await getScoreConfig();
+  const scoreDelta = scoreConfig[input.type];
   const commitDelta =
     input.type === "push" && typeof metadata.commitCount === "number"
       ? metadata.commitCount
@@ -433,13 +523,19 @@ export async function recordActivity(input: {
       const nextScore = team.score + scoreDelta;
       const nextCommitCount = team.commit_count + commitDelta;
       const nextLevel = getHouseLevel(nextScore);
-      const message = makeActivityMessage(team.name, input.type, metadata);
+      const message = makeActivityMessage(
+        activitySubject(team.name, actorLogin),
+        input.type,
+        metadata
+      );
       const activity: Activity = {
         id: randomUUID(),
         team_id: team.id,
         type: input.type,
         message,
         score_delta: scoreDelta,
+        actor_login: actorLogin,
+        actor_avatar_url: actorAvatarUrl,
         metadata,
         created_at: new Date().toISOString()
       };
@@ -515,8 +611,14 @@ export async function recordActivity(input: {
     id: randomUUID(),
     team_id: team.id,
     type: input.type,
-    message: makeActivityMessage(team.name, input.type, metadata),
+    message: makeActivityMessage(
+      activitySubject(team.name, actorLogin),
+      input.type,
+      metadata
+    ),
     score_delta: scoreDelta,
+    actor_login: actorLogin,
+    actor_avatar_url: actorAvatarUrl,
     metadata,
     created_at: new Date().toISOString()
   };
@@ -910,6 +1012,154 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
     created_at: existing?.created_at ?? new Date().toISOString()
   };
   return store.event;
+}
+
+/**
+ * いま有効な配点。
+ *
+ * イベントに設定があればそれを、無ければ既定値を返す。
+ * 保存されている値が壊れていても normalizeScoreConfig が既定値で埋める。
+ */
+export async function getScoreConfig(): Promise<ScoreConfig> {
+  try {
+    const event = await getEvent();
+    if (!event?.score_config) return { ...DEFAULT_SCORE_BY_ACTIVITY };
+    return normalizeScoreConfig(event.score_config);
+  } catch {
+    // 設定が読めないだけで記録を止めたくない。
+    return { ...DEFAULT_SCORE_BY_ACTIVITY };
+  }
+}
+
+/**
+ * 記録済みの活動を、いまの配点で計算し直してチームの合計に反映する。
+ *
+ * 途中で配点を変えると、変更前と変更後の活動が混ざって順位の意味が壊れる。
+ * それを避けるため、変更時は必ず過去分もそろえる。
+ */
+export async function recalculateScores(config: ScoreConfig): Promise<{
+  updatedActivities: number;
+  updatedTeams: number;
+}> {
+  const totals = new Map<string, { score: number; commits: number }>();
+  let updatedActivities = 0;
+
+  const applyActivity = (activity: Activity) => {
+    const nextDelta = config[activity.type] ?? 0;
+    const commits =
+      activity.type === "push" && typeof activity.metadata?.commitCount === "number"
+        ? activity.metadata.commitCount
+        : 0;
+
+    const bucket = totals.get(activity.team_id) ?? { score: 0, commits: 0 };
+    bucket.score += nextDelta;
+    bucket.commits += commits;
+    totals.set(activity.team_id, bucket);
+
+    return nextDelta;
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("activities")
+        .select("id,team_id,type,score_delta,metadata")
+        .limit(10000);
+      if (error) throw error;
+
+      const activities = (data ?? []) as Activity[];
+      const changed: { id: string; score_delta: number }[] = [];
+
+      for (const activity of activities) {
+        const nextDelta = applyActivity(activity);
+        if (nextDelta !== activity.score_delta) {
+          changed.push({ id: activity.id, score_delta: nextDelta });
+        }
+      }
+
+      // 点数が変わった行だけを書き戻す。
+      for (const row of changed) {
+        const { error: updateError } = await supabase
+          .from("activities")
+          .update({ score_delta: row.score_delta })
+          .eq("id", row.id);
+        if (updateError) throw updateError;
+      }
+      updatedActivities = changed.length;
+
+      const { data: teamRows, error: teamsError } = await supabase
+        .from("teams")
+        .select("id");
+      if (teamsError) throw teamsError;
+
+      for (const team of (teamRows ?? []) as { id: string }[]) {
+        const bucket = totals.get(team.id) ?? { score: 0, commits: 0 };
+        const { error: updateError } = await supabase
+          .from("teams")
+          .update({
+            score: bucket.score,
+            commit_count: bucket.commits,
+            house_level: getHouseLevel(bucket.score)
+          })
+          .eq("id", team.id);
+        if (updateError) throw updateError;
+      }
+
+      return { updatedActivities, updatedTeams: (teamRows ?? []).length };
+    }
+  }
+
+  const store = getMemoryStore();
+  for (const activity of store.activities) {
+    const nextDelta = applyActivity(activity);
+    if (nextDelta !== activity.score_delta) {
+      activity.score_delta = nextDelta;
+      updatedActivities += 1;
+    }
+  }
+
+  for (const team of store.teams) {
+    const bucket = totals.get(team.id) ?? { score: 0, commits: 0 };
+    team.score = bucket.score;
+    team.commit_count = bucket.commits;
+    team.house_level = getHouseLevel(bucket.score);
+  }
+
+  return { updatedActivities, updatedTeams: store.teams.length };
+}
+
+/** 配点を保存し、過去の記録も同じ配点でそろえる。 */
+export async function saveScoreConfig(input: unknown): Promise<{
+  config: ScoreConfig;
+  updatedActivities: number;
+  updatedTeams: number;
+}> {
+  const config = normalizeScoreConfig(input);
+  const event = await getEvent();
+
+  if (!event) {
+    throw new Error("先にイベントを作成してください。");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { error } = await supabase
+        .from("events")
+        .update({ score_config: config })
+        .eq("id", event.id);
+      if (error) throw error;
+    }
+  }
+
+  const store = getMemoryStore();
+  if (store.event) {
+    store.event = { ...store.event, score_config: config };
+  }
+
+  const result = await recalculateScores(config);
+  return { config, ...result };
 }
 
 /** 参加コードの照合。イベント未設定ならコード無しで通す（ローカルデモ用）。 */

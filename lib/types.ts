@@ -48,6 +48,8 @@ export type HackEvent = {
   id: string;
   name: string;
   join_code: string;
+  /** 未設定なら既定の配点を使う。 */
+  score_config?: Record<string, number> | null;
   created_at: string;
 };
 
@@ -75,8 +77,23 @@ export type Activity = {
   type: ActivityType;
   message: string;
   score_delta: number;
+  /** 操作した人のGitHubアカウント名。古い記録や取得できなかった場合は null。 */
+  actor_login: string | null;
+  actor_avatar_url: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
+};
+
+/** チーム内で誰がどれだけ動いたか。メンバー別の貢献表に使う。 */
+export type ContributorView = {
+  team_id: string;
+  github_username: string;
+  display_name: string;
+  avatar_url: string | null;
+  score: number;
+  activity_count: number;
+  commit_count: number;
+  last_active_at: string;
 };
 
 export type HelpPost = {
@@ -136,9 +153,13 @@ export type HackVerseState = {
   activities: ActivityView[];
   helpPosts: HelpPostView[];
   members: TeamMemberView[];
+  contributors: ContributorView[];
   messages: ChatMessage[];
   updatedAt: string;
 };
+
+/** イベントごとの配点。運営画面から編集する。 */
+export type ScoreConfig = Record<ActivityType, number>;
 
 export type TeamInviteView = TeamInvite & {
   team_name: string;

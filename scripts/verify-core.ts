@@ -6,6 +6,10 @@
  *   （中身: node --experimental-strip-types scripts/verify-core.ts）
  */
 import { createHmac } from "node:crypto";
+import {
+  DEFAULT_SCORE_BY_ACTIVITY,
+  normalizeScoreConfig
+} from "../lib/constants.ts";
 import { parseGitHubWebhook, verifyGitHubSignature } from "../lib/github.ts";
 import {
   SESSION_MAX_AGE,
@@ -308,6 +312,56 @@ console.log("\n[5] 認可URLの組み立て");
   check("設定ありと判定", isGitHubAuthConfigured(), true);
   delete process.env.GITHUB_CLIENT_SECRET;
   check("secretが無ければ無効", isGitHubAuthConfigured(), false);
+}
+
+console.log("\n[5] 実行者の取り出し");
+{
+  const sender = { login: "hanako", avatar_url: "https://example.com/a.png" };
+
+  const push = parseGitHubWebhook("push", {
+    repository: { full_name: "team/repo", name: "repo" },
+    commits: [{ id: "a" }, { id: "b" }],
+    after: "sha-1",
+    sender
+  });
+  check("pushの実行者", push?.actorLogin, "hanako");
+  check("pushのアイコン", push?.actorAvatarUrl, "https://example.com/a.png");
+
+  const noSender = parseGitHubWebhook("push", {
+    repository: { full_name: "team/repo", name: "repo" },
+    commits: [{ id: "a" }],
+    head_commit: { id: "a", author: { username: "taro" } }
+  });
+  check("senderが無ければコミット著者で補う", noSender?.actorLogin, "taro");
+
+  const merged = parseGitHubWebhook("pull_request", {
+    action: "closed",
+    repository: { full_name: "team/repo", name: "repo" },
+    pull_request: { merged: true, number: 7, title: "ログイン画面を追加" },
+    sender: { login: "reviewer" }
+  });
+  check("マージは押した人を記録する", merged?.actorLogin, "reviewer");
+  check("PRタイトルを残す", merged?.metadata.title, "ログイン画面を追加");
+
+  const anonymous = parseGitHubWebhook("issues", {
+    action: "closed",
+    repository: { full_name: "team/repo", name: "repo" },
+    issue: { number: 3 }
+  });
+  check("実行者が取れなければ未設定", anonymous?.actorLogin, undefined);
+}
+
+console.log("\n[6] 配点の正規化");
+{
+  check("未設定は既定値", normalizeScoreConfig(undefined), DEFAULT_SCORE_BY_ACTIVITY);
+  check("指定した種別だけ上書き", normalizeScoreConfig({ push: 3 }).push, 3);
+  check("他の種別は既定のまま", normalizeScoreConfig({ push: 3 }).review, 10);
+  check("文字列の数値も受ける", normalizeScoreConfig({ push: "5" }).push, 5);
+  check("小数は四捨五入", normalizeScoreConfig({ push: 2.6 }).push, 3);
+  check("負の値は拒否して既定に戻す", normalizeScoreConfig({ push: -1 }).push, 1);
+  check("上限超えは拒否", normalizeScoreConfig({ push: 99999 }).push, 1);
+  check("数値でなければ拒否", normalizeScoreConfig({ push: "abc" }).push, 1);
+  check("知らないキーは無視", "extra" in normalizeScoreConfig({ extra: 5 }), false);
 }
 
 console.log(`\n結果: ${pass} 件成功 / ${fail} 件失敗\n`);

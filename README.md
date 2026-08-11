@@ -71,6 +71,20 @@ GitHubにプッシュすると、チームの進み具合とランキングが�
    - 運営も参加者フォームからチームの部屋番号でチームに参加できる。
    - ただしダッシュボード上は運営権限が優先され、全体状況を表示する。
    - 運営の `/help` はお知らせチャット専用。
+9. お知らせの未読通知
+   - 運営が全チーム宛に投稿したメッセージ（`chat_messages.team_id` が null）を、参加者・メンターの `/help` にも読み取り専用で表示する。
+   - ナビの「質問・お知らせ」タブに未読件数バッジを出す。既読の基準はブラウザの `localStorage`（`hackradar-announcements-seen`）に持つ。
+   - バッジ用に `/api/announcements` がidと時刻だけを返す。8秒ごとに確認する。
+10. 実行者の記録とメンバー別集計
+   - Webhookの `sender` からGitHubアカウント名とアイコンを取り出し、`activities.actor_login` / `actor_avatar_url` に保存する。
+   - `push` は `sender` が取れない場合、コミット著者名で補う。PRのマージは「押した人」を記録する。
+   - 活動フィードに実行者を表示し、チームごとに誰が何点分動いたかを `ContributorPanel` に集計する。
+   - 集計値はGitHubから届いた記録がもとで、参加者の自己申告ではない。
+11. イベントごとの配点
+   - `events.score_config`（jsonb）に配点を持つ。未設定なら `DEFAULT_SCORE_BY_ACTIVITY` を使う。
+   - 運営画面「アクションの配点を決める」から編集する。`/api/admin/scores` が処理する。
+   - 保存時に `recalculateScores` が記録済みの活動をすべて新しい配点で計算し直し、チームの合計・コミット数・段階を再設定する。途中で配点を変えたとき、変更前後の活動が混ざって順位が意味を失うのを防ぐため。
+   - 値は `normalizeScoreConfig` で0〜`MAX_SCORE_PER_ACTIVITY`の整数に丸め、範囲外や数値でないものは既定値に戻す。
 
 ### 利用フロー
 
@@ -170,7 +184,9 @@ GitHubにプッシュすると、チームの進み具合とランキングが�
 | `POST` | `/api/judges/join` | 審査員として入る（閲覧のみ） |
 | `POST` | `/api/admin/event` | イベント保存、チーム追加 |
 | `GET/POST` | `/api/admin/invites` | 運営だけが部屋番号を取得・発行 |
+| `GET/POST` | `/api/admin/scores` | 配点の取得・保存（保存時に全記録を再計算） |
 | `PATCH` | `/api/admin/teams/[id]` | チーム名・リポジトリ編集 |
+| `GET` | `/api/announcements` | お知らせのidと時刻だけ（未読バッジ用） |
 | `POST` | `/api/github/webhook` | GitHubイベント受信 |
 | `POST` | `/api/help` | 質問投稿 |
 | `POST` | `/api/help/replies` | 質問への回答 |
@@ -181,12 +197,12 @@ GitHubにプッシュすると、チームの進み具合とランキングが�
 
 Supabaseを使う場合の中心テーブルは次のとおり。
 
-- `events`: 現在のイベント1件と全体コード
+- `events`: 現在のイベント1件、全体コード、配点（`score_config`）
 - `users`: GitHubユーザー、ロール、メンターの得意分野
 - `teams`: チーム名、リポジトリ、スコア、コミット数
 - `team_members`: GitHubユーザーとチームの所属関係
 - `team_invites`: チーム専用部屋番号
-- `activities`: push / PR / Issue / reviewの活動履歴
+- `activities`: push / PR / Issue / reviewの活動履歴。`actor_login` に実行者が入る
 - `help_posts`, `help_replies`: 質問掲示板
 - `chat_messages`: チーム相談と運営お知らせ
 

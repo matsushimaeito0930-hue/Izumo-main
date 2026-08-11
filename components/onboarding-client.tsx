@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HackRadarLogo } from "@/components/hackradar-logo";
 import { RolePicker, type OnboardingRole } from "@/components/role-picker";
+import { ScoreConfigEditor } from "@/components/score-config-editor";
 import { ShareLinkButton } from "@/components/share-link-button";
 import { WebhookNotice, type WebhookResult } from "@/components/webhook-notice";
 import {
@@ -982,6 +983,12 @@ export function OnboardingClient({
                 })}
               </ul>
             )}
+          </Collapsible>
+        )}
+
+        {canManage && pickedRole === "admin" && (
+          <Collapsible title="運営の方：アクションの配点を決める">
+            <ScoreConfigEditor onMessage={setMessage} />
           </Collapsible>
         )}
 

@@ -6,38 +6,59 @@ type GitHubRepository = {
   name?: string;
 };
 
-type PushPayload = {
+/** どのイベントにも共通で入ってくる「操作した人」。 */
+type GitHubSender = {
+  login?: string;
+  avatar_url?: string;
+  type?: string;
+};
+
+type WithSender = {
+  sender?: GitHubSender;
+};
+
+type PushPayload = WithSender & {
   repository?: GitHubRepository;
   commits?: unknown[];
   after?: string;
   head_commit?: {
     id?: string;
+    author?: { username?: string; name?: string };
   };
+  pusher?: { name?: string };
 };
 
-type PullRequestPayload = {
+type PullRequestPayload = WithSender & {
   action?: string;
   repository?: GitHubRepository;
   pull_request?: {
     merged?: boolean;
     number?: number;
+    title?: string;
+    user?: GitHubSender;
+    merged_by?: GitHubSender;
   };
   number?: number;
 };
 
-type IssuesPayload = {
+type IssuesPayload = WithSender & {
   action?: string;
   repository?: GitHubRepository;
   issue?: {
     number?: number;
+    title?: string;
   };
 };
 
-type ReviewPayload = {
+type ReviewPayload = WithSender & {
   action?: string;
   repository?: GitHubRepository;
   pull_request?: {
     number?: number;
+    title?: string;
+  };
+  review?: {
+    state?: string;
   };
 };
 
@@ -45,6 +66,9 @@ export type ParsedGitHubActivity = {
   type: ActivityType;
   githubRepo: string;
   fallbackTeamName: string;
+  /** 操作した人のGitHubアカウント名。取れなければ undefined。 */
+  actorLogin?: string;
+  actorAvatarUrl?: string | null;
   metadata: Record<string, unknown>;
 };
 
@@ -91,6 +115,33 @@ function repoName(repository: GitHubRepository | undefined): {
   };
 }
 
+/**
+ * 操作した人を取り出す。
+ *
+ * どのイベントでも `sender` が「実際にその操作をしたアカウント」なので、
+ * PRの作成者ではなくsenderを見る（マージは押した人を記録したいため）。
+ * pushだけはsenderが取れないケースに備えて、コミットの著者名を予備にする。
+ */
+function actorOf(
+  payload: WithSender,
+  fallbackLogin?: string
+): { actorLogin?: string; actorAvatarUrl?: string | null } {
+  const login = payload.sender?.login?.trim() || fallbackLogin?.trim();
+  if (!login) return {};
+
+  return {
+    actorLogin: login,
+    actorAvatarUrl: payload.sender?.avatar_url ?? null
+  };
+}
+
+/** 長いタイトルは一覧を壊すので、記録の時点で切っておく。 */
+function trimTitle(value: string | undefined): string | undefined {
+  const title = value?.trim();
+  if (!title) return undefined;
+  return title.length > 80 ? `${title.slice(0, 79)}…` : title;
+}
+
 export function parseGitHubWebhook(
   eventName: string,
   payload: unknown
@@ -107,6 +158,7 @@ export function parseGitHubWebhook(
     return {
       type: "push",
       ...repo,
+      ...actorOf(push, push.head_commit?.author?.username ?? push.pusher?.name),
       metadata: {
         commitCount,
         ...(commitSha ? { commitSha } : {})
@@ -117,13 +169,16 @@ export function parseGitHubWebhook(
   if (eventName === "pull_request") {
     const pullRequest = payload as PullRequestPayload;
     const repo = repoName(pullRequest.repository);
+    const title = trimTitle(pullRequest.pull_request?.title);
 
     if (pullRequest.action === "opened") {
       return {
         type: "pull_request_opened",
         ...repo,
+        ...actorOf(pullRequest, pullRequest.pull_request?.user?.login),
         metadata: {
-          number: pullRequest.pull_request?.number ?? pullRequest.number
+          number: pullRequest.pull_request?.number ?? pullRequest.number,
+          ...(title ? { title } : {})
         }
       };
     }
@@ -132,8 +187,10 @@ export function parseGitHubWebhook(
       return {
         type: "pull_request_merged",
         ...repo,
+        ...actorOf(pullRequest, pullRequest.pull_request.merged_by?.login),
         metadata: {
-          number: pullRequest.pull_request.number ?? pullRequest.number
+          number: pullRequest.pull_request.number ?? pullRequest.number,
+          ...(title ? { title } : {})
         }
       };
     }
@@ -145,11 +202,14 @@ export function parseGitHubWebhook(
       return null;
     }
 
+    const title = trimTitle(issue.issue?.title);
     return {
       type: "issue_closed",
       ...repoName(issue.repository),
+      ...actorOf(issue),
       metadata: {
-        number: issue.issue?.number
+        number: issue.issue?.number,
+        ...(title ? { title } : {})
       }
     };
   }
@@ -160,11 +220,15 @@ export function parseGitHubWebhook(
       return null;
     }
 
+    const title = trimTitle(review.pull_request?.title);
     return {
       type: "review",
       ...repoName(review.repository),
+      ...actorOf(review),
       metadata: {
-        number: review.pull_request?.number
+        number: review.pull_request?.number,
+        ...(review.review?.state ? { reviewState: review.review.state } : {}),
+        ...(title ? { title } : {})
       }
     };
   }

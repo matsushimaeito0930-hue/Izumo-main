@@ -43,6 +43,7 @@ export async function POST(request: Request) {
   try {
     const activity = await recordActivity({
       ...parsedActivity,
+      // 誰の操作かはGitHubのsenderから来る。参加者の自己申告ではない。
       githubDeliveryId: request.headers.get("x-github-delivery") ?? undefined
     });
 

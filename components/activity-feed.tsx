@@ -1,3 +1,4 @@
+import Image from "next/image";
 import {
   CheckCircle2,
   GitCommitHorizontal,
@@ -70,6 +71,21 @@ export function ActivityFeed({
                   <span className="rounded bg-paper2 px-1.5 py-0.5 text-ink2">
                     {ACTIVITY_SHORT_LABELS[activity.type]}
                   </span>
+                  {/* 誰の操作かはGitHubから届いた値。自己申告ではない。 */}
+                  {activity.actor_login && (
+                    <span className="flex items-center gap-1">
+                      {activity.actor_avatar_url ? (
+                        <Image
+                          src={activity.actor_avatar_url}
+                          alt=""
+                          width={16}
+                          height={16}
+                          className="size-4 rounded-full"
+                        />
+                      ) : null}
+                      <span className="font-mono text-ink2">@{activity.actor_login}</span>
+                    </span>
+                  )}
                   <span>{activity.team_name}</span>
                   <span className="font-mono text-field">+{activity.score_delta} pt</span>
                   <time>
