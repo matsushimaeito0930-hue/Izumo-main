@@ -217,6 +217,21 @@ function withViews(
   };
 }
 
+const ACTIVITY_COLUMNS =
+  "id,team_id,type,message,score_delta,actor_login,actor_avatar_url,metadata,created_at";
+/** actor_login を足す前のDBでも読めるようにしておく列。 */
+const LEGACY_ACTIVITY_COLUMNS = "id,team_id,type,message,score_delta,metadata,created_at";
+
+/**
+ * schema.sql をまだ流していないDBかどうかを、エラーの内容から判定する。
+ *
+ * デプロイとDB更新の順番が前後しても、画面が黙って空になるのを避けるため。
+ */
+function isMissingActorColumn(error: { message?: string } | null): boolean {
+  const message = error?.message ?? "";
+  return message.includes("actor_login") || message.includes("actor_avatar_url");
+}
+
 export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
   const supabase = createServerSupabaseClient();
   if (!supabase) {
@@ -240,9 +255,7 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
         .select("id,name,github_repo,score,commit_count,house_level,created_at"),
       supabase
         .from("activities")
-        .select(
-          "id,team_id,type,message,score_delta,actor_login,actor_avatar_url,metadata,created_at"
-        )
+        .select(ACTIVITY_COLUMNS)
         .order("created_at", { ascending: false })
         .limit(30),
       supabase.from("help_posts").select("*").order("created_at", { ascending: false }).limit(30),
@@ -262,14 +275,25 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
         .limit(3000)
     ]);
 
-  if (teamsResult.error || activitiesResult.error) {
-    throw teamsResult.error ?? activitiesResult.error;
+  // schema.sql の適用前でも、実行者の列が無いだけで画面が真っ白にならないようにする。
+  let activities: { data: unknown[] | null; error: { message?: string } | null } =
+    activitiesResult;
+  if (activities.error && isMissingActorColumn(activities.error)) {
+    activities = await supabase
+      .from("activities")
+      .select(LEGACY_ACTIVITY_COLUMNS)
+      .order("created_at", { ascending: false })
+      .limit(30);
+  }
+
+  if (teamsResult.error || activities.error) {
+    throw teamsResult.error ?? activities.error;
   }
 
   return withViews(
     (usersResult.data ?? seedUsers) as User[],
     ((teamsResult.data ?? seedTeams) as Team[]).map(normalizeTeam),
-    (activitiesResult.data ?? seedActivities) as Activity[],
+    (activities.data ?? seedActivities) as Activity[],
     (helpPostsResult.data ?? seedHelpPosts) as HelpPost[],
     (helpRepliesResult.error
       ? []
@@ -553,11 +577,23 @@ export async function recordActivity(input: {
         throw updateError;
       }
 
-      const { data: insertedActivity, error: activityError } = await supabase
+      let { data: insertedActivity, error: activityError } = await supabase
         .from("activities")
         .insert(activity)
         .select("*")
         .single();
+
+      // 実行者の列がまだ無いDBでも、記録そのものは落とさない。
+      if (activityError && isMissingActorColumn(activityError)) {
+        const { actor_login, actor_avatar_url, ...legacy } = activity;
+        void actor_login;
+        void actor_avatar_url;
+        ({ data: insertedActivity, error: activityError } = await supabase
+          .from("activities")
+          .insert(legacy)
+          .select("*")
+          .single());
+      }
 
       if (activityError) {
         throw activityError;
@@ -1149,7 +1185,14 @@ export async function saveScoreConfig(input: unknown): Promise<{
         .from("events")
         .update({ score_config: config })
         .eq("id", event.id);
-      if (error) throw error;
+      if (error) {
+        if ((error.message ?? "").includes("score_config")) {
+          throw new Error(
+            "配点を保存する列がまだありません。Supabaseで supabase/schema.sql を実行してください。"
+          );
+        }
+        throw error;
+      }
     }
   }
 

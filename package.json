@@ -11,7 +11,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "verify:core": "node --experimental-strip-types scripts/verify-core.ts"
+    "verify:core": "node --experimental-strip-types scripts/verify-core.ts",
+    "verify:flow": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/verify-flow.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.1",
