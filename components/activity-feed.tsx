@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { ACTIVITY_SHORT_LABELS } from "@/lib/constants";
+import { formatShortDateTime } from "@/lib/datetime";
 import type { ActivityType, ActivityView } from "@/lib/types";
 
 function activityIcon(type: ActivityType) {
@@ -72,10 +73,7 @@ export function ActivityFeed({
                   <span>{activity.team_name}</span>
                   <span className="font-mono text-field">+{activity.score_delta} pt</span>
                   <time>
-                    {new Date(activity.created_at).toLocaleTimeString("ja-JP", {
-                      hour: "2-digit",
-                      minute: "2-digit"
-                    })}
+                    {formatShortDateTime(activity.created_at)}
                   </time>
                 </div>
               </div>

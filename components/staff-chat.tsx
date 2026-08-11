@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { MessageCircle, Send } from "lucide-react";
 import { Panel } from "@/components/panel";
+import { formatDateTime } from "@/lib/datetime";
 import type { ChatMessage, Team, UserRole } from "@/lib/types";
 
 /**
@@ -158,10 +159,7 @@ export function StaffChat({
                     {item.body}
                   </p>
                   <time className="mt-1 block text-xs text-muted">
-                    {new Date(item.created_at).toLocaleTimeString("ja-JP", {
-                      hour: "2-digit",
-                      minute: "2-digit"
-                    })}
+                    {formatDateTime(item.created_at)}
                   </time>
                 </div>
               </div>

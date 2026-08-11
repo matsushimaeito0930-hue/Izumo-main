@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CircleHelp, Github, LayoutDashboard, LogOut } from "lucide-react";
+import { AnnouncementBadge } from "@/components/announcement-badge";
 import { HackRadarLogo } from "@/components/hackradar-logo";
 import type { UserRole } from "@/lib/types";
 
@@ -22,9 +23,10 @@ const roleLabels: Record<UserRole, string> = {
 };
 
 // ナビは2つだけ。増やすと初参加者がどこを見ればいいか分からなくなる。
+// 2つ目には運営からのお知らせも並ぶので、ラベルにその旨を出しておく。
 const navItems = [
   { href: "/dashboard", label: "開発状況", icon: LayoutDashboard },
-  { href: "/help", label: "質問する", icon: CircleHelp }
+  { href: "/help", label: "質問・お知らせ", icon: CircleHelp }
 ];
 
 // 審査員は投稿できないので、2つ目は「お知らせ」と呼ぶ。
@@ -73,7 +75,7 @@ export function Nav({
                 key={item.href}
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex h-9 shrink-0 items-center gap-2 rounded-xl px-3.5 text-sm font-medium transition-[box-shadow,background-color,color] ${
+                className={`relative flex h-9 shrink-0 items-center gap-2 rounded-xl px-3.5 text-sm font-medium transition-[box-shadow,background-color,color] ${
                   isActive
                     ? "bg-ink text-white shadow-btn"
                     : "text-ink2 hover:bg-paper2 hover:text-ink"
@@ -81,6 +83,8 @@ export function Nav({
               >
                 <Icon className="size-4" />
                 {item.label}
+                {/* 運営のお知らせに気づかないまま進むのを防ぐ。 */}
+                {item.href === "/help" && <AnnouncementBadge />}
               </Link>
             );
           })}

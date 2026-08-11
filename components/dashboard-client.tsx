@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "@/components/activity-feed";
+import { markAnnouncementsSeen } from "@/components/announcement-badge";
 import { AdminRepoStatus } from "@/components/admin-repo-status";
 import { DemoControls } from "@/components/demo-controls";
 import { DevelopmentOverview } from "@/components/development-overview";
@@ -88,9 +89,38 @@ export function DashboardClient({
   const myLatestActivity =
     state.activities.find((activity) => activity.team_id === myTeamId) ?? null;
 
+  // 全チーム宛のお知らせ（team_idなし）のうち、いちばん新しいものの時刻。
+  const latestAnnouncementAt = useMemo(() => {
+    let newest = 0;
+    for (const message of state.messages) {
+      if (message.channel !== "staff" || message.team_id !== null) continue;
+      const at = Date.parse(message.created_at);
+      if (at > newest) newest = at;
+    }
+    return newest ? new Date(newest).toISOString() : null;
+  }, [state.messages]);
+
+  // お知らせ画面を開いている間は既読扱いにして、ナビのバッジを消す。
+  useEffect(() => {
+    if (view !== "help") return;
+    markAnnouncementsSeen(latestAnnouncementAt);
+  }, [view, latestAnnouncementAt]);
+
   if (view === "help") {
     return (
       <div className="space-y-5">
+        {/* 運営のお知らせは全員が見る。読むだけなので入力欄は出さない。 */}
+        {!isAdmin && !isJudge && (
+          <StaffChat
+            teams={state.teams}
+            messages={state.messages}
+            myTeamId={myTeamId}
+            viewer={activeViewer}
+            announcementOnly
+            readOnly
+            onSend={createChatMessage}
+          />
+        )}
         {!isAdmin && !isJudge && (
           <>
             <HelpComposer

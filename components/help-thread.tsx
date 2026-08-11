@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Check, CornerDownRight, MessageCircle, Send } from "lucide-react";
+import { formatDateTime } from "@/lib/datetime";
 import type { HelpPostView, UserRole } from "@/lib/types";
 
 const statusLabels = {
@@ -24,10 +25,7 @@ const roleLabels: Record<UserRole, string> = {
 };
 
 function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  return formatDateTime(value);
 }
 
 export function HelpThread({
