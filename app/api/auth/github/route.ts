@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  RETURN_TO_COOKIE,
   STATE_COOKIE,
   buildAuthorizeUrl,
   createOAuthState,
@@ -26,6 +27,19 @@ export async function GET(request: Request) {
   const response = NextResponse.redirect(
     buildAuthorizeUrl({ state, callbackUrl, includePrivate })
   );
+
+  // ログイン後にどこへ戻すか。開いたリダイレクトを避けるため、
+  // 自サイト内の相対パスだけを受け付ける。
+  const returnTo = requestUrl.searchParams.get("return_to") ?? "";
+  if (returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+    response.cookies.set(RETURN_TO_COOKIE, returnTo, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 600
+    });
+  }
 
   response.cookies.set(STATE_COOKIE, state, {
     httpOnly: true,

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
+  RETURN_TO_COOKIE,
   SESSION_COOKIE,
   SESSION_MAX_AGE,
   STATE_COOKIE,
@@ -46,9 +47,17 @@ export async function GET(request: Request) {
     });
     const identity = await fetchGitHubUser(accessToken, scopes);
 
-    const destination = new URL("/", origin);
+    // 認可前に見ていた場所へ戻す。無ければトップ。
+    const returnTo = cookies().get(RETURN_TO_COOKIE)?.value;
+    const safeReturnTo =
+      returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
+        ? returnTo
+        : "/";
+
+    const destination = new URL(safeReturnTo, origin);
     destination.searchParams.set("logged_in", "1");
     const response = NextResponse.redirect(destination);
+    response.cookies.delete(RETURN_TO_COOKIE);
 
     response.cookies.set(SESSION_COOKIE, serializeIdentity(identity), {
       httpOnly: true,

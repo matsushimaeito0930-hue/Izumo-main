@@ -9,6 +9,8 @@ import type { UserRole } from "@/lib/types";
 
 export const SESSION_COOKIE = "hackverse-auth";
 export const STATE_COOKIE = "hackverse-oauth-state";
+/** 認可後に戻す先を一時的に預けておくcookie。 */
+export const RETURN_TO_COOKIE = "hackverse-return-to";
 export const SESSION_MAX_AGE = 60 * 60 * 12; // 12時間
 
 export type GitHubIdentity = {

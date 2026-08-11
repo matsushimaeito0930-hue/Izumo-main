@@ -49,7 +49,8 @@ export function Nav({
   return (
     <nav className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur">
       <div className="mx-auto flex min-w-0 max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
+        {/* ロゴはトップへ。ここから立場を選び直せるようにしておく。 */}
+        <Link href="/" className="flex shrink-0 items-center gap-2.5">
           <HackRadarLogo className="size-9" />
           <span className="hidden text-sm font-bold tracking-tight text-ink sm:block">
             HackRadar

@@ -175,6 +175,7 @@ export function OnboardingClient({
   const [displayName, setDisplayName] = useState("");
   const [specialty, setSpecialty] = useState("");
   // 最初は立場未選択。選ぶまでその立場の入口を出さない。
+  // GitHubの認可から戻ったときに選び直しにならないよう、URLの ?role= からも復元する。
   const [pickedRole, setPickedRole] = useState<OnboardingRole | null>(null);
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
@@ -195,6 +196,12 @@ export function OnboardingClient({
 
     const sharedRoom = searchParams.get("room");
     if (sharedRoom) setRoomCode(sharedRoom.trim().toUpperCase());
+
+    // 認可の往復で立場が消えないよう、URLに残しておいたものを戻す。
+    const sharedRole = searchParams.get("role");
+    if (sharedRole === "participant" || sharedRole === "mentor" || sharedRole === "admin") {
+      setPickedRole(sharedRole);
+    }
 
     const authError = searchParams.get("auth_error");
     if (authError) {
@@ -539,7 +546,10 @@ export function OnboardingClient({
                       ? "運営はGitHubログインが必要です。イベントの作成やリセットができるため、本人確認をしています。"
                       : "参加者はGitHubログインが必要です。リポジトリの選択とWebhookの自動設定に使います。"}
                   </p>
-                  <a href="/api/auth/github" className={primaryButtonClass}>
+                  <a
+                    href={`/api/auth/github?return_to=${encodeURIComponent(`/?role=${pickedRole}`)}`}
+                    className={primaryButtonClass}
+                  >
                     <Github className="size-5" />
                     GitHubでログイン
                   </a>
@@ -691,7 +701,7 @@ export function OnboardingClient({
 
                         {!canListPrivate && (
                           <a
-                            href="/api/auth/github?private=1"
+                            href="/api/auth/github?private=1&return_to=%2F%3Frole%3Dparticipant"
                             className="text-xs text-pulse underline underline-offset-2"
                           >
                             プライベートも表示する

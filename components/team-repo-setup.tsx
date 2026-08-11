@@ -160,7 +160,7 @@ export function TeamRepoSetup({ team, onDone }: { team: Team; onDone: () => void
 
             {!canListPrivate && (
               <a
-                href="/api/auth/github?private=1"
+                href="/api/auth/github?private=1&return_to=%2Fdashboard"
                 className="text-xs text-pulse underline underline-offset-2"
               >
                 プライベートも表示する
