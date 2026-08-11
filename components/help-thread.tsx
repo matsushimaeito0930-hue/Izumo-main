@@ -19,7 +19,8 @@ const statusClasses = {
 const roleLabels: Record<UserRole, string> = {
   participant: "参加者",
   mentor: "メンター",
-  admin: "運営"
+  admin: "運営",
+  judge: "審査員"
 };
 
 function formatTime(value: string) {

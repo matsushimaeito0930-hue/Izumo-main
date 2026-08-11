@@ -38,7 +38,8 @@ type Viewer = {
 const roleLabels: Record<UserRole, string> = {
   participant: "参加者",
   mentor: "メンター",
-  admin: "運営"
+  admin: "運営",
+  judge: "審査員"
 };
 
 const authErrorMessages: Record<string, string> = {
@@ -174,7 +175,7 @@ export function OnboardingClient({
   const [manualRepo, setManualRepo] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [specialty, setSpecialty] = useState("");
-  // 最初は立場未選択。選ぶまでその立場の入口を出さない。
+  // 最初は役割未選択。選ぶまでその役割の入口を出さない。
   // GitHubの認可から戻ったときに選び直しにならないよう、URLの ?role= からも復元する。
   const [pickedRole, setPickedRole] = useState<OnboardingRole | null>(null);
   const [message, setMessage] = useState("");
@@ -186,8 +187,9 @@ export function OnboardingClient({
   // 運営セクションは運営ロールのときだけ出す。参加者の視界に入れない。
   const isStaff = viewer?.role === "admin";
   const canManage = manualEntry || isStaff;
-  // メンターはGitHubログイン不要。参加者と運営だけログインを求める。
-  const needsLogin = authConfigured && !viewer && pickedRole !== "mentor";
+  // メンターと審査員はGitHubログイン不要。参加者と運営だけログインを求める。
+  const needsLogin =
+    authConfigured && !viewer && pickedRole !== "mentor" && pickedRole !== "judge";
 
   useEffect(() => {
     // 招待URL（/?code=イベント&room=部屋番号）で来た人は、入力欄を自動で埋める。
@@ -197,7 +199,7 @@ export function OnboardingClient({
     const sharedRoom = searchParams.get("room");
     if (sharedRoom) setRoomCode(sharedRoom.trim().toUpperCase());
 
-    // 認可の往復で立場が消えないよう、URLに残しておいたものを戻す。
+    // 認可の往復で役割が消えないよう、URLに残しておいたものを戻す。
     const sharedRole = searchParams.get("role");
     if (sharedRole === "participant" || sharedRole === "mentor" || sharedRole === "admin") {
       setPickedRole(sharedRole);
@@ -470,6 +472,35 @@ export function OnboardingClient({
     }
   }
 
+  async function joinJudge(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/judges/join", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          code: joinCode,
+          displayName: displayName || viewer?.displayName
+        })
+      });
+      const payload = (await response.json()) as { session?: AppSession; error?: string };
+
+      if (!response.ok || !payload.session) {
+        throw new Error(payload.error ?? "審査員として入れませんでした。");
+      }
+
+      saveSession(payload.session);
+      router.push("/dashboard");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "審査員として入れませんでした。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.localStorage.removeItem("hackverse-session");
@@ -536,7 +567,7 @@ export function OnboardingClient({
                 className="mb-4 flex items-center gap-1 text-xs text-muted transition-colors hover:text-ink"
               >
                 <ChevronLeft className="size-3.5" />
-                立場を選び直す
+                役割を選び直す
               </button>
 
               {needsLogin ? (
@@ -569,6 +600,41 @@ export function OnboardingClient({
                     </span>
                   </div>
                 )
+              ) : pickedRole === "judge" ? (
+                <form onSubmit={joinJudge} className="space-y-4">
+                  <p className="text-xs leading-5 text-muted">
+                    審査員はGitHubログイン不要です。見られるのは開発状況とお知らせだけで、
+                    投稿はできません。
+                  </p>
+
+                  <Field label="招待コード">
+                    <input
+                      value={joinCode}
+                      onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                      className={inputClass}
+                      placeholder="ABCD-2345"
+                      required
+                    />
+                    <p className="mt-1.5 text-xs leading-5 text-muted">
+                      運営から配られたコードを入力してください。
+                    </p>
+                  </Field>
+
+                  <Field label="名前">
+                    <input
+                      value={displayName}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                      className={inputClass}
+                      placeholder={viewer?.displayName ?? "表示名"}
+                      required
+                    />
+                  </Field>
+
+                  <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+                    <DoorOpen className="size-4" />
+                    開発状況を見る
+                  </button>
+                </form>
               ) : pickedRole === "mentor" ? (
                 <form onSubmit={joinMentor} className="space-y-4">
                   <p className="text-xs leading-5 text-muted">

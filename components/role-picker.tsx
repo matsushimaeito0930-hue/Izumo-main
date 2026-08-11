@@ -1,6 +1,6 @@
-import { ChevronRight, GraduationCap, Settings, Users } from "lucide-react";
+import { ChevronRight, Eye, GraduationCap, Settings, Users } from "lucide-react";
 
-export type OnboardingRole = "participant" | "mentor" | "admin";
+export type OnboardingRole = "participant" | "mentor" | "admin" | "judge";
 
 const roleCards: {
   role: OnboardingRole;
@@ -29,12 +29,19 @@ const roleCards: {
     detail: "イベントとチームを管理する人",
     note: "GitHubログインが必要です",
     icon: Settings
+  },
+  {
+    role: "judge",
+    label: "審査員",
+    detail: "開発の様子を見る人",
+    note: "コードと名前だけで入れます（閲覧のみ）",
+    icon: Eye
   }
 ];
 
 /**
- * 最初の画面。立場を選んでから、その立場の入口だけを見せる。
- * 3つの入口を1画面に並べると初参加の人がどれを触ればいいか分からなくなるため。
+ * 最初の画面。役割を選んでから、その役割の入口だけを見せる。
+ * 入口をまとめて1画面に並べると初参加の人がどれを触ればいいか分からなくなるため。
  */
 export function RolePicker({ onSelect }: { onSelect: (role: OnboardingRole) => void }) {
   return (

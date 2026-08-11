@@ -20,10 +20,12 @@ export default async function HelpPage() {
     <Shell>
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
-          質問する
+          {identity?.role === "judge" ? "お知らせ" : "質問する"}
         </h1>
         <p className="mt-1.5 text-sm text-muted">
-          わからないことを書けば、参加している人なら誰でも答えてくれます。
+          {identity?.role === "judge"
+            ? "運営から全チームへ共有された連絡です。"
+            : "わからないことを書けば、参加している人なら誰でも答えてくれます。"}
         </p>
       </div>
       <DashboardClient initialState={state} view="help" viewer={viewer} />

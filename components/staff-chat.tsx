@@ -15,7 +15,8 @@ export function StaffChat({
   myTeamId,
   viewer = null,
   onSend,
-  announcementOnly = false
+  announcementOnly = false,
+  readOnly = false
 }: {
   teams: Team[];
   messages: ChatMessage[];
@@ -29,6 +30,8 @@ export function StaffChat({
     body: string;
   }) => Promise<void>;
   announcementOnly?: boolean;
+  /** 審査員のように読むだけの人には、入力欄を出さない。 */
+  readOnly?: boolean;
 }) {
   const isStaff = viewer?.role === "admin" || viewer?.role === "mentor";
 
@@ -183,6 +186,7 @@ export function StaffChat({
         )}
       </div>
 
+      {readOnly ? null : (
       <form onSubmit={handleSubmit} className="mt-3 flex gap-2">
         <input
           value={message}
@@ -201,6 +205,7 @@ export function StaffChat({
           <span className="hidden sm:inline">送信</span>
         </button>
       </form>
+      )}
 
       {error && <p className="mt-2 text-xs font-medium text-hot">{error}</p>}
     </Panel>

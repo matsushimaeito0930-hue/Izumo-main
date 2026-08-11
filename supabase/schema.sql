@@ -5,7 +5,7 @@ create table if not exists public.users (
   github_username text not null unique,
   display_name text not null,
   avatar_url text,
-  role text not null default 'participant' check (role in ('participant', 'mentor', 'admin')),
+  role text not null default 'participant' check (role in ('participant', 'mentor', 'admin', 'judge')),
   specialty text,
   created_at timestamptz not null default now()
 );
@@ -91,7 +91,7 @@ create table if not exists public.help_replies (
   help_post_id uuid not null references public.help_posts(id) on delete cascade,
   author_name text not null,
   author_github text,
-  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin')),
+  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin', 'judge')),
   body text not null check (char_length(body) between 1 and 1000),
   is_accepted boolean not null default false,
   created_at timestamptz not null default now()
@@ -102,7 +102,7 @@ create table if not exists public.chat_messages (
   channel text not null check (channel in ('staff')),
   team_id uuid references public.teams(id) on delete cascade,
   author_name text not null,
-  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin')),
+  author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin', 'judge')),
   body text not null check (char_length(body) between 1 and 500),
   created_at timestamptz not null default now()
 );
@@ -175,16 +175,16 @@ alter table public.chat_messages
 -- ロールの制約を貼り直す。
 alter table public.users drop constraint if exists users_role_check;
 alter table public.users
-  add constraint users_role_check check (role in ('participant', 'mentor', 'admin'));
+  add constraint users_role_check check (role in ('participant', 'mentor', 'admin', 'judge'));
 
 alter table public.help_replies drop constraint if exists help_replies_author_role_check;
 alter table public.help_replies
   add constraint help_replies_author_role_check
-  check (author_role in ('participant', 'mentor', 'admin'));
+  check (author_role in ('participant', 'mentor', 'admin', 'judge'));
 
 alter table public.chat_messages drop constraint if exists chat_messages_author_role_check;
 alter table public.chat_messages
   add constraint chat_messages_author_role_check
-  check (author_role in ('participant', 'mentor', 'admin'));
+  check (author_role in ('participant', 'mentor', 'admin', 'judge'));
 
 drop table if exists public.mentors;

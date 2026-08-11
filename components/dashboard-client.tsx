@@ -79,6 +79,8 @@ export function DashboardClient({
   const activeViewer = viewer ?? sessionViewer;
   const isAdmin = activeViewer?.role === "admin";
   const isMentor = activeViewer?.role === "mentor";
+  // 審査員は閲覧専用。開発状況とお知らせだけを見る。
+  const isJudge = activeViewer?.role === "judge";
   const isStaff = isAdmin || isMentor;
   const myTeam = state.teams.find((team) => team.id === myTeamId) ?? null;
   // state.teams はスコアの降順。順位はその並びから取る。
@@ -89,7 +91,7 @@ export function DashboardClient({
   if (view === "help") {
     return (
       <div className="space-y-5">
-        {!isAdmin && (
+        {!isAdmin && !isJudge && (
           <>
             <HelpComposer
               teams={isMentor ? state.teams : myTeam ? [myTeam] : []}
@@ -110,7 +112,8 @@ export function DashboardClient({
           messages={state.messages}
           myTeamId={myTeamId}
           viewer={activeViewer}
-          announcementOnly={isAdmin}
+          announcementOnly={isAdmin || isJudge}
+          readOnly={isJudge}
           onSend={createChatMessage}
         />
       </div>
@@ -143,7 +146,7 @@ export function DashboardClient({
       )}
 
       {/* 参加者は自分のチームを先に見せる。運営は全チームをフラットに見る。 */}
-      {!isStaff && myTeam && (
+      {!isStaff && !isJudge && myTeam && (
         <MyTeamCard
           team={myTeam}
           rank={myRank}
@@ -159,7 +162,7 @@ export function DashboardClient({
       <DevelopmentOverview
         teams={state.teams}
         activities={state.activities}
-        myTeamId={isStaff ? null : myTeamId}
+        myTeamId={isStaff || isJudge ? null : myTeamId}
         members={state.members}
       />
 

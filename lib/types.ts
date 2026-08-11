@@ -10,8 +10,11 @@ export type HelpStatus = "open" | "helping" | "solved";
 /** 相談チャットは「チーム ↔ 運営」の1本だけ。 */
 export type ChatChannel = "staff";
 
-/** 参加者・メンター・運営で、ダッシュボード上の権限と表示を分ける。 */
-export type UserRole = "participant" | "mentor" | "admin";
+/**
+ * 参加者・メンター・運営・審査員で、ダッシュボード上の権限と表示を分ける。
+ * 審査員は閲覧専用で、開発状況とお知らせだけを見る。
+ */
+export type UserRole = "participant" | "mentor" | "admin" | "judge";
 
 export type User = {
   id: string;

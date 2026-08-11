@@ -8,6 +8,14 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const identity = getCurrentIdentity();
 
+  // 審査員は閲覧専用。画面を書き換えて送っても通さない。
+  if (identity?.role === "judge") {
+    return NextResponse.json(
+      { error: "審査員は閲覧のみです。投稿はできません。" },
+      { status: 403 }
+    );
+  }
+
   if (identity?.role === "admin") {
     return NextResponse.json(
       { error: "運営はお知らせチャットのみ利用できます。" },

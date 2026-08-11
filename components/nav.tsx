@@ -17,13 +17,20 @@ type Viewer = {
 const roleLabels: Record<UserRole, string> = {
   participant: "参加者",
   mentor: "メンター",
-  admin: "運営"
+  admin: "運営",
+  judge: "審査員"
 };
 
 // ナビは2つだけ。増やすと初参加者がどこを見ればいいか分からなくなる。
 const navItems = [
   { href: "/dashboard", label: "開発状況", icon: LayoutDashboard },
   { href: "/help", label: "質問する", icon: CircleHelp }
+];
+
+// 審査員は投稿できないので、2つ目は「お知らせ」と呼ぶ。
+const judgeNavItems = [
+  { href: "/dashboard", label: "開発状況", icon: LayoutDashboard },
+  { href: "/help", label: "お知らせ", icon: CircleHelp }
 ];
 
 export function Nav({
@@ -49,7 +56,7 @@ export function Nav({
   return (
     <nav className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur">
       <div className="mx-auto flex min-w-0 max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        {/* ロゴはトップへ。ここから立場を選び直せるようにしておく。 */}
+        {/* ロゴはトップへ。ここから役割を選び直せるようにしておく。 */}
         <Link href="/" className="flex shrink-0 items-center gap-2.5">
           <HackRadarLogo className="size-9" />
           <span className="hidden text-sm font-bold tracking-tight text-ink sm:block">
@@ -58,7 +65,7 @@ export function Nav({
         </Link>
 
         <div className="flex items-center gap-1">
-          {navItems.map((item) => {
+          {(viewer?.role === "judge" ? judgeNavItems : navItems).map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
