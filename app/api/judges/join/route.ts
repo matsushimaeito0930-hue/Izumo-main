@@ -41,10 +41,25 @@ export async function POST(request: Request) {
     );
   }
 
+  // すでにログインしている人は、その役割のまま通す。
+  //
+  // 審査員にできることは運営にできることの一部なので、運営を審査員に
+  // 引き下げる意味がない。参加者の場合も、上書きするとGitHubのトークンが
+  // 消えてリポジトリ選択が壊れる。審査員として入るのはログインしていない人だけ。
+  if (identity) {
+    return NextResponse.json({
+      session: {
+        role: identity.role,
+        displayName: identity.displayName,
+        githubUsername: identity.login
+      },
+      keptRole: identity.role
+    });
+  }
+
   const session = {
     role: "judge" as const,
-    displayName,
-    githubUsername: identity?.login
+    displayName
   };
 
   const response = NextResponse.json({ session });
@@ -53,10 +68,10 @@ export async function POST(request: Request) {
   response.cookies.set(
     SESSION_COOKIE,
     serializeIdentity({
-      githubId: identity?.githubId ?? 0,
-      login: identity?.login ?? `judge-${randomUUID().slice(0, 8)}`,
+      githubId: 0,
+      login: `judge-${randomUUID().slice(0, 8)}`,
       displayName,
-      avatarUrl: identity?.avatarUrl ?? null,
+      avatarUrl: null,
       role: "judge",
       issuedAt: Math.floor(Date.now() / 1000)
     }),

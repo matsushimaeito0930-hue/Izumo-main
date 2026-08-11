@@ -24,9 +24,10 @@ export async function POST(request: Request) {
     );
   }
 
+  // 運営は回答する側。全員に伝えたいことはお知らせを使う。
   if (identity?.role === "admin") {
     return NextResponse.json(
-      { error: "運営はお知らせチャットのみ利用できます。" },
+      { error: "運営は質問への回答とお知らせを利用してください。" },
       { status: 403 }
     );
   }

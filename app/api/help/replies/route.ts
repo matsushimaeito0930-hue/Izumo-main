@@ -24,12 +24,9 @@ export async function POST(request: Request) {
     );
   }
 
-  if (identity?.role === "admin") {
-    return NextResponse.json(
-      { error: "運営はお知らせチャットのみ利用できます。" },
-      { status: 403 }
-    );
-  }
+  // 運営も回答できる。小規模な会では運営が技術サポートを兼ねるため、
+  // 質問に答える手段が無いと詰まる。発言者の役割は表示に出るので、
+  // 誰が答えたかは読み手に分かる。
 
   const body = (await request.json().catch(() => ({}))) as {
     helpPostId?: string;

@@ -46,10 +46,11 @@ export function HelpThread({
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // ベストアンサーを選ぶのは質問した本人。
+  // 本人が席を外したまま解決した質問を閉じられるよう、運営だけ代われる。
+  // メンターは回答する側なので、自分の回答を自分で採用できないようにする。
   const canAccept =
-    !viewerGithub ||
-    post.author_github === viewerGithub ||
-    viewerRole === "admin" || viewerRole === "mentor";
+    !viewerGithub || post.author_github === viewerGithub || viewerRole === "admin";
 
   async function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

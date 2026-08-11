@@ -18,6 +18,7 @@ import {
   getEvent,
   getHackVerseState,
   getScoreConfig,
+  joinMentorByCode,
   joinTeamWithInvite,
   recordActivity,
   saveEvent,
@@ -262,8 +263,37 @@ check(
   32
 );
 
+// ---------------------------------------------------------------- 役割の兼任
+section("[6] 運営が他の役割で入っても運営のまま");
+
+const adminAsParticipant = await joinTeamWithInvite({
+  code: inviteB.code,
+  githubUsername: "organizer",
+  displayName: "運営の人",
+  role: "admin"
+});
+check("運営がチームに入っても運営のまま", adminAsParticipant.role, "admin");
+
+const adminAsMentor = await joinMentorByCode({
+  code: (await getEvent())!.join_code,
+  displayName: "運営の人",
+  specialty: "なんでも",
+  githubUsername: "organizer",
+  role: "admin"
+});
+check("運営がメンター登録しても運営のまま", adminAsMentor.role, "admin");
+
+const plainMentor = await joinMentorByCode({
+  code: (await getEvent())!.join_code,
+  displayName: "先生",
+  specialty: "フロントエンド",
+  githubUsername: "sensei",
+  role: "participant"
+});
+check("普通の人はメンターになる", plainMentor.role, "mentor");
+
 // ---------------------------------------------------------------- 新規イベント
-section("[6] 次のイベントを作ると持ち越さない");
+section("[7] 次のイベントを作ると持ち越さない");
 
 const before = (await getEvent())?.join_code;
 const nextEvent = await saveEvent({ name: "第2回テストハッカソン" });

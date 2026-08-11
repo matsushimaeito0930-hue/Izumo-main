@@ -122,21 +122,23 @@ export function DashboardClient({
             onSend={createChatMessage}
           />
         )}
+        {/* 質問を出すのは参加者だけ。メンターは他チームの質問にも答える。 */}
         {!isAdmin && !isJudge && (
-          <>
-            <HelpComposer
-              teams={isMentor ? state.teams : myTeam ? [myTeam] : []}
-              lockedTeamId={isMentor ? null : myTeamId}
-              onSubmit={createHelp}
-            />
-            <HelpBoard
-              posts={state.helpPosts}
-              viewerGithub={activeViewer?.login ?? null}
-              viewerRole={activeViewer?.role}
-              onReply={createHelpReply}
-              onAccept={acceptHelpReply}
-            />
-          </>
+          <HelpComposer
+            teams={isMentor ? state.teams : myTeam ? [myTeam] : []}
+            lockedTeamId={isMentor ? null : myTeamId}
+            onSubmit={createHelp}
+          />
+        )}
+        {/* 掲示板は運営にも見せる。小規模な会では運営がサポートを兼ねるため。 */}
+        {!isJudge && (
+          <HelpBoard
+            posts={state.helpPosts}
+            viewerGithub={activeViewer?.login ?? null}
+            viewerRole={activeViewer?.role}
+            onReply={createHelpReply}
+            onAccept={acceptHelpReply}
+          />
         )}
         <StaffChat
           teams={state.teams}

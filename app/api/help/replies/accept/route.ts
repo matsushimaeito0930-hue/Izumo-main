@@ -16,13 +16,6 @@ export async function POST(request: Request) {
     );
   }
 
-  if (identity?.role === "admin") {
-    return NextResponse.json(
-      { error: "運営はお知らせチャットのみ利用できます。" },
-      { status: 403 }
-    );
-  }
-
   const body = (await request.json().catch(() => ({}))) as {
     helpPostId?: string;
     replyId?: string;
@@ -50,8 +43,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // 質問者が離席したまま解決した質問を、運営が閉じられるようにしておく。
     const isAuthor = post.author_github === identity.login;
-    if (!isAuthor) {
+    if (!isAuthor && identity.role !== "admin") {
       return NextResponse.json(
         { error: "ベストアンサーを選べるのは質問者本人か運営だけです。" },
         { status: 403 }
