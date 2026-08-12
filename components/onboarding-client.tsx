@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HackRadarLogo } from "@/components/hackradar-logo";
 import { RolePicker, type OnboardingRole } from "@/components/role-picker";
@@ -14,6 +15,7 @@ import {
   LoaderCircle,
   DoorOpen,
   Github,
+  LayoutDashboard,
   LogOut,
   Plus,
   Pencil,
@@ -543,6 +545,15 @@ export function OnboardingClient({
                   @{viewer.login}・{roleLabels[viewer.role]}
                 </p>
               </div>
+              {/* 一度入った人がトップに戻ってきたとき、行き先を失わないようにする。 */}
+              <Link
+                href="/dashboard"
+                aria-label="開発状況を見る"
+                title="開発状況を見る"
+                className="grid size-8 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted shadow-soft transition-colors hover:text-ink"
+              >
+                <LayoutDashboard className="size-3.5" />
+              </Link>
               <button
                 type="button"
                 onClick={logout}
@@ -588,9 +599,17 @@ export function OnboardingClient({
                 </>
               ) : pickedRole === "admin" ? (
                 canManage ? (
-                  <p className="rounded-xl border border-line bg-paper px-3 py-4 text-xs leading-5 text-muted shadow-inset">
-                    下の「運営の方：イベントとチームを登録する」から操作してください。
-                  </p>
+                  <div className="space-y-3">
+                    {/* 運営はチームに参加しないので、自動では画面が切り替わらない。
+                        ここに入口を置かないとダッシュボードへ行く手段が無くなる。 */}
+                    <Link href="/dashboard" className={primaryButtonClass}>
+                      <LayoutDashboard className="size-5" />
+                      開発状況を見る
+                    </Link>
+                    <p className="rounded-xl border border-line bg-paper px-3 py-4 text-xs leading-5 text-muted shadow-inset">
+                      イベント作成・チーム登録・配点の変更は、下の「運営の方：…」から操作してください。
+                    </p>
+                  </div>
                 ) : (
                   <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
                     <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
