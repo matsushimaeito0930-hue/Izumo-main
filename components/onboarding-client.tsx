@@ -20,6 +20,7 @@ import {
   Plus,
   Pencil,
   Save,
+  Trash2,
   X,
   TriangleAlert
 } from "lucide-react";
@@ -28,6 +29,7 @@ import type {
   HackEvent,
   Team,
   TeamInviteView,
+  TeamMemberView,
   UserRole
 } from "@/lib/types";
 
@@ -146,12 +148,15 @@ export function OnboardingClient({
   initialInvites,
   initialEvent,
   initialTeams,
+  initialMembers = [],
   authConfigured,
   viewer
 }: {
   initialInvites: TeamInviteView[];
   initialEvent: HackEvent | null;
   initialTeams: Team[];
+  /** 運営がメンバーの所属を直せるように、誰がどのチームにいるかを渡す。 */
+  initialMembers?: TeamMemberView[];
   authConfigured: boolean;
   viewer: Viewer | null;
 }) {
@@ -159,6 +164,7 @@ export function OnboardingClient({
   const searchParams = useSearchParams();
   const [invites, setInvites] = useState(initialInvites);
   const [teams, setTeams] = useState(initialTeams);
+  const [members, setMembers] = useState(initialMembers);
   const [hackEvent, setHackEvent] = useState(initialEvent);
   const [eventName, setEventName] = useState(initialEvent?.name ?? "");
   // joinCode はイベントの招待コード、roomCode はチームの部屋番号。
@@ -391,6 +397,97 @@ export function OnboardingClient({
       cancelEditingTeam();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "チームを更新できませんでした。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  /**
+   * 部屋番号を間違えて入った人を直す。
+   * toTeamId を渡せば移動、渡さなければそのチームから外すだけ。
+   */
+  async function fixMembership(
+    fromTeamId: string,
+    githubUsername: string,
+    toTeamId?: string
+  ) {
+    setIsBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/admin/teams/${fromTeamId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          toTeamId
+            ? { moveMember: { githubUsername, toTeamId } }
+            : { removeMember: githubUsername }
+        )
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "メンバーを変更できませんでした。");
+      }
+
+      setMembers((current) =>
+        toTeamId
+          ? current.map((member) =>
+              member.team_id === fromTeamId &&
+              member.github_username === githubUsername
+                ? { ...member, team_id: toTeamId }
+                : member
+            )
+          : current.filter(
+              (member) =>
+                !(
+                  member.team_id === fromTeamId &&
+                  member.github_username === githubUsername
+                )
+            )
+      );
+
+      setMessage(
+        toTeamId
+          ? `@${githubUsername} を「${
+              teams.find((team) => team.id === toTeamId)?.name ?? "別のチーム"
+            }」に移しました。`
+          : `@${githubUsername} をチームから外しました。`
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "メンバーを変更できませんでした。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  /** 誤って作ったチームを消す。スコアが動いているときは確認を挟む。 */
+  async function removeTeam(team: Team) {
+    const warning =
+      team.score > 0
+        ? `「${team.name}」には ${team.score} ポイントの記録があります。チームと一緒に活動履歴も消えます。削除しますか？`
+        : `「${team.name}」を削除しますか？`;
+    if (!window.confirm(warning)) return;
+
+    setIsBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/admin/teams/${team.id}`, {
+        method: "DELETE"
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "チームを削除できませんでした。");
+      }
+
+      setTeams((current) => current.filter((candidate) => candidate.id !== team.id));
+      setInvites((current) => current.filter((invite) => invite.team_id !== team.id));
+      setMembers((current) => current.filter((member) => member.team_id !== team.id));
+      setMessage(`チーム「${team.name}」を削除しました。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "チームを削除できませんでした。");
     } finally {
       setIsBusy(false);
     }
@@ -906,6 +1003,9 @@ export function OnboardingClient({
               <ul className="mt-4 space-y-2 border-t border-line pt-4">
                 {teams.map((team) => {
                   const invite = invites.find((candidate) => candidate.team_id === team.id);
+                  const teamMembers = members.filter(
+                    (member) => member.team_id === team.id
+                  );
 
                   return (
                   <li key={team.id} className="rounded-xl border border-line/70 bg-paper p-3">
@@ -995,7 +1095,71 @@ export function OnboardingClient({
                         >
                           <Pencil className="size-4" />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeTeam(team)}
+                          disabled={isBusy}
+                          className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted shadow-soft transition-colors hover:border-hot/40 hover:text-hot disabled:opacity-40"
+                          aria-label={`${team.name}を削除`}
+                          title="チームを削除"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
                       </div>
+                    )}
+
+                    {/* 部屋番号を間違えて入る事故は必ず起きるので、その場で直せるようにする。 */}
+                    {editingTeamId !== team.id && teamMembers.length > 0 && (
+                      <ul className="mt-2.5 space-y-1.5 border-t border-line/70 pt-2.5">
+                        {teamMembers.map((member) => (
+                          <li
+                            key={member.github_username}
+                            className="flex items-center gap-2"
+                          >
+                            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink2">
+                              @{member.github_username}
+                            </span>
+                            <label className="shrink-0">
+                              <span className="sr-only">
+                                @{member.github_username} の移動先
+                              </span>
+                              <select
+                                value=""
+                                disabled={isBusy || teams.length < 2}
+                                onChange={(event) => {
+                                  const toTeamId = event.target.value;
+                                  if (!toTeamId) return;
+                                  void fixMembership(
+                                    team.id,
+                                    member.github_username,
+                                    toTeamId
+                                  );
+                                }}
+                                className="h-8 max-w-32 rounded-lg border border-line bg-paper px-1.5 text-[11px] text-ink2 shadow-inset outline-none focus:border-pulse disabled:opacity-40"
+                              >
+                                <option value="">移動先…</option>
+                                {teams
+                                  .filter((candidate) => candidate.id !== team.id)
+                                  .map((candidate) => (
+                                    <option key={candidate.id} value={candidate.id}>
+                                      {candidate.name}
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void fixMembership(team.id, member.github_username)
+                              }
+                              disabled={isBusy}
+                              className="shrink-0 text-[11px] font-medium text-muted underline underline-offset-2 transition-colors hover:text-hot disabled:opacity-40"
+                            >
+                              外す
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </li>
                   );

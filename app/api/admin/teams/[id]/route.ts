@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { updateTeam } from "@/lib/store";
+import { deleteTeam, moveTeamMember, removeTeamMember, updateTeam } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +28,29 @@ export async function PATCH(
   const body = (await request.json().catch(() => ({}))) as {
     name?: string;
     githubRepo?: string | null;
+    /** メンバーの操作。部屋番号を間違えて入った人を直すために使う。 */
+    removeMember?: string;
+    moveMember?: { githubUsername: string; toTeamId: string };
   };
 
   try {
+    if (body.removeMember) {
+      await removeTeamMember({
+        teamId: params.id,
+        githubUsername: body.removeMember
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.moveMember) {
+      await moveTeamMember({
+        githubUsername: body.moveMember.githubUsername,
+        fromTeamId: params.id,
+        toTeamId: body.moveMember.toTeamId
+      });
+      return NextResponse.json({ ok: true });
+    }
+
     const team = await updateTeam({
       teamId: params.id,
       name: body.name ?? "",
@@ -40,6 +60,25 @@ export async function PATCH(
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "チームを更新できませんでした。" },
+      { status: 400 }
+    );
+  }
+}
+
+/** チームを削除する。所属・部屋番号・活動履歴も一緒に消える。 */
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const denied = requireAdmin();
+  if (denied) return denied;
+
+  try {
+    await deleteTeam(params.id);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "チームを削除できませんでした。" },
       { status: 400 }
     );
   }

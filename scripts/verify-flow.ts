@@ -15,12 +15,15 @@ import { parseGitHubWebhook, verifyGitHubSignature } from "@/lib/github";
 import {
   createTeamByName,
   createTeamInviteForTeam,
+  deleteTeam,
   getEvent,
   getHackVerseState,
   getScoreConfig,
   joinMentorByCode,
   joinTeamWithInvite,
+  moveTeamMember,
   recordActivity,
+  removeTeamMember,
   saveEvent,
   saveScoreConfig,
   setTeamRepo,
@@ -292,8 +295,96 @@ const plainMentor = await joinMentorByCode({
 });
 check("普通の人はメンターになる", plainMentor.role, "mentor");
 
+// ---------------------------------------------------------------- 所属の直し
+section("[7] 部屋番号を間違えた人を直す");
+
+// 次郎はBチーム。本当はAチームだった、という想定で移す。
+await moveTeamMember({
+  githubUsername: "jiro",
+  fromTeamId: teamB.id,
+  toTeamId: teamA.id
+});
+
+const moved = await getHackVerseState();
+check(
+  "移動先に入っている",
+  moved.members.some((m) => m.github_username === "jiro" && m.team_id === teamA.id),
+  true
+);
+check(
+  "元のチームから消えている",
+  moved.members.some((m) => m.github_username === "jiro" && m.team_id === teamB.id),
+  false
+);
+
+// 移したあとも、掛け持ちにはならない。
+let stillBlocked = "許してしまった";
+try {
+  await joinTeamWithInvite({
+    code: inviteB.code,
+    githubUsername: "jiro",
+    displayName: "次郎",
+    role: "participant"
+  });
+} catch {
+  stillBlocked = "拒否した";
+}
+check("移動先に居る間は元のチームに戻れない", stillBlocked, "拒否した");
+
+// 外せば、本人が入り直せる。
+await removeTeamMember({ teamId: teamA.id, githubUsername: "jiro" });
+const removed = await getHackVerseState();
+check(
+  "外したメンバーは一覧から消える",
+  removed.members.some((m) => m.github_username === "jiro"),
+  false
+);
+
+const rejoined = await joinTeamWithInvite({
+  code: inviteB.code,
+  githubUsername: "jiro",
+  displayName: "次郎",
+  role: "participant"
+});
+check("外したあとは入り直せる", rejoined.teamName, "Team Bravo");
+
+let removeMissing = "通ってしまった";
+try {
+  await removeTeamMember({ teamId: teamB.id, githubUsername: "who-is-this" });
+} catch {
+  removeMissing = "拒否した";
+}
+check("居ない人を外そうとしたら拒否", removeMissing, "拒否した");
+
+let sameTeamMove = "通ってしまった";
+try {
+  await moveTeamMember({
+    githubUsername: "jiro",
+    fromTeamId: teamB.id,
+    toTeamId: teamB.id
+  });
+} catch {
+  sameTeamMove = "拒否した";
+}
+check("同じチームへの移動は拒否", sameTeamMove, "拒否した");
+
+const beforeDelete = (await getHackVerseState()).teams.length;
+await deleteTeam(teamB.id);
+const afterDelete = await getHackVerseState();
+check("チームが消える", afterDelete.teams.length, beforeDelete - 1);
+check(
+  "そのチームの活動履歴も消える",
+  afterDelete.activities.some((a) => a.team_id === teamB.id),
+  false
+);
+check(
+  "他のチームは残る",
+  afterDelete.teams.some((team) => team.name === "Team Alpha"),
+  true
+);
+
 // ---------------------------------------------------------------- 新規イベント
-section("[7] 次のイベントを作ると持ち越さない");
+section("[8] 次のイベントを作ると持ち越さない");
 
 const before = (await getEvent())?.join_code;
 const nextEvent = await saveEvent({ name: "第2回テストハッカソン" });

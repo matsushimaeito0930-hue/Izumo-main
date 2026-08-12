@@ -1649,6 +1649,156 @@ export async function isTeamMember(input: {
   );
 }
 
+/**
+ * 運営がメンバーをチームから外す。
+ *
+ * 部屋番号を間違えて入る事故は必ず起きる。これが無いと、直すには
+ * イベント全体をリセットするしかなく、他チームのスコアまで消える。
+ *
+ * 活動履歴（activities）はチームに紐づくので消さない。
+ * 「誰がやったか」は残るが、点数はチームのものという扱いを保つ。
+ */
+export async function removeTeamMember(input: {
+  teamId: string;
+  githubUsername: string;
+}): Promise<void> {
+  const githubUsername = input.githubUsername.trim();
+  if (!githubUsername) {
+    throw new Error("外すメンバーを指定してください。");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("github_username", githubUsername)
+        .maybeSingle();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("このアカウントは登録されていません。");
+
+      const { error } = await supabase
+        .from("team_members")
+        .delete()
+        .eq("team_id", input.teamId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      return;
+    }
+  }
+
+  const store = getMemoryStore();
+  const user = store.users.find(
+    (candidate) => candidate.github_username === githubUsername
+  );
+  if (!user) throw new Error("このアカウントは登録されていません。");
+
+  store.teamMembers = store.teamMembers.filter(
+    (member) => !(member.team_id === input.teamId && member.user_id === user.id)
+  );
+}
+
+/** 運営がメンバーを別のチームへ移す。外してから入れるので、二重所属にならない。 */
+export async function moveTeamMember(input: {
+  githubUsername: string;
+  fromTeamId: string;
+  toTeamId: string;
+}): Promise<void> {
+  if (input.fromTeamId === input.toTeamId) {
+    throw new Error("移動先が同じチームです。");
+  }
+
+  await removeTeamMember({
+    teamId: input.fromTeamId,
+    githubUsername: input.githubUsername
+  });
+
+  const githubUsername = input.githubUsername.trim();
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: team, error: teamError } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("id", input.toTeamId)
+        .maybeSingle();
+
+      if (teamError) throw teamError;
+      if (!team) throw new Error("移動先のチームが見つかりません。");
+
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("github_username", githubUsername)
+        .maybeSingle();
+
+      if (userError) throw userError;
+      if (!user) throw new Error("このアカウントは登録されていません。");
+
+      const { error } = await supabase
+        .from("team_members")
+        .upsert(
+          { team_id: input.toTeamId, user_id: user.id },
+          { onConflict: "team_id,user_id" }
+        );
+
+      if (error) throw error;
+      return;
+    }
+  }
+
+  const store = getMemoryStore();
+  const team = store.teams.find((candidate) => candidate.id === input.toTeamId);
+  if (!team) throw new Error("移動先のチームが見つかりません。");
+
+  const user = store.users.find(
+    (candidate) => candidate.github_username === githubUsername
+  );
+  if (!user) throw new Error("このアカウントは登録されていません。");
+
+  const alreadyThere = store.teamMembers.some(
+    (member) => member.team_id === input.toTeamId && member.user_id === user.id
+  );
+  if (!alreadyThere) {
+    store.teamMembers.push({
+      id: randomUUID(),
+      team_id: input.toTeamId,
+      user_id: user.id
+    });
+  }
+}
+
+/**
+ * 運営がチームを削除する。
+ *
+ * 誤って作ったチームを、イベント全体のリセット無しに消せるようにする。
+ * 所属・招待コード・活動履歴も一緒に消えるので、スコアが動いたあとは
+ * 呼び出し側で確認を取ること。
+ */
+export async function deleteTeam(teamId: string): Promise<void> {
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      // team_members / team_invites / activities は外部キーのcascadeで消える。
+      const { error } = await supabase.from("teams").delete().eq("id", teamId);
+      if (error) throw error;
+      return;
+    }
+  }
+
+  const store = getMemoryStore();
+  store.teams = store.teams.filter((team) => team.id !== teamId);
+  store.teamMembers = store.teamMembers.filter((member) => member.team_id !== teamId);
+  store.teamInvites = store.teamInvites.filter((invite) => invite.team_id !== teamId);
+  store.activities = store.activities.filter((activity) => activity.team_id !== teamId);
+  store.helpPosts = store.helpPosts.filter((post) => post.team_id !== teamId);
+  store.messages = store.messages.filter((message) => message.team_id !== teamId);
+}
+
 export async function joinTeamWithInvite(input: {
   code: string;
   displayName: string;
@@ -1705,7 +1855,9 @@ export async function joinTeamWithInvite(input: {
         );
 
         if (belongsToAnotherTeam) {
-          throw new Error("このGitHubアカウントはすでに別のチームに所属しています。");
+          throw new Error(
+            "このGitHubアカウントはすでに別のチームに所属しています。チームを変えたい場合は、運営に移動をお願いしてください。"
+          );
         }
       }
 
@@ -1768,7 +1920,9 @@ export async function joinTeamWithInvite(input: {
     );
 
     if (belongsToAnotherTeam) {
-      throw new Error("このGitHubアカウントはすでに別のチームに所属しています。");
+      throw new Error(
+        "このGitHubアカウントはすでに別のチームに所属しています。チームを変えたい場合は、運営に移動をお願いしてください。"
+      );
     }
   }
 

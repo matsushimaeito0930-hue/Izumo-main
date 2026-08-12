@@ -18,6 +18,8 @@ export default async function Page() {
       initialInvites={invites}
       initialEvent={hackEvent}
       initialTeams={state.teams}
+      // 所属の直しは運営だけの操作なので、他の役割には渡さない。
+      initialMembers={identity?.role === "admin" ? state.members : []}
       authConfigured={isConfigured}
       viewer={
         identity
