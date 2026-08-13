@@ -1205,6 +1205,42 @@ export async function saveScoreConfig(input: unknown): Promise<{
   return { config, ...result };
 }
 
+/**
+ * イベントを丸ごと消す。
+ *
+ * ハッカソンが終わったあと、次の準備の前に片付けるための操作。
+ * チーム・所属・部屋番号・活動履歴・質問・チャットが全部消えて、
+ * 招待コードも無効になる。取り返しがつかないので、呼び出し側で
+ * イベント名の入力を求めてから実行すること。
+ */
+export async function deleteEvent(): Promise<void> {
+  const event = await getEvent();
+  if (!event) {
+    throw new Error("削除するイベントがありません。");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      // 先にチームを消す。所属・部屋番号・活動履歴はcascadeで一緒に消える。
+      await resetSupabaseEventData(supabase);
+
+      const { error } = await supabase.from("events").delete().eq("id", event.id);
+      if (error) throw error;
+
+      // チームに紐づかない記録（お知らせ、メンター登録）も残さない。
+      await supabase.from("chat_messages").delete().is("team_id", null);
+      await supabase.from("users").delete().neq("role", "admin");
+      return;
+    }
+  }
+
+  const store = getMemoryStore();
+  resetMemoryEventData(store);
+  store.users = store.users.filter((user) => user.role === "admin");
+  store.event = null;
+}
+
 /** 参加コードの照合。イベント未設定ならコード無しで通す（ローカルデモ用）。 */
 export async function verifyJoinCode(code: string | undefined): Promise<boolean> {
   const event = await getEvent();

@@ -15,6 +15,7 @@ import { parseGitHubWebhook, verifyGitHubSignature } from "@/lib/github";
 import {
   createTeamByName,
   createTeamInviteForTeam,
+  deleteEvent,
   deleteTeam,
   getEvent,
   getHackVerseState,
@@ -383,16 +384,34 @@ check(
   true
 );
 
-// ---------------------------------------------------------------- 新規イベント
-section("[8] 次のイベントを作ると持ち越さない");
+// ---------------------------------------------------------------- 削除
+section("[8] イベントごと片付ける");
 
-const before = (await getEvent())?.join_code;
-const nextEvent = await saveEvent({ name: "第2回テストハッカソン" });
-check("招待コードが変わる", nextEvent.join_code !== before, true);
-
+await deleteEvent();
 const cleared = await getHackVerseState();
-check("チームは引き継がない", cleared.teams.length, 0);
-check("活動履歴も引き継がない", cleared.activities.length, 0);
+check("イベントが無くなる", await getEvent(), null);
+check("チームが残らない", cleared.teams.length, 0);
+check("活動履歴も残らない", cleared.activities.length, 0);
+check("所属も残らない", cleared.members.length, 0);
+
+let deleteTwice = "通ってしまった";
+try {
+  await deleteEvent();
+} catch {
+  deleteTwice = "拒否した";
+}
+check("イベントが無いときの削除は拒否", deleteTwice, "拒否した");
+
+// ---------------------------------------------------------------- 新規イベント
+section("[9] 次のイベントを作ると持ち越さない");
+
+const nextEvent = await saveEvent({ name: "第2回テストハッカソン" });
+check("新しい招待コードが出る", /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(nextEvent.join_code), true);
+check("前のコードとは違う", nextEvent.join_code !== event.join_code, true);
+
+const restarted = await getHackVerseState();
+check("チームは引き継がない", restarted.teams.length, 0);
+check("活動履歴も引き継がない", restarted.activities.length, 0);
 check("配点はイベントに紐づく", (await getScoreConfig()).push, 1);
 
 console.log(`\n結果: ${pass} 件成功 / ${fail} 件失敗\n`);

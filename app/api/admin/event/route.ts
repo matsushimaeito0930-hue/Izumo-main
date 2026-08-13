@@ -4,6 +4,7 @@ import { getCurrentIdentity } from "@/lib/session";
 import {
   createTeamByName,
   createTeamInviteForTeam,
+  deleteEvent,
   getEvent,
   saveEvent
 } from "@/lib/store";
@@ -74,6 +75,44 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "保存できませんでした。" },
+      { status: 400 }
+    );
+  }
+}
+
+/**
+ * イベントを削除する。
+ *
+ * 誤操作で全部消えるのを防ぐため、イベント名の一致を確認してから実行する。
+ * 画面側でも確認しているが、APIを直接叩かれた場合にも同じ関門を通す。
+ */
+export async function DELETE(request: Request) {
+  const denied = requireAdmin();
+  if (denied) return denied;
+
+  const body = (await request.json().catch(() => ({}))) as { confirmName?: string };
+  const current = await getEvent();
+
+  if (!current) {
+    return NextResponse.json(
+      { error: "削除するイベントがありません。" },
+      { status: 404 }
+    );
+  }
+
+  if (body.confirmName?.trim() !== current.name) {
+    return NextResponse.json(
+      { error: "確認のため、イベント名を正確に入力してください。" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    await deleteEvent();
+    return NextResponse.json({ ok: true, deletedName: current.name });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "削除できませんでした。" },
       { status: 400 }
     );
   }
