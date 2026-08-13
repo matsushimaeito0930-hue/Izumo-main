@@ -1226,12 +1226,12 @@ export function OnboardingClient({
                       <strong className="font-bold text-hot">すべて消えます</strong>。
                       招待コードも使えなくなります。元に戻せません。
                     </p>
+                    {/* コードはここに出さない。
+                        出すと写すだけで済んでしまい、確認にならない。
+                        上に戻って自分で確かめてもらう。 */}
                     <p className="mt-2.5 text-xs leading-5 text-ink2">
-                      確認のため、このイベントの招待コード{" "}
-                      <code className="font-mono font-bold tracking-wide text-ink">
-                        {hackEvent.join_code}
-                      </code>{" "}
-                      を入力してください。
+                      確認のため、このイベントの招待コードを入力してください。
+                      上の「招待コード（イベント共通）」で確認できます。
                     </p>
                     <input
                       value={deleteConfirmCode}
@@ -1239,7 +1239,7 @@ export function OnboardingClient({
                         setDeleteConfirmCode(event.target.value.toUpperCase())
                       }
                       className={`${inputClass} mt-2 font-mono tracking-wide`}
-                      placeholder="ABCD-2345"
+                      placeholder="0000-0000"
                       autoComplete="off"
                       aria-label="確認のための招待コード"
                     />
