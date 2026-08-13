@@ -174,7 +174,7 @@ export function OnboardingClient({
   const [newTeamName, setNewTeamName] = useState("");
   // イベント削除は取り返しがつかないので、開くのと打ち直すのを2段階に分ける。
   const [showDeleteEvent, setShowDeleteEvent] = useState(false);
-  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [deleteConfirmCode, setDeleteConfirmCode] = useState("");
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState("");
   const [editingGithubRepo, setEditingGithubRepo] = useState("");
@@ -466,7 +466,7 @@ export function OnboardingClient({
 
   /**
    * イベントを丸ごと消す。
-   * 取り返しがつかないので、イベント名を打ち直してもらってから実行する。
+   * 取り返しがつかないので、招待コードを打ち直してもらってから実行する。
    */
   async function removeEvent() {
     if (!hackEvent) return;
@@ -478,7 +478,7 @@ export function OnboardingClient({
       const response = await fetch("/api/admin/event", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ confirmName: deleteConfirmName })
+        body: JSON.stringify({ confirmCode: deleteConfirmCode })
       });
       const payload = (await response.json().catch(() => ({}))) as {
         deletedName?: string;
@@ -494,7 +494,7 @@ export function OnboardingClient({
       setTeams([]);
       setInvites([]);
       setMembers([]);
-      setDeleteConfirmName("");
+      setDeleteConfirmCode("");
       setShowDeleteEvent(false);
       setMessage(
         `イベント「${payload.deletedName ?? ""}」を削除しました。新しいイベント名を登録すると、また最初から始められます。`
@@ -1227,23 +1227,28 @@ export function OnboardingClient({
                       招待コードも使えなくなります。元に戻せません。
                     </p>
                     <p className="mt-2.5 text-xs leading-5 text-ink2">
-                      確認のため、イベント名{" "}
-                      <code className="font-mono font-bold text-ink">{hackEvent.name}</code>{" "}
+                      確認のため、このイベントの招待コード{" "}
+                      <code className="font-mono font-bold tracking-wide text-ink">
+                        {hackEvent.join_code}
+                      </code>{" "}
                       を入力してください。
                     </p>
                     <input
-                      value={deleteConfirmName}
-                      onChange={(event) => setDeleteConfirmName(event.target.value)}
-                      className={`${inputClass} mt-2`}
-                      placeholder={hackEvent.name}
-                      aria-label="確認のためのイベント名"
+                      value={deleteConfirmCode}
+                      onChange={(event) =>
+                        setDeleteConfirmCode(event.target.value.toUpperCase())
+                      }
+                      className={`${inputClass} mt-2 font-mono tracking-wide`}
+                      placeholder="ABCD-2345"
+                      autoComplete="off"
+                      aria-label="確認のための招待コード"
                     />
                     <div className="mt-3 flex gap-2">
                       <button
                         type="button"
                         onClick={() => {
                           setShowDeleteEvent(false);
-                          setDeleteConfirmName("");
+                          setDeleteConfirmCode("");
                         }}
                         className="h-11 flex-1 rounded-xl border border-line bg-surface text-sm font-medium text-ink2 shadow-soft transition-colors hover:text-ink"
                       >
@@ -1252,7 +1257,11 @@ export function OnboardingClient({
                       <button
                         type="button"
                         onClick={() => void removeEvent()}
-                        disabled={isBusy || deleteConfirmName.trim() !== hackEvent.name}
+                        disabled={
+                          isBusy ||
+                          deleteConfirmCode.trim().toUpperCase() !==
+                            hackEvent.join_code.toUpperCase()
+                        }
                         className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-hot text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] active:translate-y-px active:shadow-pressed disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
                       >
                         <Trash2 className="size-4" />

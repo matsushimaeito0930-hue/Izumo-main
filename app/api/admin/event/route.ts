@@ -83,14 +83,14 @@ export async function POST(request: Request) {
 /**
  * イベントを削除する。
  *
- * 誤操作で全部消えるのを防ぐため、イベント名の一致を確認してから実行する。
+ * 誤操作で全部消えるのを防ぐため、招待コードの一致を確認してから実行する。
  * 画面側でも確認しているが、APIを直接叩かれた場合にも同じ関門を通す。
  */
 export async function DELETE(request: Request) {
   const denied = requireAdmin();
   if (denied) return denied;
 
-  const body = (await request.json().catch(() => ({}))) as { confirmName?: string };
+  const body = (await request.json().catch(() => ({}))) as { confirmCode?: string };
   const current = await getEvent();
 
   if (!current) {
@@ -100,9 +100,11 @@ export async function DELETE(request: Request) {
     );
   }
 
-  if (body.confirmName?.trim() !== current.name) {
+  // 大文字小文字は問わない。コードは読み上げて共有されることがあるため。
+  const given = (body.confirmCode ?? "").trim().toUpperCase();
+  if (given !== current.join_code.toUpperCase()) {
     return NextResponse.json(
-      { error: "確認のため、イベント名を正確に入力してください。" },
+      { error: "確認のため、このイベントの招待コードを正確に入力してください。" },
       { status: 400 }
     );
   }
