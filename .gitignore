@@ -7,7 +7,10 @@ dist/
 
 # Optional: ignore npm debug logs
 npm-debug.log*
-
+*.pptx
+*.docx
+*.gif
+*.mp4
 # Ignore local environment files
 .env
 .env.local
