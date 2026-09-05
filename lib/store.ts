@@ -2276,20 +2276,31 @@ export async function joinTeamWithInvite(input: {
 
       if (existingUserError) throw existingUserError;
 
-      if (existingUser && role !== "admin") {
+      if (existingUser) {
         const { data: existingMemberships, error: membershipError } = await supabase
           .from("team_members")
           .select("team_id")
           .eq("user_id", existingUser.id);
 
         if (membershipError) throw membershipError;
-        const belongsToAnotherTeam = (existingMemberships ?? []).some(
-          (membership) => membership.team_id !== team.id
-        );
+        const memberTeamIds = [...new Set((existingMemberships ?? []).map((membership) => membership.team_id))];
+        let belongsToAnotherTeam = false;
+
+        if (memberTeamIds.length > 0) {
+          const { data: teamsInThisEvent, error: eventTeamError } = await supabase
+            .from("teams")
+            .select("id")
+            .eq("event_id", (team as Team).event_id)
+            .in("id", memberTeamIds);
+          if (eventTeamError) throw eventTeamError;
+          belongsToAnotherTeam = (teamsInThisEvent ?? []).some(
+            (memberTeam) => memberTeam.id !== team.id
+          );
+        }
 
         if (belongsToAnotherTeam) {
           throw new Error(
-            "このGitHubアカウントはすでに別のチームに所属しています。チームを変えたい場合は、運営に移動をお願いしてください。"
+            "このイベントではすでに別のチームに所属しています。別のハッカソンには同時に参加できます。チームを変えたい場合は、運営に移動をお願いしてください。"
           );
         }
       }
@@ -2347,15 +2358,18 @@ export async function joinTeamWithInvite(input: {
     (candidate) => candidate.github_username === githubUsername
   );
 
-  if (user && role !== "admin") {
+  if (user) {
     const userId = user.id;
-    const belongsToAnotherTeam = store.teamMembers.some(
-      (member) => member.user_id === userId && member.team_id !== team.id
-    );
+    const belongsToAnotherTeam = store.teamMembers.some((member) => {
+      if (member.user_id !== userId || member.team_id === team.id) return false;
+      return store.teams.some(
+        (memberTeam) => memberTeam.id === member.team_id && memberTeam.event_id === team.event_id
+      );
+    });
 
     if (belongsToAnotherTeam) {
       throw new Error(
-        "このGitHubアカウントはすでに別のチームに所属しています。チームを変えたい場合は、運営に移動をお願いしてください。"
+        "このイベントではすでに別のチームに所属しています。別のハッカソンには同時に参加できます。チームを変えたい場合は、運営に移動をお願いしてください。"
       );
     }
   }

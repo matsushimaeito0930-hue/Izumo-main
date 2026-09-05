@@ -46,4 +46,33 @@ describe("team invite onboarding", () => {
       })
     ).rejects.toThrow("すでに別のチームに所属");
   });
+
+  it("allows the same GitHub account to join a team in another event", async () => {
+    const firstInvite = await createTeamInvite({
+      teamName: "Parallel Event One",
+      githubRepo: "demo/parallel-event-one",
+      invitedBy: "HackRadar Admin",
+      eventId: "parallel-event-one"
+    });
+    const secondInvite = await createTeamInvite({
+      teamName: "Parallel Event Two",
+      githubRepo: "demo/parallel-event-two",
+      invitedBy: "HackRadar Admin",
+      eventId: "parallel-event-two"
+    });
+
+    const firstSession = await joinTeamWithInvite({
+      code: firstInvite.code,
+      displayName: "Parallel User",
+      githubUsername: "parallel-user"
+    });
+    const secondSession = await joinTeamWithInvite({
+      code: secondInvite.code,
+      displayName: "Parallel User",
+      githubUsername: "parallel-user"
+    });
+
+    expect(firstSession.eventId).toBe("parallel-event-one");
+    expect(secondSession.eventId).toBe("parallel-event-two");
+  });
 });
