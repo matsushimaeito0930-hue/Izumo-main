@@ -6,12 +6,13 @@ import {
   createTeamInviteForTeam,
   deleteEvent,
   getEvent,
+  isEventOwner,
   saveEvent
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-function requireAdmin() {
+async function requireEventOwner() {
   const identity = getCurrentIdentity();
 
   if (!isGitHubAuthConfigured()) return null; // ローカルデモは素通し
@@ -23,29 +24,40 @@ function requireAdmin() {
     );
   }
 
-  if (identity.role !== "admin") {
+  if (
+    identity.role !== "admin" ||
+    !(await isEventOwner({ eventId: identity.eventId, githubUsername: identity.login }))
+  ) {
     return NextResponse.json(
       { error: "この操作は運営のみです。" },
       { status: 403 }
     );
   }
 
-  return null;
+  const event = await getEvent(identity.eventId);
+  if (!event) {
+    return NextResponse.json({ error: "開くイベントを選択してください。" }, { status: 400 });
+  }
+
+  return { identity, event };
 }
 
 /** 現在のイベントと参加コードを返す。 */
 export async function GET() {
-  const denied = requireAdmin();
-  if (denied) return denied;
+  const access = await requireEventOwner();
+  if (!access || access instanceof NextResponse) {
+    return access ?? NextResponse.json({ error: "ログインが必要です。" }, { status: 401 });
+  }
 
-  const event = await getEvent();
-  return NextResponse.json({ event });
+  return NextResponse.json({ event: access.event });
 }
 
 /** イベント名を登録・変更する。イベント名を変えると全体コードも更新する。 */
 export async function POST(request: Request) {
-  const denied = requireAdmin();
-  if (denied) return denied;
+  const access = await requireEventOwner();
+  if (!access || access instanceof NextResponse) {
+    return access ?? NextResponse.json({ error: "ログインが必要です。" }, { status: 401 });
+  }
 
   const body = (await request.json().catch(() => ({}))) as {
     name?: string;
@@ -55,7 +67,7 @@ export async function POST(request: Request) {
   try {
     // チーム名だけを追加する用途にも同じ入口を使う。
     if (body.teamName) {
-      const team = await createTeamByName({ name: body.teamName });
+      const team = await createTeamByName({ name: body.teamName, eventId: access.event.id });
       const invite = await createTeamInviteForTeam({
         teamId: team.id,
         invitedBy: getCurrentIdentity()?.displayName ?? "HackRadar 運営"
@@ -70,7 +82,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const event = await saveEvent({ name: body.name });
+    const event = await saveEvent({ name: body.name, eventId: access.event.id });
     return NextResponse.json({ event });
   } catch (error) {
     return NextResponse.json(
@@ -87,11 +99,13 @@ export async function POST(request: Request) {
  * 画面側でも確認しているが、APIを直接叩かれた場合にも同じ関門を通す。
  */
 export async function DELETE(request: Request) {
-  const denied = requireAdmin();
-  if (denied) return denied;
+  const access = await requireEventOwner();
+  if (!access || access instanceof NextResponse) {
+    return access ?? NextResponse.json({ error: "ログインが必要です。" }, { status: 401 });
+  }
 
   const body = (await request.json().catch(() => ({}))) as { confirmCode?: string };
-  const current = await getEvent();
+  const current = access.event;
 
   if (!current) {
     return NextResponse.json(
@@ -110,7 +124,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    await deleteEvent();
+    await deleteEvent(access.event.id);
     return NextResponse.json({ ok: true, deletedName: current.name });
   } catch (error) {
     return NextResponse.json(

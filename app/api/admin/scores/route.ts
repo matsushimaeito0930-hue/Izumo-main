@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
+import { getActiveEventOwner } from "@/lib/event-access";
 import { getScoreConfig, saveScoreConfig } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +26,12 @@ function requireAdmin() {
 export async function GET() {
   const denied = requireAdmin();
   if (denied) return denied;
+  const access = await getActiveEventOwner();
+  if (!access) {
+    return NextResponse.json({ error: "このイベントを管理する権限がありません。" }, { status: 403 });
+  }
 
-  return NextResponse.json({ config: await getScoreConfig() });
+  return NextResponse.json({ config: await getScoreConfig(access.event.id) });
 }
 
 /**
@@ -38,11 +43,15 @@ export async function GET() {
 export async function POST(request: Request) {
   const denied = requireAdmin();
   if (denied) return denied;
+  const access = await getActiveEventOwner();
+  if (!access) {
+    return NextResponse.json({ error: "このイベントを管理する権限がありません。" }, { status: 403 });
+  }
 
   const body = (await request.json().catch(() => ({}))) as { config?: unknown };
 
   try {
-    const result = await saveScoreConfig(body.config);
+    const result = await saveScoreConfig(body.config, access.event.id);
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(

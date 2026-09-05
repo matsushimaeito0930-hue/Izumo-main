@@ -10,12 +10,15 @@ const fieldClass =
 
 const labelClass = "mb-1.5 block text-xs font-medium text-ink2";
 
+const categories = ["フロントエンド", "バックエンド", "リアルタイム通信", "UI/UX", "発表資料", "その他"];
+
 export function HelpComposer({
   teams,
   lockedTeamId,
   onSubmit
 }: {
   teams: Team[];
+  /** 参加者のチームはログイン情報から決まるため、画面で選ばせない。 */
   lockedTeamId?: string | null;
   onSubmit: (input: {
     teamId: string;
@@ -27,8 +30,10 @@ export function HelpComposer({
   const [teamId, setTeamId] = useState(lockedTeamId ?? teams[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [category, setCategory] = useState("フロントエンド");
+  const [category, setCategory] = useState(categories[0]);
+  const [customCategory, setCustomCategory] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (lockedTeamId) {
@@ -38,13 +43,22 @@ export function HelpComposer({
     }
   }, [lockedTeamId, teamId, teams]);
 
+  const selectedCategory = category === "その他" ? customCategory.trim() : category;
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
+    setError("");
     try {
-      await onSubmit({ teamId, title, body, category });
+      await onSubmit({ teamId, title, body, category: selectedCategory });
       setTitle("");
       setBody("");
+      setCategory(categories[0]);
+      setCustomCategory("");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "質問を投稿できませんでした。もう一度お試しください。"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -53,80 +67,95 @@ export function HelpComposer({
   return (
     <Panel
       title="わからないことを書く"
-      description="参加している人なら誰でも答えてくれます。"
+      description="困っていることを投稿すると、参加している人なら誰でも回答できます。"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        {!lockedTeamId && (
           <label className="block">
-            <span className={labelClass}>自分のチーム</span>
-            {lockedTeamId ? (
-              <div className={`flex h-10 items-center ${fieldClass} text-ink2`}>
-                {teams.find((team) => team.id === lockedTeamId)?.name ?? "自分のチーム"}
-              </div>
-            ) : (
-              <select
-                value={teamId}
-                onChange={(event) => setTeamId(event.target.value)}
-                disabled={teams.length === 0}
-                className={`h-10 ${fieldClass}`}
-              >
-                {teams.length === 0 && <option value="">チーム未登録</option>}
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </label>
-          <label className="block">
-            <span className={labelClass}>カテゴリ</span>
+            <span className={labelClass}>チーム</span>
             <select
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
+              value={teamId}
+              onChange={(event) => setTeamId(event.target.value)}
+              disabled={teams.length === 0}
               className={`h-10 ${fieldClass}`}
             >
-              <option>フロントエンド</option>
-              <option>バックエンド</option>
-              <option>リアルタイム通信</option>
-              <option>UI/UX</option>
-              <option>発表準備</option>
+              {teams.length === 0 && <option value="">チーム未登録</option>}
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
             </select>
           </label>
-        </div>
+        )}
+
         {teams.length === 0 && (
           <p className="rounded-xl border border-dashed border-lineStrong bg-sand/60 px-3 py-2.5 text-xs leading-5 text-muted">
             運営がチームを登録すると、質問を投稿できます。
           </p>
         )}
+
+        <label className="block">
+          <span className={labelClass}>カテゴリ</span>
+          <select
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            className={`h-10 ${fieldClass}`}
+          >
+            {categories.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+
+        {category === "その他" && (
+          <label className="block">
+            <span className={labelClass}>カテゴリを入力</span>
+            <input
+              value={customCategory}
+              onChange={(event) => setCustomCategory(event.target.value)}
+              required
+              maxLength={60}
+              placeholder="例：データベース設計"
+              className={`h-10 ${fieldClass}`}
+            />
+          </label>
+        )}
+
         <label className="block">
           <span className={labelClass}>ひとことで言うと</span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             required
-            placeholder="例）ログインしてもセッションが取れない"
+            maxLength={120}
+            placeholder="例：ログイン後もセッションが切れる"
             className={`h-10 ${fieldClass}`}
           />
         </label>
+
         <label className="block">
           <span className={labelClass}>くわしく</span>
           <textarea
             value={body}
             onChange={(event) => setBody(event.target.value)}
             required
+            maxLength={3000}
             rows={4}
-            placeholder="やりたいこと・試したこと・出ているエラーを書くと、答えが返ってきやすいです。"
+            placeholder="やりたいこと・試したこと・出ているエラーを書いてください。"
             className={`resize-none py-2 ${fieldClass}`}
           />
         </label>
+
+        {error && <p className="rounded-xl bg-hot/10 px-3 py-2 text-sm text-hot">{error}</p>}
+
         <button
           type="submit"
-          disabled={isSubmitting || !teamId}
+          disabled={isSubmitting || !teamId || !selectedCategory}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
         >
           <Send className="size-4" />
-          <span>{isSubmitting ? "送信中..." : "質問を投稿する"}</span>
+          <span>{isSubmitting ? "投稿中..." : "質問を投稿する"}</span>
         </button>
       </form>
     </Panel>

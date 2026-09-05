@@ -62,14 +62,21 @@ export async function POST(request: Request) {
     }
   }
 
-  const post = await createHelpPost({
-    teamId: body.teamId,
-    title: body.title,
-    body: body.body,
-    category: body.category,
-    authorName: identity?.displayName,
-    authorGithub: identity?.login
-  });
+  try {
+    const post = await createHelpPost({
+      teamId: body.teamId,
+      title: body.title,
+      body: body.body,
+      category: body.category,
+      authorName: identity?.displayName,
+      authorGithub: identity?.login
+    });
 
-  return NextResponse.json({ post });
+    return NextResponse.json({ post });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "質問を投稿できませんでした。" },
+      { status: 400 }
+    );
+  }
 }

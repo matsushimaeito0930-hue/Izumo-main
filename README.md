@@ -308,9 +308,25 @@ GITHUB_CLIENT_SECRET=
 AUTH_SECRET=
 ADMIN_GITHUB_LOGINS=
 
+# WakaTime OAuth（開発時間の個人・チーム集計）
+WAKATIME_CLIENT_ID=
+WAKATIME_CLIENT_SECRET=
+WAKATIME_OAUTH_CALLBACK_URL=http://localhost:3000/api/auth/wakatime/callback
+
 ENABLE_DEMO_MODE=true
 EXPRESS_PORT=4000
 ```
+
+## WakaTime作業時間連携
+
+ダッシュボードの「開発時間」から各参加者がWakaTimeを連携すると、イベント開始日から今日までの計測時間と、チームの合計人時を表示します。トークンはブラウザに返さず、Supabaseの`wakatime_connections`テーブルをサーバー側からのみ読み書きします。
+
+1. WakaTimeでOAuthアプリを作成し、Callback URLを`本番URL/api/auth/wakatime/callback`に設定する
+2. `WAKATIME_CLIENT_ID`、`WAKATIME_CLIENT_SECRET`、`WAKATIME_OAUTH_CALLBACK_URL`を環境変数に設定する
+3. `supabase/schema.sql`を再実行して`wakatime_connections`テーブルを作成する
+4. 参加者がダッシュボードの「WakaTimeを連携」を選ぶ
+
+WakaTimeに記録される全コーディング時間を合計します。チーム合計は、連携済みメンバー全員の人時の合算です。
 
 Supabaseの環境変数が未設定の場合は、メモリ上のシードデータで動作するため、ローカルでもそのままデモできます。
 

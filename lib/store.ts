@@ -25,6 +25,8 @@ import type {
   ChatChannel,
   ChatMessage,
   ContributorView,
+  DirectMessage,
+  DirectMessageContact,
   HackVerseState,
   ScoreConfig,
   HelpPost,
@@ -48,6 +50,7 @@ type MemoryStore = {
   helpPosts: HelpPost[];
   helpReplies: HelpReply[];
   messages: ChatMessage[];
+  directMessages: DirectMessage[];
   teamMembers: TeamMember[];
   teamInvites: TeamInvite[];
   event: HackEvent | null;
@@ -73,6 +76,7 @@ function cloneStore(): MemoryStore {
     teams: structuredClone(seedTeams),
     activities: structuredClone(seedActivities),
     messages: structuredClone(seedChatMessages),
+    directMessages: [],
     helpPosts: structuredClone(seedHelpPosts),
     helpReplies: structuredClone(seedHelpReplies),
     teamMembers: structuredClone(seedTeamMembers),
@@ -162,6 +166,7 @@ function withViews(
   const usersById = new Map(users.map((user) => [user.id, user]));
 
   const activityViews: ActivityView[] = activities
+    .filter((activity) => teamsById.has(activity.team_id))
     .map((activity) => ({
       ...activity,
       team_name: teamsById.get(activity.team_id)?.name ?? "Unknown Team"
@@ -176,6 +181,7 @@ function withViews(
   }
 
   const helpPostViews: HelpPostView[] = helpPosts
+    .filter((post) => teamsById.has(post.team_id))
     .map((post) => ({
       ...post,
       author_name: usersById.get(post.user_id)?.display_name ?? "匿名",
@@ -192,6 +198,7 @@ function withViews(
   // 誰がどのチームに入っているか。GitHubユーザー名が分かる人だけ載せる。
   const memberViews: TeamMemberView[] = teamMembers
     .map((member) => {
+      if (!teamsById.has(member.team_id)) return null;
       const user = usersById.get(member.user_id);
       if (!user) return null;
       return {
@@ -209,7 +216,10 @@ function withViews(
     activities: activityViews,
     helpPosts: helpPostViews,
     members: memberViews,
-    contributors: buildContributors(contributorActivities, memberViews),
+    contributors: buildContributors(
+      contributorActivities.filter((activity) => teamsById.has(activity.team_id)),
+      memberViews
+    ),
     messages: messages
       .slice()
       .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
@@ -232,11 +242,16 @@ function isMissingActorColumn(error: { message?: string } | null): boolean {
   return message.includes("actor_login") || message.includes("actor_avatar_url");
 }
 
-export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
+export async function getSupabaseHackVerseState(eventId?: string | null): Promise<HackVerseState> {
   const supabase = createServerSupabaseClient();
   if (!supabase) {
     throw new Error("Supabase is not configured.");
   }
+
+  const teamsQuery = supabase
+    .from("teams")
+    .select("id,event_id,name,github_repo,score,commit_count,house_level,created_at");
+  if (eventId) teamsQuery.eq("event_id", eventId);
 
   const [
     usersResult,
@@ -250,9 +265,7 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
   ] =
     await Promise.all([
       supabase.from("users").select("*"),
-      supabase
-        .from("teams")
-        .select("id,name,github_repo,score,commit_count,house_level,created_at"),
+      teamsQuery,
       supabase
         .from("activities")
         .select(ACTIVITY_COLUMNS)
@@ -300,29 +313,32 @@ export async function getSupabaseHackVerseState(): Promise<HackVerseState> {
       : (helpRepliesResult.data ?? seedHelpReplies)) as HelpReply[],
     (messagesResult.error
       ? []
-      : (messagesResult.data ?? seedChatMessages)) as ChatMessage[],
+      : ((messagesResult.data ?? seedChatMessages) as ChatMessage[])).filter(
+      (message) => !eventId || message.event_id === eventId
+    ),
     (teamMembersResult.error ? [] : (teamMembersResult.data ?? [])) as TeamMember[],
     (contributorResult.error ? [] : (contributorResult.data ?? [])) as Activity[]
   );
 }
 
-export async function getHackVerseState(): Promise<HackVerseState> {
+export async function getHackVerseState(eventId?: string | null): Promise<HackVerseState> {
   if (isSupabaseConfigured()) {
     try {
-      return await getSupabaseHackVerseState();
+      return await getSupabaseHackVerseState(eventId);
     } catch {
       // Keep local development usable when Supabase is unavailable.
     }
   }
 
   const store = getMemoryStore();
+  const teams = eventId ? store.teams.filter((team) => team.event_id === eventId) : store.teams;
   return withViews(
     store.users,
-    store.teams,
+    teams,
     store.activities,
     store.helpPosts,
     store.helpReplies,
-    store.messages,
+    store.messages.filter((message) => !eventId || message.event_id === eventId),
     store.teamMembers
   );
 }
@@ -361,7 +377,11 @@ function makeActivityMessage(
   return `${teamName} ${ACTIVITY_LABELS[type]}`;
 }
 
-async function findOrCreateSupabaseTeam(githubRepo: string, fallbackName: string) {
+async function findOrCreateSupabaseTeam(
+  githubRepo: string,
+  fallbackName: string,
+  eventId?: string
+) {
   const supabase = createServerSupabaseClient();
   if (!supabase) {
     return null;
@@ -371,6 +391,7 @@ async function findOrCreateSupabaseTeam(githubRepo: string, fallbackName: string
     .from("teams")
     .select("*")
     .eq("github_repo", githubRepo)
+    .eq("event_id", eventId ?? (await getEvent())?.id ?? "")
     .maybeSingle();
 
   if (selectError) {
@@ -383,6 +404,7 @@ async function findOrCreateSupabaseTeam(githubRepo: string, fallbackName: string
 
   const newTeam: Team = {
     id: randomUUID(),
+    event_id: eventId ?? (await getEvent())?.id ?? "memory-event",
     name: fallbackName,
     github_repo: githubRepo,
     score: 0,
@@ -423,15 +445,19 @@ async function findSupabaseTeam(githubRepo: string) {
   return (data as Team | null) ?? null;
 }
 
-function findOrCreateMemoryTeam(githubRepo: string, fallbackName: string): Team {
+function findOrCreateMemoryTeam(githubRepo: string, fallbackName: string, eventId?: string): Team {
   const store = getMemoryStore();
-  const existingTeam = store.teams.find((team) => team.github_repo === githubRepo);
+  const currentEventId = eventId ?? store.event?.id ?? "memory-event";
+  const existingTeam = store.teams.find(
+    (team) => team.github_repo === githubRepo && team.event_id === currentEventId
+  );
   if (existingTeam) {
     return existingTeam;
   }
 
   const newTeam: Team = {
     id: randomUUID(),
+    event_id: currentEventId,
     name: fallbackName,
     github_repo: githubRepo,
     score: 0,
@@ -667,8 +693,228 @@ export async function recordActivity(input: {
   };
 }
 
+/**
+ * GitHubログインした運営もDMの宛先にできるよう、最初にDM画面を開いた時点で
+ * 公開プロフィールだけを users に同期する。既存メンターの specialty は上書きしない。
+ */
+export async function syncDirectMessageProfile(input: {
+  githubUsername: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: UserRole;
+}): Promise<void> {
+  const githubUsername = input.githubUsername.trim();
+  if (!githubUsername) return;
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { error } = await supabase.from("users").upsert(
+        {
+          github_username: githubUsername,
+          display_name: input.displayName.trim() || githubUsername,
+          avatar_url: input.avatarUrl,
+          role: input.role
+        },
+        { onConflict: "github_username" }
+      );
+      if (error) throw error;
+      return;
+    }
+  }
+
+  const store = getMemoryStore();
+  const existing = store.users.find(
+    (user) => user.github_username.toLowerCase() === githubUsername.toLowerCase()
+  );
+  if (existing) {
+    existing.display_name = input.displayName.trim() || githubUsername;
+    existing.avatar_url = input.avatarUrl;
+    existing.role = input.role;
+    return;
+  }
+
+  store.users.push({
+    id: randomUUID(),
+    github_username: githubUsername,
+    display_name: input.displayName.trim() || githubUsername,
+    avatar_url: input.avatarUrl,
+    role: input.role,
+    specialty: null,
+    created_at: new Date().toISOString()
+  });
+}
+
+function dmRecipientRoles(role: UserRole): UserRole[] {
+  if (role === "participant") return ["mentor", "admin"];
+  if (role === "mentor") return ["participant", "admin"];
+  if (role === "admin") return ["participant", "mentor"];
+  return [];
+}
+
+function toDirectMessageContact(user: User): DirectMessageContact {
+  return {
+    github_username: user.github_username,
+    display_name: user.display_name,
+    avatar_url: user.avatar_url,
+    role: user.role,
+    specialty: user.specialty ?? null
+  };
+}
+
+/** 役割に応じて、DMを開始できる相手だけを返す。 */
+export async function getDirectMessageContacts(input: {
+  viewerLogin: string;
+  viewerRole: UserRole;
+}): Promise<DirectMessageContact[]> {
+  const allowedRoles = dmRecipientRoles(input.viewerRole);
+  if (allowedRoles.length === 0) return [];
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("users")
+        .select("github_username,display_name,avatar_url,role,specialty")
+        .in("role", allowedRoles)
+        .order("display_name", { ascending: true });
+      if (error) throw error;
+      return ((data ?? []) as DirectMessageContact[]).filter(
+        (user) => user.github_username.toLowerCase() !== input.viewerLogin.toLowerCase()
+      );
+    }
+  }
+
+  return getMemoryStore()
+    .users.filter(
+      (user) =>
+        allowedRoles.includes(user.role) &&
+        user.github_username.toLowerCase() !== input.viewerLogin.toLowerCase()
+    )
+    .map(toDirectMessageContact)
+    .sort((a, b) => a.display_name.localeCompare(b.display_name));
+}
+
+/** 当事者本人のDMだけを取得する。 */
+export async function getDirectMessages(
+  viewerLogin: string,
+  eventId?: string
+): Promise<DirectMessage[]> {
+  const normalizedLogin = viewerLogin.trim();
+  if (!normalizedLogin) return [];
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("direct_messages")
+        .select("*")
+        .or(`sender_login.ilike.${normalizedLogin},recipient_login.ilike.${normalizedLogin}`)
+        .eq("event_id", eventId ?? "")
+        .order("created_at", { ascending: true })
+        .limit(300);
+      if (error) throw error;
+      return (data ?? []) as DirectMessage[];
+    }
+  }
+
+  return getMemoryStore()
+    .directMessages.filter(
+      (message) =>
+        (!eventId || message.event_id === eventId) &&
+        (message.sender_login.toLowerCase() === normalizedLogin.toLowerCase() ||
+          message.recipient_login.toLowerCase() === normalizedLogin.toLowerCase())
+    )
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+}
+
+/** メンター・運営・参加者の間でだけ、1対1のDMを送信する。 */
+export async function createDirectMessage(input: {
+  eventId?: string;
+  senderLogin: string;
+  senderName: string;
+  senderRole: UserRole;
+  recipientLogin: string;
+  body: string;
+}): Promise<DirectMessage> {
+  const senderLogin = input.senderLogin.trim();
+  const recipientLogin = input.recipientLogin.trim();
+  const body = input.body.trim();
+  const eventId = input.eventId ?? (await getEvent())?.id ?? "memory-event";
+
+  if (!senderLogin || !recipientLogin || senderLogin.toLowerCase() === recipientLogin.toLowerCase()) {
+    throw new Error("DMの相手を選択してください。");
+  }
+  if (!body || body.length > 1000) {
+    throw new Error("メッセージは1〜1000文字で入力してください。");
+  }
+
+  const allowedRoles = dmRecipientRoles(input.senderRole);
+  if (allowedRoles.length === 0) {
+    throw new Error("この役割ではDMを利用できません。");
+  }
+
+  let recipient: Pick<User, "github_username" | "role"> | undefined;
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("users")
+        .select("github_username,role")
+        .ilike("github_username", recipientLogin)
+        .maybeSingle();
+      if (error) throw error;
+      recipient = data as Pick<User, "github_username" | "role"> | null ?? undefined;
+
+      if (!recipient || !allowedRoles.includes(recipient.role)) {
+        throw new Error("この相手にはDMを送れません。");
+      }
+
+      const message: DirectMessage = {
+        id: randomUUID(),
+        event_id: eventId,
+        sender_login: senderLogin,
+        recipient_login: recipient.github_username,
+        sender_name: input.senderName.trim() || senderLogin,
+        sender_role: input.senderRole,
+        body,
+        created_at: new Date().toISOString()
+      };
+      const { data: saved, error: insertError } = await supabase
+        .from("direct_messages")
+        .insert(message)
+        .select("*")
+        .single();
+      if (insertError || !saved) throw insertError ?? new Error("DMを保存できませんでした。");
+      return saved as DirectMessage;
+    }
+  }
+
+  const store = getMemoryStore();
+  recipient = store.users.find(
+    (user) => user.github_username.toLowerCase() === recipientLogin.toLowerCase()
+  );
+  if (!recipient || !allowedRoles.includes(recipient.role)) {
+    throw new Error("この相手にはDMを送れません。");
+  }
+
+  const message: DirectMessage = {
+    id: randomUUID(),
+    event_id: eventId,
+    sender_login: senderLogin,
+    recipient_login: recipient.github_username,
+    sender_name: input.senderName.trim() || senderLogin,
+    sender_role: input.senderRole,
+    body,
+    created_at: new Date().toISOString()
+  };
+  store.directMessages.push(message);
+  return message;
+}
+
 export async function createChatMessage(input: {
   channel: ChatChannel;
+  eventId?: string;
   teamId?: string;
   authorName: string;
   authorRole: ChatMessage["author_role"];
@@ -676,6 +922,7 @@ export async function createChatMessage(input: {
 }): Promise<ChatMessage> {
   const body = input.body.trim();
   const authorName = input.authorName.trim() || "HackRadar user";
+  const eventId = input.eventId ?? (await getEvent())?.id ?? "memory-event";
 
   if (!body || body.length > 500) {
     throw new Error("メッセージは1〜500文字で入力してください。");
@@ -691,6 +938,7 @@ export async function createChatMessage(input: {
   const message: ChatMessage = {
     id: randomUUID(),
     channel: input.channel,
+    event_id: eventId,
     team_id: input.teamId ?? null,
     author_name: authorName,
     author_role: input.authorRole,
@@ -747,7 +995,7 @@ export async function createHelpPost(input: {
       // ログイン済みならその本人を、そうでなければ既存の参加者を投稿者にする。
       let author: User | null = null;
       if (input.authorGithub) {
-        const { data } = await supabase
+        const { data, error: authorError } = await supabase
           .from("users")
           .upsert(
             {
@@ -758,14 +1006,20 @@ export async function createHelpPost(input: {
           )
           .select("*")
           .single();
+        if (authorError || !data) {
+          throw authorError ?? new Error("質問者の情報を保存できませんでした。");
+        }
         author = data as User | null;
       } else {
-        const { data } = await supabase
+        const { data, error: authorError } = await supabase
           .from("users")
           .select("*")
           .eq("role", "participant")
           .limit(1)
           .single();
+        if (authorError || !data) {
+          throw authorError ?? new Error("質問者の情報を取得できませんでした。");
+        }
         author = data as User | null;
       }
 
@@ -780,7 +1034,8 @@ export async function createHelpPost(input: {
         created_at: new Date().toISOString()
       };
 
-      await supabase.from("help_posts").insert(post);
+      const { error: insertError } = await supabase.from("help_posts").insert(post);
+      if (insertError) throw insertError;
       return {
         ...post,
         author_name: author?.display_name ?? input.authorName ?? "参加者",
@@ -961,21 +1216,101 @@ function makeJoinCode(): string {
 }
 
 /** 開催中のイベント（1件のみ運用）。未設定なら null。 */
-export async function getEvent(): Promise<HackEvent | null> {
+export async function getEvent(eventId?: string | null): Promise<HackEvent | null> {
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
-      const { data } = await supabase
-        .from("events")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const query = supabase.from("events").select("*");
+      const { data } = eventId
+        ? await query.eq("id", eventId).maybeSingle()
+        : await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (data) return data as HackEvent;
     }
   }
 
-  return getMemoryStore().event;
+  const event = getMemoryStore().event;
+  return !eventId || event?.id === eventId ? event : null;
+}
+
+export async function getEventByJoinCode(code: string | undefined): Promise<HackEvent | null> {
+  const joinCode = code?.trim().toUpperCase();
+  if (!joinCode) return null;
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .ilike("join_code", joinCode)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as HackEvent | null) ?? null;
+    }
+  }
+
+  const event = getMemoryStore().event;
+  return event?.join_code.toUpperCase() === joinCode ? event : null;
+}
+
+/** GitHubログインした人が、自分だけが管理できるイベントを作成する。 */
+export async function createEvent(input: {
+  name: string;
+  ownerGithubUsername: string;
+}): Promise<HackEvent> {
+  const name = input.name.trim();
+  const owner = input.ownerGithubUsername.trim();
+  if (!name || !owner) throw new Error("イベント名と主催者を確認してください。");
+
+  const event: HackEvent = {
+    id: randomUUID(),
+    name,
+    join_code: makeJoinCode(),
+    owner_github_username: owner,
+    created_at: new Date().toISOString()
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase.from("events").insert(event).select("*").single();
+      if (error || !data) throw error ?? new Error("イベントを作成できませんでした。");
+      return data as HackEvent;
+    }
+  }
+
+  getMemoryStore().event = event;
+  return event;
+}
+
+export async function isEventOwner(input: {
+  eventId: string | undefined;
+  githubUsername: string | undefined;
+}): Promise<boolean> {
+  if (!input.eventId || !input.githubUsername) return false;
+  const event = await getEvent(input.eventId);
+  return Boolean(
+    event && event.owner_github_username.toLowerCase() === input.githubUsername.toLowerCase()
+  );
+}
+
+export async function getEventsOwnedBy(githubUsername: string | undefined): Promise<HackEvent[]> {
+  const owner = githubUsername?.trim();
+  if (!owner) return [];
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .ilike("owner_github_username", owner)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as HackEvent[];
+    }
+  }
+  const event = getMemoryStore().event;
+  return event?.owner_github_username.toLowerCase() === owner.toLowerCase() ? [event] : [];
 }
 
 function resetMemoryEventData(store: MemoryStore) {
@@ -989,24 +1324,29 @@ function resetMemoryEventData(store: MemoryStore) {
 }
 
 async function resetSupabaseEventData(
-  supabase: NonNullable<ReturnType<typeof createServerSupabaseClient>>
+  supabase: NonNullable<ReturnType<typeof createServerSupabaseClient>>,
+  eventId: string
 ) {
   // teamsの削除は外部キーのcascadeで、チームに紐づく履歴もまとめて初期化する。
   const { error } = await supabase
     .from("teams")
     .delete()
-    .not("id", "is", null);
+    .eq("event_id", eventId);
   if (error) throw error;
 }
 
 /** イベント名を保存する。名前を変更したときはチームと進捗を新イベント用に初期化する。 */
-export async function saveEvent(input: { name: string }): Promise<HackEvent> {
+export async function saveEvent(input: {
+  name: string;
+  ownerGithubUsername?: string;
+  eventId?: string;
+}): Promise<HackEvent> {
   const name = input.name.trim();
   if (!name) throw new Error("イベント名を入力してください。");
 
-  const existing = await getEvent();
-  const shouldReset = Boolean(existing && existing.name !== name);
-  const joinCode = shouldReset ? makeJoinCode() : existing?.join_code ?? makeJoinCode();
+  const existing = await getEvent(input.eventId);
+  const shouldReset = false;
+  const joinCode = existing?.join_code ?? makeJoinCode();
 
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
@@ -1019,7 +1359,6 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
           .select("*")
           .single();
         if (!error && data) {
-          if (shouldReset) await resetSupabaseEventData(supabase);
           return data as HackEvent;
         }
       } else {
@@ -1027,6 +1366,7 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
           id: randomUUID(),
           name,
           join_code: makeJoinCode(),
+          owner_github_username: input.ownerGithubUsername?.trim() || "test-owner",
           created_at: new Date().toISOString()
         };
         const { data, error } = await supabase
@@ -1045,6 +1385,8 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
     id: existing?.id ?? randomUUID(),
     name,
     join_code: joinCode,
+    owner_github_username:
+      existing?.owner_github_username ?? input.ownerGithubUsername?.trim() ?? "test-owner",
     created_at: existing?.created_at ?? new Date().toISOString()
   };
   return store.event;
@@ -1056,9 +1398,9 @@ export async function saveEvent(input: { name: string }): Promise<HackEvent> {
  * イベントに設定があればそれを、無ければ既定値を返す。
  * 保存されている値が壊れていても normalizeScoreConfig が既定値で埋める。
  */
-export async function getScoreConfig(): Promise<ScoreConfig> {
+export async function getScoreConfig(eventId?: string): Promise<ScoreConfig> {
   try {
-    const event = await getEvent();
+    const event = await getEvent(eventId);
     if (!event?.score_config) return { ...DEFAULT_SCORE_BY_ACTIVITY };
     return normalizeScoreConfig(event.score_config);
   } catch {
@@ -1166,13 +1508,13 @@ export async function recalculateScores(config: ScoreConfig): Promise<{
 }
 
 /** 配点を保存し、過去の記録も同じ配点でそろえる。 */
-export async function saveScoreConfig(input: unknown): Promise<{
+export async function saveScoreConfig(input: unknown, eventId?: string): Promise<{
   config: ScoreConfig;
   updatedActivities: number;
   updatedTeams: number;
 }> {
   const config = normalizeScoreConfig(input);
-  const event = await getEvent();
+  const event = await getEvent(eventId);
 
   if (!event) {
     throw new Error("先にイベントを作成してください。");
@@ -1213,8 +1555,8 @@ export async function saveScoreConfig(input: unknown): Promise<{
  * 招待コードも無効になる。取り返しがつかないので、呼び出し側で
  * イベント名の入力を求めてから実行すること。
  */
-export async function deleteEvent(): Promise<void> {
-  const event = await getEvent();
+export async function deleteEvent(eventId?: string): Promise<void> {
+  const event = await getEvent(eventId);
   if (!event) {
     throw new Error("削除するイベントがありません。");
   }
@@ -1223,14 +1565,12 @@ export async function deleteEvent(): Promise<void> {
     const supabase = createServerSupabaseClient();
     if (supabase) {
       // 先にチームを消す。所属・部屋番号・活動履歴はcascadeで一緒に消える。
-      await resetSupabaseEventData(supabase);
+      await resetSupabaseEventData(supabase, event.id);
 
       const { error } = await supabase.from("events").delete().eq("id", event.id);
       if (error) throw error;
 
       // チームに紐づかない記録（お知らせ、メンター登録）も残さない。
-      await supabase.from("chat_messages").delete().is("team_id", null);
-      await supabase.from("users").delete().neq("role", "admin");
       return;
     }
   }
@@ -1250,13 +1590,42 @@ export async function verifyJoinCode(code: string | undefined): Promise<boolean>
 
 /** イベント参加コードまたはチーム招待コードを検証する。 */
 export async function verifyMentorInviteCode(code: string | undefined): Promise<boolean> {
-  if (await verifyJoinCode(code)) return true;
+  if (await getEventByJoinCode(code)) return true;
 
   const normalized = (code ?? "").trim().toUpperCase();
   if (!normalized) return false;
 
   const invites = await getTeamInvites();
   return invites.some((invite) => invite.code.toUpperCase() === normalized);
+}
+
+async function getEventIdForMentorCode(code: string): Promise<string | undefined> {
+  const event = await getEventByJoinCode(code);
+  if (event) return event.id;
+
+  const normalized = code.trim().toUpperCase();
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: invite } = await supabase
+        .from("team_invites")
+        .select("team_id")
+        .eq("code", normalized)
+        .maybeSingle();
+      if (!invite) return undefined;
+      const { data: team } = await supabase
+        .from("teams")
+        .select("event_id")
+        .eq("id", invite.team_id)
+        .maybeSingle();
+      return (team as { event_id?: string } | null)?.event_id;
+    }
+  }
+
+  const invite = getMemoryStore().teamInvites.find((item) => item.code === normalized);
+  return invite
+    ? getMemoryStore().teams.find((team) => team.id === invite.team_id)?.event_id
+    : undefined;
 }
 
 /** 運営が配った招待コードでメンターとして登録する。メンターはチームに所属しない。 */
@@ -1282,6 +1651,8 @@ export async function joinMentorByCode(input: {
       "招待コードが違います。イベント参加コードまたはチーム招待コードを確認してください。"
     );
   }
+  const eventId = await getEventIdForMentorCode(code);
+  if (!eventId) throw new Error("このコードのイベントが見つかりません。");
 
   const role: UserRole = input.role === "admin" ? "admin" : "mentor";
 
@@ -1308,6 +1679,7 @@ export async function joinMentorByCode(input: {
         role,
         displayName: data.display_name,
         githubUsername: data.github_username,
+        eventId,
         specialty,
         inviteCode: code
       };
@@ -1340,14 +1712,17 @@ export async function joinMentorByCode(input: {
     role,
     displayName,
     githubUsername,
+    eventId,
     specialty,
     inviteCode: code
   };
 }
 
 /** 運営がチーム名だけ登録する。リポジトリは参加者があとから紐づける。 */
-export async function createTeamByName(input: { name: string }): Promise<Team> {
+export async function createTeamByName(input: { name: string; eventId?: string }): Promise<Team> {
   const name = input.name.trim();
+  const eventId = input.eventId ?? (await getEvent())?.id;
+  if (!eventId) throw new Error("イベントを選択してください。");
   if (!name) throw new Error("チーム名を入力してください。");
 
   if (isSupabaseConfigured()) {
@@ -1357,11 +1732,13 @@ export async function createTeamByName(input: { name: string }): Promise<Team> {
         .from("teams")
         .select("*")
         .eq("name", name)
+        .eq("event_id", eventId)
         .maybeSingle();
       if (existing) throw new Error("同じ名前のチームがすでにあります。");
 
       const team: Team = {
         id: randomUUID(),
+        event_id: eventId,
         name,
         github_repo: null,
         score: 0,
@@ -1376,12 +1753,13 @@ export async function createTeamByName(input: { name: string }): Promise<Team> {
   }
 
   const store = getMemoryStore();
-  if (store.teams.some((team) => team.name === name)) {
+  if (store.teams.some((team) => team.event_id === eventId && team.name === name)) {
     throw new Error("同じ名前のチームがすでにあります。");
   }
 
   const team: Team = {
     id: randomUUID(),
+    event_id: eventId,
     name,
     github_repo: null,
     score: 0,
@@ -1520,23 +1898,26 @@ function inviteViews(teams: Team[], invites: TeamInvite[]): TeamInviteView[] {
   const teamsById = new Map(teams.map((team) => [team.id, normalizeTeam(team)]));
 
   return invites
-    .map((invite) => {
+    .flatMap((invite) => {
       const team = teamsById.get(invite.team_id);
-      return {
+      if (!team) return [];
+      return [{
         ...invite,
-        team_name: team?.name ?? "Unknown Team",
-        github_repo: team?.github_repo ?? ""
-      };
+        team_name: team.name,
+        github_repo: team.github_repo
+      }];
     })
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
-export async function getTeamInvites(): Promise<TeamInviteView[]> {
+export async function getTeamInvites(eventId?: string | null): Promise<TeamInviteView[]> {
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
+      const teamsQuery = supabase.from("teams").select("*");
+      if (eventId) teamsQuery.eq("event_id", eventId);
       const [teamsResult, invitesResult] = await Promise.all([
-        supabase.from("teams").select("*"),
+        teamsQuery,
         supabase
           .from("team_invites")
           .select("*")
@@ -1553,13 +1934,29 @@ export async function getTeamInvites(): Promise<TeamInviteView[]> {
   }
 
   const store = getMemoryStore();
-  return inviteViews(store.teams, store.teamInvites);
+  return inviteViews(
+    eventId ? store.teams.filter((team) => team.event_id === eventId) : store.teams,
+    store.teamInvites
+  );
+}
+
+export async function getTeamById(teamId: string): Promise<Team | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase.from("teams").select("*").eq("id", teamId).maybeSingle();
+      if (error) throw error;
+      return (data as Team | null) ?? null;
+    }
+  }
+  return getMemoryStore().teams.find((team) => team.id === teamId) ?? null;
 }
 
 export async function createTeamInvite(input: {
   teamName: string;
   githubRepo: string;
   invitedBy: string;
+  eventId?: string;
 }): Promise<TeamInviteView> {
   const teamName = input.teamName.trim();
   const githubRepo = input.githubRepo.trim();
@@ -1570,13 +1967,13 @@ export async function createTeamInvite(input: {
   }
 
   if (isSupabaseConfigured()) {
-    const team = await findOrCreateSupabaseTeam(githubRepo, teamName);
+    const team = await findOrCreateSupabaseTeam(githubRepo, teamName, input.eventId);
     if (team) {
       return createTeamInviteForTeam({ teamId: team.id, invitedBy });
     }
   }
 
-  const team = findOrCreateMemoryTeam(githubRepo, teamName);
+  const team = findOrCreateMemoryTeam(githubRepo, teamName, input.eventId);
   return createTeamInviteForTeam({ teamId: team.id, invitedBy });
 }
 
@@ -1926,6 +2323,7 @@ export async function joinTeamWithInvite(input: {
         role,
         displayName,
         githubUsername,
+        eventId: (team as Team).event_id,
         teamId: team.id,
         teamName: team.name,
         inviteCode: code
@@ -1990,6 +2388,7 @@ export async function joinTeamWithInvite(input: {
     role,
     displayName,
     githubUsername,
+    eventId: team.event_id,
     teamId: team.id,
     teamName: team.name,
     inviteCode: code

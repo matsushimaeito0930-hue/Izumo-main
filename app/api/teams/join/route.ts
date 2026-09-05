@@ -1,15 +1,42 @@
 import { NextResponse } from "next/server";
-import { isGitHubAuthConfigured } from "@/lib/github-auth";
+import {
+  isGitHubAuthConfigured,
+  SESSION_COOKIE,
+  SESSION_MAX_AGE,
+  serializeIdentity,
+  type GitHubIdentity
+} from "@/lib/github-auth";
 import { ensureRepoWebhook, type WebhookSetupResult } from "@/lib/github-webhook-setup";
 import { getCurrentIdentity } from "@/lib/session";
 import {
-  getEvent,
+  getEventByJoinCode,
   joinTeamWithInvite,
   setTeamRepo,
   verifyJoinCode
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
+
+function setEventSession(
+  response: NextResponse,
+  identity: GitHubIdentity | null,
+  eventId: string | undefined,
+  role: "participant" | "mentor" | "admin" | "judge"
+) {
+  if (!identity || !eventId) return response;
+  response.cookies.set(
+    SESSION_COOKIE,
+    serializeIdentity({ ...identity, role, eventId }),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: SESSION_MAX_AGE
+    }
+  );
+  return response;
+}
 
 export async function POST(request: Request) {
   const identity = getCurrentIdentity();
@@ -48,12 +75,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const event = await getEvent();
+  const event = await getEventByJoinCode(body.eventCode);
   const roomCode = body.joinCode.trim().toUpperCase();
   const eventCode = body.eventCode?.trim().toUpperCase() ?? "";
 
   // 招待コードでイベントを特定する。将来ハッカソンを複数動かしたときに、
   // 部屋番号だけでは別イベントの部屋に入れてしまうため、ここで先に絞る。
+  if (body.eventCode?.trim() && !event) {
+    return NextResponse.json(
+      { error: "イベント参加コードが違います。主催者から配られたコードを確認してください。" },
+      { status: 403 }
+    );
+  }
+
   if (event) {
     if (!eventCode) {
       return NextResponse.json(
@@ -86,7 +120,8 @@ export async function POST(request: Request) {
       code: body.joinCode,
       displayName,
       githubUsername,
-      role: identity?.role
+      // 招待から入るイベントでは、以前の主催者ロールを引き継がない。
+      role: "participant"
     });
 
     // リポジトリは任意。指定があればこの場で紐づけ、Webhookも自動登録する。
@@ -103,26 +138,38 @@ export async function POST(request: Request) {
         });
       } catch (repoError) {
         // 参加自体は成立させ、リポジトリはあとから設定してもらう。
-        return NextResponse.json({
+        const response = NextResponse.json({
           session: {
             ...session,
-            role: identity?.role === "admin" ? "admin" : session.role
+            role: "participant"
           },
           repoWarning:
             repoError instanceof Error
               ? repoError.message
               : "リポジトリを設定できませんでした。"
         });
+        return setEventSession(
+          response,
+          identity,
+          session.eventId,
+          "participant"
+        );
       }
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       session: {
         ...session,
-        role: identity?.role === "admin" ? "admin" : session.role
+        role: "participant"
       },
       webhook
     });
+    return setEventSession(
+      response,
+      identity,
+      session.eventId,
+      "participant"
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "チームに参加できませんでした。" },

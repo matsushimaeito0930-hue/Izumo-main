@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       // GitHubログイン済みの人がメンター登録した場合は、そのまま権限だけ変える。
       response.cookies.set(
         SESSION_COOKIE,
-        serializeIdentity({ ...identity, role: "mentor" }),
+        serializeIdentity({ ...identity, role: "mentor", eventId: session.eventId }),
         cookieOptions
       );
     } else if (!identity) {
@@ -70,6 +70,7 @@ export async function POST(request: Request) {
           displayName,
           avatarUrl: null,
           role: "mentor",
+          eventId: session.eventId,
           issuedAt: Math.floor(Date.now() / 1000)
         }),
         cookieOptions

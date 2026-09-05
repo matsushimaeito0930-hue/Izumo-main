@@ -7,7 +7,7 @@ export async function Shell({ children }: { children: React.ReactNode }) {
 
   // 参加コードは運営にしか渡さない。参加者のHTMLには一切含めない。
   const joinCode =
-    identity?.role === "admin" ? ((await getEvent())?.join_code ?? null) : null;
+    identity?.role === "admin" ? ((await getEvent(identity.eventId))?.join_code ?? null) : null;
 
   return (
     <main className="min-h-screen bg-paper">

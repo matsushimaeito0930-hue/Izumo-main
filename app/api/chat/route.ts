@@ -24,6 +24,12 @@ export async function POST(request: Request) {
       { status: 401 }
     );
   }
+  if (identity && !identity.eventId) {
+    return NextResponse.json(
+      { error: "開くイベントを選択してください。" },
+      { status: 400 }
+    );
+  }
 
   const body = (await request.json().catch(() => ({}))) as {
     channel?: ChatChannel;
@@ -79,6 +85,7 @@ export async function POST(request: Request) {
   try {
     const message = await createChatMessage({
       channel: body.channel,
+      eventId: identity?.eventId,
       teamId: body.teamId,
       // ログイン済みなら投稿者名はcookieの本人情報で固定する。
       authorName: identity?.displayName ?? (body.authorName?.trim() || "HackRadar user"),

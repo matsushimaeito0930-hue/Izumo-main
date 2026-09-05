@@ -75,6 +75,9 @@ git push
 | `GITHUB_CLIENT_ID` | ● | 手順4で発行 |
 | `GITHUB_CLIENT_SECRET` | ● | 手順4で発行 |
 | `AUTH_SECRET` | ● | `openssl rand -hex 32` で生成した値 |
+| `WAKATIME_CLIENT_ID` | ○ | WakaTime OAuth AppのClient ID |
+| `WAKATIME_CLIENT_SECRET` | ○ | WakaTime OAuth AppのClient Secret |
+| `WAKATIME_OAUTH_CALLBACK_URL` | ○ | `本番URL/api/auth/wakatime/callback` |
 | `GITHUB_OAUTH_CALLBACK_URL` | ● | `本番URL/api/auth/github/callback` |
 | `APP_BASE_URL` | ✅ | Webhookの自動登録先にするドメイン（例 `https://izumo-main.vercel.app`、末尾スラッシュなし） |
 | `GITHUB_WEBHOOK_SECRET` | ● | 自分で決めた長い文字列（手順5で使う） |

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { deleteTeam, moveTeamMember, removeTeamMember, updateTeam } from "@/lib/store";
+import { getActiveEventOwner } from "@/lib/event-access";
+import { deleteTeam, getTeamById, moveTeamMember, removeTeamMember, updateTeam } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,11 @@ export async function PATCH(
 ) {
   const denied = requireAdmin();
   if (denied) return denied;
+  const access = await getActiveEventOwner();
+  const team = await getTeamById(params.id);
+  if (!access || !team || team.event_id !== access.event.id) {
+    return NextResponse.json({ error: "このイベントのチームではありません。" }, { status: 403 });
+  }
 
   const body = (await request.json().catch(() => ({}))) as {
     name?: string;
@@ -43,6 +49,10 @@ export async function PATCH(
     }
 
     if (body.moveMember) {
+      const destination = await getTeamById(body.moveMember.toTeamId);
+      if (!destination || destination.event_id !== access.event.id) {
+        return NextResponse.json({ error: "移動先のチームが違います。" }, { status: 400 });
+      }
       await moveTeamMember({
         githubUsername: body.moveMember.githubUsername,
         fromTeamId: params.id,
@@ -72,6 +82,11 @@ export async function DELETE(
 ) {
   const denied = requireAdmin();
   if (denied) return denied;
+  const access = await getActiveEventOwner();
+  const team = await getTeamById(params.id);
+  if (!access || !team || team.event_id !== access.event.id) {
+    return NextResponse.json({ error: "このイベントのチームではありません。" }, { status: 403 });
+  }
 
   try {
     await deleteTeam(params.id);

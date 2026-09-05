@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { SESSION_COOKIE, SESSION_MAX_AGE, serializeIdentity } from "@/lib/github-auth";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
 import { joinTeamWithInvite } from "@/lib/store";
@@ -40,15 +41,34 @@ export async function POST(request: Request) {
       code: body.code,
       displayName,
       githubUsername,
-      role: identity?.role
+      // 招待リンクでの参加は、以前の主催者ロールを引き継がない。
+      role: "participant"
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       session: {
         ...session,
-        role: identity?.role === "admin" ? "admin" : session.role
+        role: "participant"
       }
     });
+    if (identity) {
+      response.cookies.set(
+        SESSION_COOKIE,
+        serializeIdentity({
+          ...identity,
+          role: "participant",
+          eventId: session.eventId
+        }),
+        {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          maxAge: SESSION_MAX_AGE
+        }
+      );
+    }
+    return response;
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "チームに参加できませんでした。" },

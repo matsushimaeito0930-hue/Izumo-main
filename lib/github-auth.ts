@@ -20,6 +20,8 @@ export type GitHubIdentity = {
   avatarUrl: string | null;
   role: UserRole;
   issuedAt: number;
+  /** 現在開いているイベント。イベントごとの権限判定とデータ取得に使う。 */
+  eventId?: string;
   /**
    * リポジトリ一覧の取得に使うGitHubのアクセストークン。
    * httpOnly cookieの中にしか置かず、クライアントへは一切返さない。
@@ -51,22 +53,12 @@ function getAuthSecret(): string {
   return secret;
 }
 
-function parseLogins(value: string | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-/** 環境変数のallowlistでロールを決める。該当しなければ参加者。 */
+/**
+ * GitHub アカウント自体には主催者権限を持たせない。
+ * 主催者かどうかは、選択したイベントの owner と照合して決める。
+ */
 export function resolveRole(login: string): UserRole {
-  const normalized = login.toLowerCase();
-
-  if (parseLogins(process.env.ADMIN_GITHUB_LOGINS).includes(normalized)) {
-    return "admin";
-  }
-
+  void login;
   return "participant";
 }
 
@@ -93,6 +85,7 @@ type SessionClaims = {
   name: string;
   avatar: string | null;
   role: UserRole;
+  eventId?: string;
   gh?: string;
   scp?: string;
 };
@@ -114,6 +107,7 @@ export function serializeIdentity(identity: GitHubIdentity): string {
     name: identity.displayName,
     avatar: identity.avatarUrl,
     role: identity.role,
+    eventId: identity.eventId,
     gh: identity.accessToken,
     scp: identity.scopes
   };
@@ -176,6 +170,7 @@ export function parseIdentity(token: string | undefined): GitHubIdentity | null 
       displayName: claims.name,
       avatarUrl: claims.avatar,
       role: claims.role,
+      eventId: claims.eventId,
       issuedAt: claims.iat,
       accessToken: claims.gh,
       scopes: claims.scp

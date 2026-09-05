@@ -85,7 +85,7 @@ export function StaffChat({
   if (!announcementOnly && !isStaff && !activeTeam) {
     return (
       <Panel
-        title="運営に相談する"
+        title="運営へのチーム相談"
         description="チームに参加すると、運営と直接やり取りできる部屋が開きます。"
       >
         <p className="rounded-xl border border-line bg-paper px-3 py-6 text-center text-sm text-muted shadow-inset">
@@ -97,13 +97,13 @@ export function StaffChat({
 
   return (
     <Panel
-      title={announcementOnly ? "お知らせ" : "運営に相談する"}
+      title={announcementOnly ? "お知らせ" : "運営へのチーム相談"}
       description={
         announcementOnly
           ? "運営から全チームに共有するメッセージです。"
           : isStaff
           ? "各チームからの相談がここに届きます。チームを切り替えて返信してください。"
-          : "掲示板に書きにくいことは、ここで運営に直接聞けます。"
+          : "チーム全体に関わることは、ここで運営へ相談できます。メンターへの個別相談は下の個人DMを使ってください。"
       }
       action={
         announcementOnly ? null : isStaff ? (

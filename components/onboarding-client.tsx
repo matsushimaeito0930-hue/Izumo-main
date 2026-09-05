@@ -40,6 +40,17 @@ type Viewer = {
   role: UserRole;
 };
 
+/** GitHub の追加認可で画面を離れる間だけ保持する、参加フォームの入力値。 */
+type ParticipantDraft = {
+  joinCode: string;
+  roomCode: string;
+  githubRepo: string;
+  manualRepo: boolean;
+  pickedRole: OnboardingRole | null;
+};
+
+const participantDraftStorageKey = "hackverse-participant-draft";
+
 const roleLabels: Record<UserRole, string> = {
   participant: "参加者",
   mentor: "メンター",
@@ -76,12 +87,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 /** 運営向けの操作は普段畳んでおく。 */
 function Collapsible({
   title,
-  children
+  children,
+  openByDefault = false
 }: {
   title: string;
   children: React.ReactNode;
+  /** イベント作成直後など、次に行う操作を迷わせないために開いておく。 */
+  openByDefault?: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(openByDefault);
+
+  useEffect(() => {
+    if (openByDefault) setIsOpen(true);
+  }, [openByDefault]);
 
   return (
     <div className="rounded-2xl border border-line/70 bg-surface shadow-soft">
@@ -149,6 +167,7 @@ export function OnboardingClient({
   initialEvent,
   initialTeams,
   initialMembers = [],
+  ownedEvents = [],
   authConfigured,
   viewer
 }: {
@@ -157,6 +176,7 @@ export function OnboardingClient({
   initialTeams: Team[];
   /** 運営がメンバーの所属を直せるように、誰がどのチームにいるかを渡す。 */
   initialMembers?: TeamMemberView[];
+  ownedEvents?: HackEvent[];
   authConfigured: boolean;
   viewer: Viewer | null;
 }) {
@@ -166,6 +186,7 @@ export function OnboardingClient({
   const [teams, setTeams] = useState(initialTeams);
   const [members, setMembers] = useState(initialMembers);
   const [hackEvent, setHackEvent] = useState(initialEvent);
+  const [myEvents] = useState(ownedEvents);
   const [eventName, setEventName] = useState(initialEvent?.name ?? "");
   // joinCode はイベントの招待コード、roomCode はチームの部屋番号。
   // 複数のハッカソンを動かしたときに部屋番号が衝突しないよう、参加時は両方もらう。
@@ -193,6 +214,7 @@ export function OnboardingClient({
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [webhook, setWebhook] = useState<WebhookResult | null>(null);
+  const [openAdminSetup, setOpenAdminSetup] = useState(false);
 
   // GitHubログイン未設定のローカル環境だけ、手入力での参加を許す。
   const manualEntry = !authConfigured;
@@ -217,11 +239,39 @@ export function OnboardingClient({
       setPickedRole(sharedRole);
     }
 
+    // 「プライベートも表示する」は GitHub の認可画面を経由する。
+    // URL に含めない入力値を、戻ってきたときに一度だけ復元する。
+    try {
+      const savedDraft = window.sessionStorage.getItem(participantDraftStorageKey);
+      if (savedDraft) {
+        const draft = JSON.parse(savedDraft) as Partial<ParticipantDraft>;
+        if (!sharedCode && typeof draft.joinCode === "string") setJoinCode(draft.joinCode);
+        if (!sharedRoom && typeof draft.roomCode === "string") setRoomCode(draft.roomCode);
+        if (typeof draft.githubRepo === "string") setGithubRepo(draft.githubRepo);
+        if (typeof draft.manualRepo === "boolean") setManualRepo(draft.manualRepo);
+        if (!sharedRole && draft.pickedRole === "participant") setPickedRole("participant");
+        window.sessionStorage.removeItem(participantDraftStorageKey);
+      }
+    } catch {
+      // 保存領域が使えない場合でも、認可そのものは続ける。
+    }
+
     const authError = searchParams.get("auth_error");
     if (authError) {
       setMessage(authErrorMessages[authError] ?? "ログインに失敗しました。");
     }
   }, [initialInvites, searchParams]);
+
+  function preserveParticipantDraft() {
+    const draft: ParticipantDraft = {
+      joinCode,
+      roomCode,
+      githubRepo,
+      manualRepo,
+      pickedRole
+    };
+    window.sessionStorage.setItem(participantDraftStorageKey, JSON.stringify(draft));
+  }
 
   // 運営としてログインしている場合だけ、選択用にリポジトリ一覧を取りに行く。
   useEffect(() => {
@@ -308,6 +358,61 @@ export function OnboardingClient({
       setMessage(`参加コード ${payload.event.join_code} を発行しました。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存に失敗しました。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function createOwnEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: eventName })
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        event?: HackEvent;
+        error?: string;
+      };
+      if (!response.ok || !payload.event) {
+        throw new Error(payload.error ?? "イベントを作成できませんでした。");
+      }
+      saveSession({
+        role: "admin",
+        displayName: viewer?.displayName ?? "主催者",
+        githubUsername: viewer?.login,
+        eventId: payload.event.id,
+        eventName: payload.event.name
+      });
+      // 主催者は参加者ではない。まずチームを登録できる運営画面を表示する。
+      setOpenAdminSetup(true);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "イベントを作成できませんでした。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function openOwnedEvent(eventId: string) {
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/events/activate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ eventId })
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "イベントを開けませんでした。");
+      // 再び主催するイベントを開く場合も、運営設定を起点にする。
+      setOpenAdminSetup(true);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "イベントを開けませんでした。");
     } finally {
       setIsBusy(false);
     }
@@ -753,13 +858,45 @@ export function OnboardingClient({
                     </p>
                   </div>
                 ) : (
-                  <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
-                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
-                    <span>
-                      このGitHubアカウントは運営として登録されていません。
-                      運営に <code className="font-mono">ADMIN_GITHUB_LOGINS</code> へ
-                      @{viewer?.login} を追加してもらってください。
-                    </span>
+                  <div className="space-y-4">
+                    <form onSubmit={createOwnEvent} className="space-y-3 rounded-xl border border-line bg-paper p-4 shadow-inset">
+                      <p className="text-sm leading-6 text-ink2">
+                        新しいハッカソンを作成すると、あなたがそのイベントだけの主催者になります。
+                      </p>
+                      <Field label="イベント名">
+                        <input
+                          value={eventName}
+                          onChange={(event) => setEventName(event.target.value)}
+                          className={inputClass}
+                          placeholder="例：秋のハッカソン 2026"
+                          required
+                        />
+                      </Field>
+                      <button type="submit" disabled={isBusy} className={primaryButtonClass}>
+                        <Plus className="size-4" />
+                        このイベントを主催する
+                      </button>
+                    </form>
+
+                    {myEvents.length > 0 && (
+                      <div className="rounded-xl border border-line bg-paper p-4 shadow-inset">
+                        <p className="text-sm font-bold text-ink">自分が主催しているイベント</p>
+                        <div className="mt-3 space-y-2">
+                          {myEvents.map((event) => (
+                            <button
+                              key={event.id}
+                              type="button"
+                              onClick={() => void openOwnedEvent(event.id)}
+                              disabled={isBusy}
+                              className="flex w-full items-center justify-between rounded-lg border border-line px-3 py-2 text-left text-sm text-ink2 transition hover:bg-surface disabled:opacity-50"
+                            >
+                              <span>{event.name}</span>
+                              <span className="font-mono text-xs text-muted">{event.join_code}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               ) : pickedRole === "judge" ? (
@@ -930,6 +1067,7 @@ export function OnboardingClient({
                         {!canListPrivate && (
                           <a
                             href="/api/auth/github?private=1&return_to=%2F%3Frole%3Dparticipant"
+                            onClick={preserveParticipantDraft}
                             className="text-xs text-pulse underline underline-offset-2"
                           >
                             プライベートも表示する
@@ -984,7 +1122,10 @@ export function OnboardingClient({
         </div>
 
         {canManage && pickedRole === "admin" && (
-          <Collapsible title="運営の方：イベントとチームを登録する">
+          <Collapsible
+            title="運営の方：イベントとチームを登録する"
+            openByDefault={openAdminSetup}
+          >
             <form onSubmit={saveEventName} className="space-y-4">
               <Field label="イベント名">
                 <input

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createChatMessage, createTeamByName, joinTeamByName } from "@/lib/store";
+import { createChatMessage, createTeamByName, joinTeamByName, saveEvent } from "@/lib/store";
 
 describe("operator participation", () => {
   it("keeps the admin role when the operator joins a team", async () => {
+    await saveEvent({ name: "Operator Test Event" });
     const team = await createTeamByName({ name: "Operator Test Team" });
 
     const session = await joinTeamByName({

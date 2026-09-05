@@ -147,7 +147,8 @@ export function useHackVerseState(initialState: HackVerseState) {
       });
 
       if (!response.ok) {
-        throw new Error("Help post failed.");
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? "質問を投稿できませんでした。");
       }
 
       await refresh();

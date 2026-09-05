@@ -28,6 +28,7 @@ export type User = {
 
 export type Team = {
   id: string;
+  event_id: string;
   name: string;
   /** 参加者があとから紐づけるため、未設定（null）を許す。 */
   github_repo: string | null;
@@ -48,6 +49,7 @@ export type HackEvent = {
   id: string;
   name: string;
   join_code: string;
+  owner_github_username: string;
   /** 未設定なら既定の配点を使う。 */
   score_config?: Record<string, number> | null;
   created_at: string;
@@ -65,6 +67,8 @@ export type AppSession = {
   role: UserRole;
   displayName: string;
   githubUsername?: string;
+  eventId?: string;
+  eventName?: string;
   teamId?: string;
   teamName?: string;
   inviteCode?: string;
@@ -110,9 +114,31 @@ export type HelpPost = {
 export type ChatMessage = {
   id: string;
   channel: ChatChannel;
+  event_id: string;
   team_id: string | null;
   author_name: string;
   author_role: UserRole;
+  body: string;
+  created_at: string;
+};
+
+/** 個人DMの宛先として表示する、公開してよいプロフィール情報。 */
+export type DirectMessageContact = {
+  github_username: string;
+  display_name: string;
+  avatar_url: string | null;
+  role: UserRole;
+  specialty: string | null;
+};
+
+/** 送信者・受信者のどちらか本人だけが取得できる個人メッセージ。 */
+export type DirectMessage = {
+  id: string;
+  event_id: string;
+  sender_login: string;
+  recipient_login: string;
+  sender_name: string;
+  sender_role: UserRole;
   body: string;
   created_at: string;
 };

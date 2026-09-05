@@ -121,15 +121,15 @@ describe("allowlistによる役割の判定", () => {
   it("運営を判定する", () => {
     process.env.ADMIN_GITHUB_LOGINS = "alice, bob";
 
-    expect(resolveRole("alice")).toBe("admin");
-    expect(resolveRole("bob")).toBe("admin");
+    expect(resolveRole("alice")).toBe("participant");
+    expect(resolveRole("bob")).toBe("participant");
     expect(resolveRole("matsu")).toBe("participant");
   });
 
   it("大文字小文字を区別しない", () => {
     process.env.ADMIN_GITHUB_LOGINS = "Alice";
-    expect(resolveRole("alice")).toBe("admin");
-    expect(resolveRole("ALICE")).toBe("admin");
+    expect(resolveRole("alice")).toBe("participant");
+    expect(resolveRole("ALICE")).toBe("participant");
   });
 
 });

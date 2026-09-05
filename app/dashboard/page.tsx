@@ -7,8 +7,8 @@ import { getHackVerseState } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const state = await getHackVerseState();
   const { identity } = getAuthStatus();
+  const state = await getHackVerseState(identity?.eventId);
   const viewer = identity
     ? {
         login: identity.login,

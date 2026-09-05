@@ -14,11 +14,13 @@ create table if not exists public.events (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   join_code text not null unique,
+  owner_github_username text not null,
   created_at timestamptz not null default now()
 );
 
 create table if not exists public.teams (
   id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.events(id) on delete cascade,
   name text not null,
   github_repo text unique,
   score integer not null default 0,
@@ -37,16 +39,25 @@ alter table public.teams
 alter table public.users
   add column if not exists specialty text;
 
-create unique index if not exists teams_name_idx on public.teams(name);
-
-create unique index if not exists teams_name_lower_idx
-  on public.teams (lower(name));
+create unique index if not exists teams_event_name_lower_idx
+  on public.teams (event_id, lower(name));
 
 create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
   user_id uuid not null references public.users(id) on delete cascade,
   unique (team_id, user_id)
+);
+
+-- WakaTime OAuth tokens are deliberately not granted to anon. The server-side
+-- service role is the only client that reads them, so browser code never sees a token.
+create table if not exists public.wakatime_connections (
+  user_id uuid primary key references public.users(id) on delete cascade,
+  access_token text not null,
+  refresh_token text,
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.team_invites (
@@ -88,6 +99,12 @@ alter table public.activities
 alter table public.events
   add column if not exists score_config jsonb;
 
+alter table public.events
+  add column if not exists owner_github_username text;
+
+alter table public.teams
+  add column if not exists event_id uuid references public.events(id) on delete cascade;
+
 create table if not exists public.help_posts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
@@ -113,6 +130,7 @@ create table if not exists public.help_replies (
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
   channel text not null check (channel in ('staff')),
+  event_id uuid not null references public.events(id) on delete cascade,
   team_id uuid references public.teams(id) on delete cascade,
   author_name text not null,
   author_role text not null default 'participant' check (author_role in ('participant', 'mentor', 'admin', 'judge')),
@@ -120,16 +138,43 @@ create table if not exists public.chat_messages (
   created_at timestamptz not null default now()
 );
 
+alter table public.chat_messages
+  add column if not exists event_id uuid references public.events(id) on delete cascade;
+
+-- 個人DMはブラウザから直接読ませない。APIが送受信者を確認して返すため、
+-- anon には権限を与えない。
+create table if not exists public.direct_messages (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.events(id) on delete cascade,
+  sender_login text not null,
+  recipient_login text not null,
+  sender_name text not null,
+  sender_role text not null check (sender_role in ('participant', 'mentor', 'admin', 'judge')),
+  body text not null check (char_length(body) between 1 and 1000),
+  created_at timestamptz not null default now(),
+  check (lower(sender_login) <> lower(recipient_login))
+);
+
+alter table public.direct_messages
+  add column if not exists event_id uuid references public.events(id) on delete cascade;
+
 create index if not exists activities_created_at_idx on public.activities(created_at desc);
 create index if not exists activities_team_id_idx on public.activities(team_id);
 create index if not exists activities_actor_idx on public.activities(team_id, actor_login);
 create index if not exists help_posts_status_idx on public.help_posts(status);
 create index if not exists help_replies_post_idx on public.help_replies(help_post_id, created_at);
 create index if not exists teams_score_idx on public.teams(score desc);
+create index if not exists teams_event_score_idx on public.teams(event_id, score desc);
 create index if not exists teams_commit_count_idx on public.teams(commit_count desc);
 create index if not exists team_invites_created_at_idx on public.team_invites(created_at desc);
+create index if not exists wakatime_connections_expires_at_idx on public.wakatime_connections(expires_at);
 create index if not exists chat_messages_created_at_idx on public.chat_messages(created_at);
 create index if not exists chat_messages_channel_team_idx on public.chat_messages(channel, team_id);
+create index if not exists chat_messages_event_created_at_idx on public.chat_messages(event_id, created_at);
+create index if not exists direct_messages_sender_created_at_idx on public.direct_messages(sender_login, created_at);
+create index if not exists direct_messages_recipient_created_at_idx on public.direct_messages(recipient_login, created_at);
+create index if not exists direct_messages_event_sender_created_at_idx on public.direct_messages(event_id, sender_login, created_at);
+create index if not exists direct_messages_event_recipient_created_at_idx on public.direct_messages(event_id, recipient_login, created_at);
 
 grant select on public.users to anon;
 grant select on public.teams to anon;

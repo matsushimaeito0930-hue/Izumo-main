@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "@/components/activity-feed";
 import { markAnnouncementsSeen } from "@/components/announcement-badge";
 import { ContributorPanel } from "@/components/contributor-panel";
+import { DirectMessages } from "@/components/direct-messages";
 import { AdminRepoStatus } from "@/components/admin-repo-status";
 import { DemoControls } from "@/components/demo-controls";
 import { DevelopmentOverview } from "@/components/development-overview";
@@ -14,6 +15,7 @@ import { RankingPanel } from "@/components/ranking-panel";
 import { StaffChat } from "@/components/staff-chat";
 import { RealtimeStatusBadge } from "@/components/realtime-status-badge";
 import { TeamRepoSetup } from "@/components/team-repo-setup";
+import { WakaTimePanel } from "@/components/wakatime-panel";
 import { useHackVerseState } from "@/components/use-hackverse-state";
 import type { HackVerseState, UserRole } from "@/lib/types";
 
@@ -130,6 +132,7 @@ export function DashboardClient({
             onSubmit={createHelp}
           />
         )}
+        {!isJudge && <DirectMessages viewer={activeViewer} />}
         {/* 掲示板は運営にも見せる。小規模な会では運営がサポートを兼ねるため。 */}
         {!isJudge && (
           <HelpBoard
@@ -188,6 +191,10 @@ export function DashboardClient({
           members={state.members.filter((member) => member.team_id === myTeam.id)}
           viewerLogin={activeViewer?.login ?? null}
         />
+      )}
+
+      {!isStaff && !isJudge && myTeam && (
+        <WakaTimePanel viewerLogin={activeViewer?.login ?? null} />
       )}
 
       {isAdmin && <AdminRepoStatus teams={state.teams} />}

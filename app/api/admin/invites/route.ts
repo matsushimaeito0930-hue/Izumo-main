@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
+import { getActiveEventOwner } from "@/lib/event-access";
 import {
   createTeamInvite,
   createTeamInviteForTeam,
@@ -31,14 +32,22 @@ function requireAdmin() {
 export async function GET() {
   const denied = requireAdmin();
   if (denied) return denied;
+  const access = await getActiveEventOwner();
+  if (!access) {
+    return NextResponse.json({ error: "このイベントを管理する権限がありません。" }, { status: 403 });
+  }
 
-  const invites = await getTeamInvites();
+  const invites = await getTeamInvites(access.event.id);
   return NextResponse.json({ invites });
 }
 
 export async function POST(request: Request) {
   const denied = requireAdmin();
   if (denied) return denied;
+  const access = await getActiveEventOwner();
+  if (!access) {
+    return NextResponse.json({ error: "このイベントを管理する権限がありません。" }, { status: 403 });
+  }
 
   const identity = getCurrentIdentity();
 
@@ -63,7 +72,8 @@ export async function POST(request: Request) {
       : await createTeamInvite({
           teamName: body.teamName as string,
           githubRepo: body.githubRepo as string,
-          invitedBy
+          invitedBy,
+          eventId: access.event.id
         });
 
     return NextResponse.json({ invite });
