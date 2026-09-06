@@ -355,7 +355,7 @@ console.log("\n[6] 配点の正規化");
 {
   check("未設定は既定値", normalizeScoreConfig(undefined), DEFAULT_SCORE_BY_ACTIVITY);
   check("指定した種別だけ上書き", normalizeScoreConfig({ push: 3 }).push, 3);
-  check("他の種別は既定のまま", normalizeScoreConfig({ push: 3 }).review, 10);
+  check("他の種別は既定のまま", normalizeScoreConfig({ push: 3 }).review, 3);
   check("文字列の数値も受ける", normalizeScoreConfig({ push: "5" }).push, 5);
   check("小数は四捨五入", normalizeScoreConfig({ push: 2.6 }).push, 3);
   check("負の値は拒否して既定に戻す", normalizeScoreConfig({ push: -1 }).push, 1);

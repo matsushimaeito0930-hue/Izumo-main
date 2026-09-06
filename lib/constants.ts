@@ -48,10 +48,10 @@ export const ACTIVITY_TYPES: ActivityType[] = [
  */
 export const DEFAULT_SCORE_BY_ACTIVITY: Record<ActivityType, number> = {
   push: 1,
-  pull_request_opened: 10,
-  pull_request_merged: 20,
-  issue_closed: 8,
-  review: 10
+  pull_request_opened: 2,
+  pull_request_merged: 5,
+  issue_closed: 2,
+  review: 3
 };
 
 /** 既定値の別名。設定が読めないときの拠り所として残している。 */
