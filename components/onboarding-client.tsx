@@ -32,6 +32,7 @@ import type {
   TeamMemberView,
   UserRole
 } from "@/lib/types";
+import type { JoinedEvent } from "@/lib/store";
 
 type Viewer = {
   login: string;
@@ -168,6 +169,7 @@ export function OnboardingClient({
   initialTeams,
   initialMembers = [],
   ownedEvents = [],
+  joinedEvents = [],
   authConfigured,
   viewer
 }: {
@@ -177,6 +179,7 @@ export function OnboardingClient({
   /** 運営がメンバーの所属を直せるように、誰がどのチームにいるかを渡す。 */
   initialMembers?: TeamMemberView[];
   ownedEvents?: HackEvent[];
+  joinedEvents?: JoinedEvent[];
   authConfigured: boolean;
   viewer: Viewer | null;
 }) {
@@ -187,6 +190,7 @@ export function OnboardingClient({
   const [members, setMembers] = useState(initialMembers);
   const [hackEvent, setHackEvent] = useState(initialEvent);
   const [myEvents] = useState(ownedEvents);
+  const myJoinedEvents = joinedEvents;
   const [eventName, setEventName] = useState(initialEvent?.name ?? "");
   // joinCode はイベントの招待コード、roomCode はチームの部屋番号。
   // 複数のハッカソンを動かしたときに部屋番号が衝突しないよう、参加時は両方もらう。
@@ -210,11 +214,11 @@ export function OnboardingClient({
   const [specialty, setSpecialty] = useState("");
   // 最初は役割未選択。選ぶまでその役割の入口を出さない。
   // GitHubの認可から戻ったときに選び直しにならないよう、URLの ?role= からも復元する。
-  const [pickedRole, setPickedRole] = useState<OnboardingRole | null>(null);
+  const [pickedRole, setPickedRole] = useState<OnboardingRole | null>(viewer?.role === "admin" ? "admin" : null);
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [webhook, setWebhook] = useState<WebhookResult | null>(null);
-  const [openAdminSetup, setOpenAdminSetup] = useState(false);
+  const [openAdminSetup, setOpenAdminSetup] = useState(viewer?.role === "admin" && initialTeams.length === 0);
 
   // GitHubログイン未設定のローカル環境だけ、手入力での参加を許す。
   const manualEntry = !authConfigured;
@@ -388,6 +392,10 @@ export function OnboardingClient({
         eventName: payload.event.name
       });
       // 主催者は参加者ではない。まずチームを登録できる運営画面を表示する。
+      setTeams([]);
+      setInvites([]);
+      setMembers([]);
+      setHackEvent(payload.event);
       setOpenAdminSetup(true);
       router.refresh();
     } catch (error) {
@@ -410,6 +418,32 @@ export function OnboardingClient({
       if (!response.ok) throw new Error(payload.error ?? "イベントを開けませんでした。");
       // 再び主催するイベントを開く場合も、運営設定を起点にする。
       setOpenAdminSetup(true);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "イベントを開けませんでした。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function openJoinedEvent(eventId: string) {
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/events/activate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ eventId, role: "participant" })
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        session?: AppSession;
+        error?: string;
+      };
+      if (!response.ok || !payload.session) {
+        throw new Error(payload.error ?? "イベントを開けませんでした。");
+      }
+      saveSession(payload.session);
+      router.push("/dashboard");
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "イベントを開けませんでした。");
@@ -828,6 +862,32 @@ export function OnboardingClient({
                 <ChevronLeft className="size-3.5" />
                 役割を選び直す
               </button>
+
+              {pickedRole === "participant" && myJoinedEvents.length > 0 && (
+                <div className="mb-4 rounded-xl border border-line bg-paper p-4 shadow-inset">
+                  <p className="text-sm font-bold text-ink">参加中のハッカソン</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    別のイベントに切り替えると、そのイベントのチーム画面を開きます。
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {myJoinedEvents.map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        onClick={() => void openJoinedEvent(event.id)}
+                        disabled={isBusy}
+                        className="flex w-full items-center justify-between rounded-lg border border-line px-3 py-2 text-left text-sm text-ink2 transition hover:bg-surface disabled:opacity-50"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{event.name}</span>
+                          <span className="block truncate text-xs text-muted">{event.teamName}</span>
+                        </span>
+                        <span className="ml-3 shrink-0 text-xs font-medium text-pulse">開く</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {needsLogin ? (
                 <>

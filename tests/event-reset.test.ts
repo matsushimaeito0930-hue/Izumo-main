@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createTeamByName,
+  createEvent,
   getHackVerseState,
   saveEvent,
   setTeamRepo,
@@ -8,6 +9,13 @@ import {
 } from "@/lib/store";
 
 describe("event editing", () => {
+  it("starts a new event empty and preserves the previous event teams", async () => {
+    const previous = await createEvent({ name: "Previous", ownerGithubUsername: "owner" });
+    const team = await createTeamByName({ name: "Previous team", eventId: previous.id });
+    const next = await createEvent({ name: "Next", ownerGithubUsername: "owner" });
+    expect((await getHackVerseState(next.id)).teams).toEqual([]);
+    expect((await getHackVerseState(previous.id)).teams.map((item) => item.id)).toContain(team.id);
+  });
   it("keeps registered teams in the same event when its name changes", async () => {
     const before = await saveEvent({ name: "Before Reset" });
     const team = await createTeamByName({ name: "Reset Team" });

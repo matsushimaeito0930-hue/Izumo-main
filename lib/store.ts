@@ -1313,6 +1313,122 @@ export async function getEventsOwnedBy(githubUsername: string | undefined): Prom
   return event?.owner_github_username.toLowerCase() === owner.toLowerCase() ? [event] : [];
 }
 
+/** 参加者が切り替えられる、所属チームを持つイベント。 */
+export type JoinedEvent = HackEvent & {
+  teamId: string;
+  teamName: string;
+};
+
+export async function getMembershipInEvent(input: {
+  eventId: string;
+  githubUsername: string;
+}): Promise<{ teamId: string; teamName: string } | null> {
+  const login = input.githubUsername.trim();
+  if (!login) return null;
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("github_username", login)
+        .maybeSingle();
+      if (userError) throw userError;
+      if (!user) return null;
+
+      const { data: memberships, error: membershipError } = await supabase
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", user.id);
+      if (membershipError) throw membershipError;
+      const teamIds = [...new Set((memberships ?? []).map((membership) => membership.team_id))];
+      if (teamIds.length === 0) return null;
+
+      const { data: team, error: teamError } = await supabase
+        .from("teams")
+        .select("id,name")
+        .eq("event_id", input.eventId)
+        .in("id", teamIds)
+        .maybeSingle();
+      if (teamError) throw teamError;
+      return team ? { teamId: team.id, teamName: team.name } : null;
+    }
+  }
+
+  const store = getMemoryStore();
+  const user = store.users.find((candidate) => candidate.github_username === login);
+  if (!user) return null;
+  const team = store.teams.find(
+    (candidate) =>
+      candidate.event_id === input.eventId &&
+      store.teamMembers.some(
+        (membership) => membership.team_id === candidate.id && membership.user_id === user.id
+      )
+  );
+  return team ? { teamId: team.id, teamName: team.name } : null;
+}
+
+export async function getEventsJoinedBy(githubUsername: string | undefined): Promise<JoinedEvent[]> {
+  const login = githubUsername?.trim();
+  if (!login) return [];
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("github_username", login)
+        .maybeSingle();
+      if (userError) throw userError;
+      if (!user) return [];
+
+      const { data: memberships, error: membershipError } = await supabase
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", user.id);
+      if (membershipError) throw membershipError;
+      const teamIds = [...new Set((memberships ?? []).map((membership) => membership.team_id))];
+      if (teamIds.length === 0) return [];
+
+      const { data: teams, error: teamError } = await supabase
+        .from("teams")
+        .select("id,event_id,name")
+        .in("id", teamIds);
+      if (teamError) throw teamError;
+      const eventIds = [...new Set((teams ?? []).map((team) => team.event_id))];
+      if (eventIds.length === 0) return [];
+
+      const { data: events, error: eventError } = await supabase
+        .from("events")
+        .select("*")
+        .in("id", eventIds)
+        .order("created_at", { ascending: false });
+      if (eventError) throw eventError;
+      const teamsByEvent = new Map((teams ?? []).map((team) => [team.event_id, team]));
+      return (events ?? []).flatMap((event) => {
+        const team = teamsByEvent.get(event.id);
+        return team ? [{ ...(event as HackEvent), teamId: team.id, teamName: team.name }] : [];
+      });
+    }
+  }
+
+  const store = getMemoryStore();
+  const user = store.users.find((candidate) => candidate.github_username === login);
+  if (!user) return [];
+  const teamIds = new Set(
+    store.teamMembers
+      .filter((membership) => membership.user_id === user.id)
+      .map((membership) => membership.team_id)
+  );
+  const activeEvent = store.event;
+  return store.teams.flatMap((team) => {
+    if (!teamIds.has(team.id) || activeEvent?.id !== team.event_id) return [];
+    return [{ ...activeEvent, teamId: team.id, teamName: team.name }];
+  });
+}
+
 function resetMemoryEventData(store: MemoryStore) {
   store.teams = [];
   store.teamMembers = [];
