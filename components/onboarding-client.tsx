@@ -187,6 +187,9 @@ export function OnboardingClient({
   const [manualRepo, setManualRepo] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [specialty, setSpecialty] = useState("");
+  const [participantJoinMode, setParticipantJoinMode] = useState<"code" | "url">("code");
+  const [inviteTeamName, setInviteTeamName] = useState("");
+  const [showInviteConfirm, setShowInviteConfirm] = useState(false);
   // 最初は役割未選択。選ぶまでその役割の入口を出さない。
   // GitHubの認可から戻ったときに選び直しにならないよう、URLの ?role= からも復元する。
   const [pickedRole, setPickedRole] = useState<OnboardingRole | null>(null);
@@ -211,10 +214,22 @@ export function OnboardingClient({
     const sharedRoom = searchParams.get("room");
     if (sharedRoom) setRoomCode(sharedRoom.trim().toUpperCase());
 
+    const sharedTeam = searchParams.get("team");
+    if (sharedTeam) setInviteTeamName(sharedTeam);
+    
+    // Discordなどから招待URLで来た場合は、参加者画面を直接開く。
+    // 参加確定は認証後の「チームに参加する」で行うため、URLを開いただけでは登録しない。
+    if (sharedCode && sharedRoom) {
+      setParticipantJoinMode("url");
+      setShowInviteConfirm(true);
+    }
+
     // 認可の往復で役割が消えないよう、URLに残しておいたものを戻す。
     const sharedRole = searchParams.get("role");
     if (sharedRole === "participant" || sharedRole === "mentor" || sharedRole === "admin") {
       setPickedRole(sharedRole);
+    } else if (sharedCode && sharedRoom) {
+      setPickedRole("participant");
     }
 
     const authError = searchParams.get("auth_error");
@@ -222,6 +237,13 @@ export function OnboardingClient({
       setMessage(authErrorMessages[authError] ?? "ログインに失敗しました。");
     }
   }, [initialInvites, searchParams]);
+
+  function participantAuthReturnTo() {
+    const params = new URLSearchParams({ role: "participant" });
+    if (joinCode.trim()) params.set("code", joinCode.trim().toUpperCase());
+    if (roomCode.trim()) params.set("room", roomCode.trim().toUpperCase());
+    return `/?${params.toString()}`;
+  }
 
   // 運営としてログインしている場合だけ、選択用にリポジトリ一覧を取りに行く。
   useEffect(() => {
@@ -664,6 +686,49 @@ export function OnboardingClient({
         </div>
 
         <div className="rounded-2xl border border-line/70 bg-surface p-5 shadow-card">
+        {showInviteConfirm && (
+  <div className="mb-4 rounded-2xl border border-line bg-paper p-4 shadow-soft">
+    <h2 className="text-lg font-bold text-ink">
+      「{inviteTeamName || "このチーム"}」で参加しますか？
+    </h2>
+
+    <p className="mt-2 text-sm leading-6 text-muted">
+      はいを押すと、参加者としてログイン・参加手続きに進みます。
+    </p>
+
+    <div className="mt-4 grid grid-cols-3 gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          setShowInviteConfirm(false);
+          setPickedRole("participant");
+        }}
+        className="rounded-xl bg-ink px-3 py-3 text-sm font-bold text-white"
+      >
+        はい
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setShowInviteConfirm(false);
+          router.replace("/");
+        }}
+        className="rounded-xl border border-line px-3 py-3 text-sm font-medium text-ink"
+      >
+        キャンセル
+      </button>
+
+      <button
+        type="button"
+        onClick={() => router.push("/help")}
+        className="rounded-xl border border-line px-3 py-3 text-sm font-medium text-ink"
+      >
+        運営に連絡
+      </button>
+    </div>
+  </div>
+)}
           {viewer && (
             <div className="mb-4 flex items-center gap-3 rounded-xl border border-line/70 bg-sand/60 p-3 shadow-inset">
               {viewer.avatarUrl ? (
@@ -732,7 +797,11 @@ export function OnboardingClient({
                       : "参加者はGitHubログインが必要です。リポジトリの選択とWebhookの自動設定に使います。"}
                   </p>
                   <a
-                    href={`/api/auth/github?return_to=${encodeURIComponent(`/?role=${pickedRole}`)}`}
+                    href={`/api/auth/github?return_to=${encodeURIComponent(
+                      pickedRole === "participant"
+                        ? participantAuthReturnTo()
+                        : `/?role=${pickedRole}`
+                    )}`}
                     className={primaryButtonClass}
                   >
                     <Github className="size-5" />
@@ -843,6 +912,38 @@ export function OnboardingClient({
                 </form>
               ) : (
                 <form onSubmit={joinTeam} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-paper p-1 shadow-inset">
+                    <button
+                      type="button"
+                      onClick={() => setParticipantJoinMode("code")}
+                      className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                        participantJoinMode === "code"
+                          ? "bg-ink text-white shadow-soft"
+                          : "text-muted hover:text-ink"
+                      }`}
+                    >
+                      部屋番号で参加
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setParticipantJoinMode("url")}
+                      className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                        participantJoinMode === "url"
+                          ? "bg-ink text-white shadow-soft"
+                          : "text-muted hover:text-ink"
+                      }`}
+                    >
+                      招待URLで参加
+                    </button>
+                  </div>
+
+                  {participantJoinMode === "url" && (
+                    <p className="rounded-xl border border-pulse/25 bg-pulse/5 px-3 py-2.5 text-xs leading-5 text-ink2">
+                      Discordなどで受け取った招待URLから来ると、イベントコードと部屋番号が自動入力されます。
+                      認証後に「チームに参加する」を押すと参加が確定します。
+                    </p>
+                  )}
+
                   {manualEntry && (
                     <div className="flex items-start gap-2.5 rounded-xl border border-sun/30 bg-sun/10 px-3 py-2.5 text-xs leading-5 text-sun shadow-soft">
                       <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -929,7 +1030,9 @@ export function OnboardingClient({
 
                         {!canListPrivate && (
                           <a
-                            href="/api/auth/github?private=1&return_to=%2F%3Frole%3Dparticipant"
+                            href={`/api/auth/github?private=1&return_to=${encodeURIComponent(
+                              participantAuthReturnTo()
+                            )}`}
                             className="text-xs text-pulse underline underline-offset-2"
                           >
                             プライベートも表示する
@@ -1113,8 +1216,8 @@ export function OnboardingClient({
                                     title={`HackRadar「${team.name}」への招待`}
                                     text="このリンクを開くとチームに参加できます。"
                                     url={`/?code=${encodeURIComponent(
-                                      hackEvent.join_code
-                                    )}&room=${encodeURIComponent(invite.code)}`}
+                                    hackEvent.join_code
+                                    )}&room=${encodeURIComponent(invite.code)}&team=${encodeURIComponent(team.name)}`}
                                     onDone={setMessage}
                                   />
                                 )}
