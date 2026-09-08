@@ -160,7 +160,7 @@ export function HelpComposer({
           <span>
             匿名で投稿する
             <span className="mt-0.5 block text-xs leading-5 text-muted">
-              画面には「匿名」と表示されます。運営は本人を確認できます。
+              画面には「匿名」と表示されます。投稿者情報はシステム内部で保持されます。
             </span>
           </span>
         </label>
