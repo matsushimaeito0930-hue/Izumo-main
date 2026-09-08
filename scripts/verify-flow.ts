@@ -204,8 +204,8 @@ const state = await getHackVerseState();
 const alpha = state.teams.find((team) => team.name === "Team Alpha");
 const bravo = state.teams.find((team) => team.name === "Team Bravo");
 
-// push 1 + push 1 + PR作成 10 + PRマージ 20 = 32
-check("Team Alpha のスコア", alpha?.score, 32);
+// push 1 + push 1 + PR作成 2 + PRマージ 3 = 7
+check("Team Alpha のスコア", alpha?.score, 7);
 check("Team Alpha のコミット数", alpha?.commit_count, 5);
 check("Team Bravo のスコア", bravo?.score, 1);
 check("マージしていないPRは0点", state.activities.filter((a) => a.type === "pull_request_merged").length, 1);
@@ -216,8 +216,8 @@ const hanakoRow = alphaContributors.find((c) => c.github_username === "hanako");
 const taroRow = alphaContributors.find((c) => c.github_username === "taro");
 
 check("Team Alpha の貢献者は2人", alphaContributors.length, 2);
-check("花子の点数（push1 + マージ20）", hanakoRow?.score, 21);
-check("太郎の点数（push1 + PR作成10）", taroRow?.score, 11);
+check("花子の点数（push1 + マージ3）", hanakoRow?.score, 4);
+check("太郎の点数（push1 + PR作成2）", taroRow?.score, 3);
 check("花子の表示名はメンバー登録から", hanakoRow?.display_name, "花子");
 check("花子のコミット数", hanakoRow?.commit_count, 3);
 check("太郎のコミット数", taroRow?.commit_count, 2);
@@ -258,13 +258,13 @@ check("メンバー別も追随する（push5 + マージ50）", hanakoAfter?.sc
 
 const rejected = await saveScoreConfig({ push: -3, pull_request_merged: 99999 });
 check("負の値は既定値に戻る", rejected.config.push, 1);
-check("上限超えも既定値に戻る", rejected.config.pull_request_merged, 20);
+check("上限超えも既定値に戻る", rejected.config.pull_request_merged, 3);
 
 const restored = await getHackVerseState();
 check(
   "既定値に戻したらスコアも元に戻る",
   restored.teams.find((team) => team.name === "Team Alpha")?.score,
-  32
+  7
 );
 
 // ---------------------------------------------------------------- 役割の兼任
