@@ -25,6 +25,7 @@ export function HelpComposer({
     title: string;
     body: string;
     category: string;
+    anonymous: boolean;
   }) => Promise<void>;
 }) {
   const [teamId, setTeamId] = useState(lockedTeamId ?? teams[0]?.id ?? "");
@@ -32,6 +33,7 @@ export function HelpComposer({
   const [body, setBody] = useState("");
   const [category, setCategory] = useState(categories[0]);
   const [customCategory, setCustomCategory] = useState("");
+  const [anonymous, setAnonymous] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -50,11 +52,12 @@ export function HelpComposer({
     setIsSubmitting(true);
     setError("");
     try {
-      await onSubmit({ teamId, title, body, category: selectedCategory });
+      await onSubmit({ teamId, title, body, category: selectedCategory, anonymous });
       setTitle("");
       setBody("");
       setCategory(categories[0]);
       setCustomCategory("");
+      setAnonymous(false);
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "質問を投稿できませんでした。もう一度お試しください。"
@@ -145,6 +148,21 @@ export function HelpComposer({
             placeholder="やりたいこと・試したこと・出ているエラーを書いてください。"
             className={`resize-none py-2 ${fieldClass}`}
           />
+        </label>
+
+        <label className="flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink2 shadow-inset">
+          <input
+            type="checkbox"
+            checked={anonymous}
+            onChange={(event) => setAnonymous(event.target.checked)}
+            className="mt-0.5 size-4 accent-ink"
+          />
+          <span>
+            匿名で投稿する
+            <span className="mt-0.5 block text-xs leading-5 text-muted">
+              画面には「匿名」と表示されます。運営は本人を確認できます。
+            </span>
+          </span>
         </label>
 
         {error && <p className="rounded-xl bg-hot/10 px-3 py-2 text-sm text-hot">{error}</p>}

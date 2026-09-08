@@ -37,6 +37,7 @@ export async function POST(request: Request) {
     title?: string;
     body?: string;
     category?: string;
+    anonymous?: boolean;
   };
 
   if (!body.teamId || !body.title || !body.body || !body.category) {
@@ -69,7 +70,8 @@ export async function POST(request: Request) {
       body: body.body,
       category: body.category,
       authorName: identity?.displayName,
-      authorGithub: identity?.login
+      authorGithub: identity?.login,
+      anonymous: body.anonymous === true
     });
 
     return NextResponse.json({ post });

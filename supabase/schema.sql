@@ -112,9 +112,13 @@ create table if not exists public.help_posts (
   title text not null,
   body text not null,
   category text not null,
+  is_anonymous boolean not null default false,
   status text not null default 'open' check (status in ('open', 'helping', 'solved')),
   created_at timestamptz not null default now()
 );
+
+alter table public.help_posts
+  add column if not exists is_anonymous boolean not null default false;
 
 create table if not exists public.help_replies (
   id uuid primary key default gen_random_uuid(),

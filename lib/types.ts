@@ -107,6 +107,8 @@ export type HelpPost = {
   title: string;
   body: string;
   category: string;
+  /** trueなら画面上の投稿者名を匿名にする。内部のuser_idは保持する。 */
+  is_anonymous?: boolean;
   status: HelpStatus;
   created_at: string;
 };

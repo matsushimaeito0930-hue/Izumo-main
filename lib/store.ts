@@ -184,7 +184,9 @@ function withViews(
     .filter((post) => teamsById.has(post.team_id))
     .map((post) => ({
       ...post,
-      author_name: usersById.get(post.user_id)?.display_name ?? "匿名",
+      author_name: post.is_anonymous
+        ? "匿名"
+        : usersById.get(post.user_id)?.display_name ?? "匿名",
       author_github: usersById.get(post.user_id)?.github_username ?? null,
       team_name: teamsById.get(post.team_id)?.name ?? "不明なチーム",
       replies: (repliesByPost.get(post.id) ?? []).sort((a, b) => {
@@ -974,6 +976,7 @@ export async function createHelpPost(input: {
   status?: HelpStatus;
   authorName?: string;
   authorGithub?: string;
+  anonymous?: boolean;
 }): Promise<HelpPostView> {
   const status = input.status ?? "open";
 
@@ -1030,6 +1033,7 @@ export async function createHelpPost(input: {
         title: input.title,
         body: input.body,
         category: input.category,
+        is_anonymous: input.anonymous === true,
         status,
         created_at: new Date().toISOString()
       };
@@ -1038,7 +1042,7 @@ export async function createHelpPost(input: {
       if (insertError) throw insertError;
       return {
         ...post,
-        author_name: author?.display_name ?? input.authorName ?? "参加者",
+        author_name: input.anonymous ? "匿名" : author?.display_name ?? input.authorName ?? "参加者",
         author_github: author?.github_username ?? input.authorGithub ?? null,
         team_name: selectedTeam.name,
         replies: []
@@ -1075,6 +1079,7 @@ export async function createHelpPost(input: {
     title: input.title,
     body: input.body,
     category: input.category,
+    is_anonymous: input.anonymous === true,
     status,
     created_at: new Date().toISOString()
   };
@@ -1083,7 +1088,7 @@ export async function createHelpPost(input: {
 
   return {
     ...post,
-    author_name: user.display_name,
+    author_name: input.anonymous ? "匿名" : user.display_name,
     author_github: user.github_username,
     team_name: team.name,
     replies: []

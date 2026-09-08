@@ -137,6 +137,7 @@ export function useHackVerseState(initialState: HackVerseState) {
       title: string;
       body: string;
       category: string;
+      anonymous: boolean;
     }) => {
       const response = await fetch("/api/help", {
         method: "POST",
