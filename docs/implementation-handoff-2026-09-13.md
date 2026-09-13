@@ -2,11 +2,12 @@
 
 ## 現在地
 
-- `main`の作業ツリーに、イベント単位の所属・権限・得点・質問・DM・WakaTime集計の分離を実装。
+- `main`に、イベント単位の所属・権限・得点・質問・DM・WakaTime集計の分離を実装。
 - Webhookの活動追加、重複排除、チーム加点をPostgreSQLの`record_activity_atomic`に一本化。旧DBでの非原子的なフォールバックは削除。
 - ブラウザのSupabase権限から本文・招待コード・個人情報への直接アクセスを外し、Realtimeは`app_change_signal`のみ購読。
 - 既存DB向けの移行SQLは`supabase/migrations/20260913_event_isolation_and_webhook_atomic.sql`。新規DBは`supabase/schema.sql`。
-- 展示用のローカルデモは動作確認済み。本番DBの移行・外部サービスの実接続試験・Vercel反映は**未実施**。
+- ユーザーは既存Supabase DBの移行SQLが成功したと報告。`cf3e086`をGitHubへpushし、Vercel ProductionとGitHub Actionsの成功を確認済み。
+- 公開URLで`/`が200、未ログインの`/api/state`と`/api/wakatime/summary`が401であることを確認。外部サービスの実アカウントを使った通し試験は**未実施**。
 
 ## 通過したローカル検証
 
@@ -19,12 +20,11 @@
 
 ## 次に必要なこと
 
-1. 本番Supabaseをバックアップし、`DEPLOY.md`の既存DB移行手順を実行。SQL実行結果を確認する。移行エラーが出た場合、イベント所有者・イベントIDなどを推測で補完しない。
-2. 移行が成功してからアプリをVercelへ反映する。DBよりアプリを先に出さない。
-3. 本番でGitHubログイン、複数イベント切替、部屋番号参加、質問・DMの分離、GitHub Webhookの5種の活動と重複配信を通しで確認する。
-4. WakaTimeを実アカウント2人以上で連携し、個人時間・チーム合計・別イベント参加時の集計を確認する。
-5. 失敗した実環境テストがあれば修正して再検証する。公式スコアを預けるハッカソンへの導入判定はその後に行う。
+1. Supabase SQL Editorで`record_activity_atomic`と`app_change_signal`、`event_members`の移行結果を確認する。SQLの実行成功はユーザー報告のみで、DB内容の読み取り検証は未実施。
+2. 本番でGitHubログイン、複数イベント切替、部屋番号参加、質問・DMの分離、GitHub Webhookの5種の活動と重複配信を通しで確認する。
+3. WakaTimeを実アカウント2人以上で連携し、個人時間・チーム合計・別イベント参加時の集計を確認する。
+4. 失敗した実環境テストがあれば修正して再検証する。公式スコアを預けるハッカソンへの導入判定はその後に行う。
 
 ## Claudeへの引き継ぎ時
 
-この文書、`docs/hackathon-readiness-audit-2026-09-12.md`、`DEPLOY.md`、最新のGit差分を渡す。APIキー・OAuth secret・`.env.local`は渡さない。Claude Code CLIが認証切れなら、ユーザー本人が`claude auth login`を実行する。
+この文書、`docs/hackathon-readiness-audit-2026-09-12.md`、`DEPLOY.md`、最新のGit履歴を渡す。APIキー・OAuth secret・`.env.local`は渡さない。Claudeによるコードレビューはまだ一度も実行していない。Claude Code CLIが認証切れなら、ユーザー本人が`claude auth login`を実行する。リポジトリ内容をAnthropicへ送るレビューは、ユーザーの明示的な了承を得てから行う。
