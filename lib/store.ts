@@ -53,10 +53,24 @@ type MemoryStore = {
   directMessages: DirectMessage[];
   teamMembers: TeamMember[];
   teamInvites: TeamInvite[];
+  eventMembers: EventMember[];
+  events: HackEvent[];
   event: HackEvent | null;
 };
 
-const MEMORY_STORE_VERSION = "empty-teams-v1";
+type EventMember = {
+  event_id: string;
+  user_id: string;
+  role: UserRole;
+  specialty: string | null;
+};
+
+type StateViewer = {
+  githubUsername: string;
+  role: UserRole;
+};
+
+const MEMORY_STORE_VERSION = "multi-event-v2";
 
 function normalizeTeam(team: Team): Team {
   return {
@@ -81,6 +95,8 @@ function cloneStore(): MemoryStore {
     helpReplies: structuredClone(seedHelpReplies),
     teamMembers: structuredClone(seedTeamMembers),
     teamInvites: structuredClone(seedTeamInvites),
+    eventMembers: [],
+    events: [],
     event: null
   };
 }
@@ -160,7 +176,8 @@ function withViews(
   messages: ChatMessage[],
   teamMembers: TeamMember[] = [],
   /** 集計用。フィードは直近だけを出すので、集計には別の全件を渡す。 */
-  contributorActivities: Activity[] = activities
+  contributorActivities: Activity[] = activities,
+  viewer?: StateViewer
 ): HackVerseState {
   const teamsById = new Map(teams.map((team) => [team.id, team]));
   const usersById = new Map(users.map((user) => [user.id, user]));
@@ -182,19 +199,30 @@ function withViews(
 
   const helpPostViews: HelpPostView[] = helpPosts
     .filter((post) => teamsById.has(post.team_id))
-    .map((post) => ({
-      ...post,
-      author_name: post.is_anonymous
-        ? "匿名"
-        : usersById.get(post.user_id)?.display_name ?? "匿名",
-      author_github: usersById.get(post.user_id)?.github_username ?? null,
-      team_name: teamsById.get(post.team_id)?.name ?? "不明なチーム",
-      replies: (repliesByPost.get(post.id) ?? []).sort((a, b) => {
-        // 採用された回答を先頭に、それ以外は古い順。
-        if (a.is_accepted !== b.is_accepted) return a.is_accepted ? -1 : 1;
-        return Date.parse(a.created_at) - Date.parse(b.created_at);
-      })
-    }))
+    .map((post) => {
+      const author = usersById.get(post.user_id);
+      const authorGithub = author?.github_username ?? null;
+      const { user_id: _privateUserId, ...publicPost } = post;
+      void _privateUserId;
+
+      return {
+        ...publicPost,
+        author_name: post.is_anonymous ? "匿名" : author?.display_name ?? "匿名",
+        author_github: post.is_anonymous ? null : authorGithub,
+        team_name: teamsById.get(post.team_id)?.name ?? "不明なチーム",
+        can_accept: Boolean(
+          viewer?.role === "admin" ||
+            (viewer?.githubUsername &&
+              authorGithub &&
+              viewer.githubUsername.toLowerCase() === authorGithub.toLowerCase())
+        ),
+        replies: (repliesByPost.get(post.id) ?? []).sort((a, b) => {
+          // 採用された回答を先頭に、それ以外は古い順。
+          if (a.is_accepted !== b.is_accepted) return a.is_accepted ? -1 : 1;
+          return Date.parse(a.created_at) - Date.parse(b.created_at);
+        })
+      };
+    })
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 
   // 誰がどのチームに入っているか。GitHubユーザー名が分かる人だけ載せる。
@@ -213,6 +241,22 @@ function withViews(
     .filter((member): member is TeamMemberView => member !== null)
     .sort((a, b) => a.github_username.localeCompare(b.github_username));
 
+  // チーム相談は運営・メンター以外に別チームの本文を渡さない。
+  // UIで非表示にするだけでは /api/state のJSONから読めてしまう。
+  const viewerTeamIds = new Set(
+    memberViews
+      .filter(
+        (member) =>
+          member.github_username.toLowerCase() === viewer?.githubUsername.toLowerCase()
+      )
+      .map((member) => member.team_id)
+  );
+  const visibleMessages = messages.filter((message) => {
+    if (!viewer || viewer.role === "admin" || viewer.role === "mentor") return true;
+    if (message.team_id === null) return true;
+    return viewer.role === "participant" && viewerTeamIds.has(message.team_id);
+  });
+
   return {
     teams: teams.map(normalizeTeam).sort((a, b) => b.score - a.score),
     activities: activityViews,
@@ -222,7 +266,7 @@ function withViews(
       contributorActivities.filter((activity) => teamsById.has(activity.team_id)),
       memberViews
     ),
-    messages: messages
+    messages: visibleMessages
       .slice()
       .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
     updatedAt: new Date().toISOString()
@@ -244,7 +288,10 @@ function isMissingActorColumn(error: { message?: string } | null): boolean {
   return message.includes("actor_login") || message.includes("actor_avatar_url");
 }
 
-export async function getSupabaseHackVerseState(eventId?: string | null): Promise<HackVerseState> {
+export async function getSupabaseHackVerseState(
+  eventId?: string | null,
+  viewer?: StateViewer
+): Promise<HackVerseState> {
   const supabase = createServerSupabaseClient();
   if (!supabase) {
     throw new Error("Supabase is not configured.");
@@ -255,81 +302,120 @@ export async function getSupabaseHackVerseState(eventId?: string | null): Promis
     .select("id,event_id,name,github_repo,score,commit_count,house_level,created_at");
   if (eventId) teamsQuery.eq("event_id", eventId);
 
+  const teamsResult = await teamsQuery;
+  if (teamsResult.error) throw teamsResult.error;
+
+  const teams = ((teamsResult.data ?? []) as Team[]).map(normalizeTeam);
+  const teamIds = teams.map((team) => team.id);
+  const emptyResult = Promise.resolve({ data: [], error: null });
+
+  const activitiesQuery = supabase
+    .from("activities")
+    .select(ACTIVITY_COLUMNS)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  const helpPostsQuery = supabase
+    .from("help_posts")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  const messagesQuery = supabase
+    .from("chat_messages")
+    .select("*")
+    .order("created_at", { ascending: true })
+    .limit(80);
+  const teamMembersQuery = supabase.from("team_members").select("*");
+  const contributorQuery = supabase
+    .from("activities")
+    .select("id,team_id,type,score_delta,actor_login,actor_avatar_url,metadata,created_at")
+    .not("actor_login", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(3000);
+
+  if (eventId && teamIds.length > 0) {
+    activitiesQuery.in("team_id", teamIds);
+    helpPostsQuery.in("team_id", teamIds);
+    teamMembersQuery.in("team_id", teamIds);
+    contributorQuery.in("team_id", teamIds);
+  }
+  if (eventId) messagesQuery.eq("event_id", eventId);
+
   const [
     usersResult,
-    teamsResult,
     activitiesResult,
     helpPostsResult,
-    helpRepliesResult,
     messagesResult,
     teamMembersResult,
     contributorResult
-  ] =
-    await Promise.all([
-      supabase.from("users").select("*"),
-      teamsQuery,
-      supabase
-        .from("activities")
-        .select(ACTIVITY_COLUMNS)
-        .order("created_at", { ascending: false })
-        .limit(30),
-      supabase.from("help_posts").select("*").order("created_at", { ascending: false }).limit(30),
-      supabase
-        .from("help_replies")
-        .select("*")
-        .order("created_at", { ascending: true })
-        .limit(200),
-      supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).limit(80),
-      supabase.from("team_members").select("*"),
-      // 貢献の集計は全期間が要るので、フィードとは別に軽い列だけを取る。
-      supabase
-        .from("activities")
-        .select("id,team_id,type,score_delta,actor_login,actor_avatar_url,metadata,created_at")
-        .not("actor_login", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(3000)
-    ]);
+  ] = await Promise.all([
+    supabase.from("users").select("*"),
+    eventId && teamIds.length === 0 ? emptyResult : activitiesQuery,
+    eventId && teamIds.length === 0 ? emptyResult : helpPostsQuery,
+    messagesQuery,
+    eventId && teamIds.length === 0 ? emptyResult : teamMembersQuery,
+    eventId && teamIds.length === 0 ? emptyResult : contributorQuery
+  ]);
+
+  const helpPostIds = ((helpPostsResult.data ?? []) as HelpPost[]).map((post) => post.id);
+  const helpRepliesResult =
+    eventId && helpPostIds.length === 0
+      ? await emptyResult
+      : await (() => {
+          const query = supabase
+            .from("help_replies")
+            .select("*")
+            .order("created_at", { ascending: true })
+            .limit(200);
+          if (eventId) query.in("help_post_id", helpPostIds);
+          return query;
+        })();
+
+  const readError =
+    usersResult.error ??
+    helpPostsResult.error ??
+    messagesResult.error ??
+    teamMembersResult.error ??
+    helpRepliesResult.error ??
+    contributorResult.error;
+  if (readError) throw readError;
 
   // schema.sql の適用前でも、実行者の列が無いだけで画面が真っ白にならないようにする。
   let activities: { data: unknown[] | null; error: { message?: string } | null } =
     activitiesResult;
   if (activities.error && isMissingActorColumn(activities.error)) {
-    activities = await supabase
+    const legacyQuery = supabase
       .from("activities")
       .select(LEGACY_ACTIVITY_COLUMNS)
       .order("created_at", { ascending: false })
       .limit(30);
+    if (eventId) legacyQuery.in("team_id", teamIds);
+    activities = await legacyQuery;
   }
 
-  if (teamsResult.error || activities.error) {
-    throw teamsResult.error ?? activities.error;
-  }
+  if (activities.error) throw activities.error;
 
   return withViews(
     (usersResult.data ?? seedUsers) as User[],
-    ((teamsResult.data ?? seedTeams) as Team[]).map(normalizeTeam),
+    teams,
     (activities.data ?? seedActivities) as Activity[],
     (helpPostsResult.data ?? seedHelpPosts) as HelpPost[],
-    (helpRepliesResult.error
-      ? []
-      : (helpRepliesResult.data ?? seedHelpReplies)) as HelpReply[],
-    (messagesResult.error
-      ? []
-      : ((messagesResult.data ?? seedChatMessages) as ChatMessage[])).filter(
+    (helpRepliesResult.data ?? seedHelpReplies) as HelpReply[],
+    ((messagesResult.data ?? seedChatMessages) as ChatMessage[]).filter(
       (message) => !eventId || message.event_id === eventId
     ),
-    (teamMembersResult.error ? [] : (teamMembersResult.data ?? [])) as TeamMember[],
-    (contributorResult.error ? [] : (contributorResult.data ?? [])) as Activity[]
+    (teamMembersResult.data ?? []) as TeamMember[],
+    (contributorResult.data ?? []) as Activity[],
+    viewer
   );
 }
 
-export async function getHackVerseState(eventId?: string | null): Promise<HackVerseState> {
+export async function getHackVerseState(
+  eventId?: string | null,
+  viewer?: StateViewer
+): Promise<HackVerseState> {
   if (isSupabaseConfigured()) {
-    try {
-      return await getSupabaseHackVerseState(eventId);
-    } catch {
-      // Keep local development usable when Supabase is unavailable.
-    }
+    // 本番DBの失敗を空のメモリデータで隠さず、利用者と監視に障害を知らせる。
+    return getSupabaseHackVerseState(eventId, viewer);
   }
 
   const store = getMemoryStore();
@@ -341,7 +427,9 @@ export async function getHackVerseState(eventId?: string | null): Promise<HackVe
     store.helpPosts,
     store.helpReplies,
     store.messages.filter((message) => !eventId || message.event_id === eventId),
-    store.teamMembers
+    store.teamMembers,
+    store.activities,
+    viewer
   );
 }
 
@@ -437,14 +525,14 @@ async function findSupabaseTeam(githubRepo: string) {
   const { data, error } = await supabase
     .from("teams")
     .select("*")
-    .eq("github_repo", githubRepo)
-    .maybeSingle();
+    .ilike("github_repo", githubRepo)
+    .limit(2);
 
   if (error) {
     throw error;
   }
 
-  return (data as Team | null) ?? null;
+  return data?.length === 1 ? (data[0] as Team) : null;
 }
 
 function findOrCreateMemoryTeam(githubRepo: string, fallbackName: string, eventId?: string): Team {
@@ -495,12 +583,11 @@ export async function recordActivity(input: {
   };
   const actorLogin = input.actorLogin?.trim() || null;
   const actorAvatarUrl = input.actorAvatarUrl ?? null;
-  // 配点はイベントごとに変えられる。読めなければ既定値で動かす。
-  const scoreConfig = await getScoreConfig();
-  const scoreDelta = scoreConfig[input.type];
   const commitDelta =
-    input.type === "push" && typeof metadata.commitCount === "number"
-      ? metadata.commitCount
+    input.type === "push" &&
+    typeof metadata.commitCount === "number" &&
+    Number.isFinite(metadata.commitCount)
+      ? Math.max(0, Math.floor(metadata.commitCount))
       : 0;
 
   if (isSupabaseConfigured()) {
@@ -509,12 +596,14 @@ export async function recordActivity(input: {
       let team: Team | null = null;
 
       if (input.teamId) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("teams")
           .select("*")
           .eq("id", input.teamId)
           .maybeSingle();
+        if (error) throw error;
         team = data as Team | null;
+        if (!team) return null;
       }
 
       if (!team && input.githubRepo) {
@@ -524,57 +613,19 @@ export async function recordActivity(input: {
         if (!team) return null;
       }
 
-      if (!team) {
-        const { data } = await supabase.from("teams").select("*").limit(1).maybeSingle();
-        team = data as Team | null;
-      }
-
       if (!team) return null;
 
       team = normalizeTeam(team);
-
-      const deliveryId = input.githubDeliveryId;
-      const commitSha = typeof metadata.commitSha === "string" ? metadata.commitSha : undefined;
-      const duplicateQueries = [];
-
-      if (deliveryId) {
-        duplicateQueries.push(
-          supabase
-            .from("activities")
-            .select("*")
-            .contains("metadata", { githubDeliveryId: deliveryId })
-            .maybeSingle()
-        );
+      if (
+        input.githubRepo &&
+        team.github_repo?.toLowerCase() !== input.githubRepo.toLowerCase()
+      ) {
+        return null;
       }
+      // チームを特定してから、そのチームが属するイベントの配点を読む。
+      const scoreConfig = await getScoreConfig(team.event_id);
+      const scoreDelta = scoreConfig[input.type];
 
-      if (commitSha) {
-        duplicateQueries.push(
-          supabase
-            .from("activities")
-            .select("*")
-            .contains("metadata", { commitSha })
-            .eq("team_id", team.id)
-            .maybeSingle()
-        );
-      }
-
-      for (const duplicateQuery of duplicateQueries) {
-        const { data: existingActivity, error: duplicateError } = await duplicateQuery;
-        if (duplicateError) {
-          throw duplicateError;
-        }
-
-        if (existingActivity) {
-          return {
-            ...(existingActivity as Activity),
-            team_name: team.name
-          };
-        }
-      }
-
-      const nextScore = team.score + scoreDelta;
-      const nextCommitCount = team.commit_count + commitDelta;
-      const nextLevel = getHouseLevel(nextScore);
       const message = makeActivityMessage(
         activitySubject(team.name, actorLogin),
         input.type,
@@ -592,43 +643,25 @@ export async function recordActivity(input: {
         created_at: new Date().toISOString()
       };
 
-      const { error: updateError } = await supabase
-        .from("teams")
-        .update({
-          score: nextScore,
-          commit_count: nextCommitCount,
-          house_level: nextLevel
+      const { data: atomicActivity, error: atomicError } = await supabase
+        .rpc("record_activity_atomic", {
+          p_id: activity.id,
+          p_team_id: activity.team_id,
+          p_type: activity.type,
+          p_message: activity.message,
+          p_score_delta: activity.score_delta,
+          p_commit_delta: commitDelta,
+          p_actor_login: activity.actor_login,
+          p_actor_avatar_url: activity.actor_avatar_url,
+          p_metadata: activity.metadata,
+          p_created_at: activity.created_at
         })
-        .eq("id", team.id);
+        .maybeSingle();
 
-      if (updateError) {
-        throw updateError;
-      }
-
-      let { data: insertedActivity, error: activityError } = await supabase
-        .from("activities")
-        .insert(activity)
-        .select("*")
-        .single();
-
-      // 実行者の列がまだ無いDBでも、記録そのものは落とさない。
-      if (activityError && isMissingActorColumn(activityError)) {
-        const { actor_login, actor_avatar_url, ...legacy } = activity;
-        void actor_login;
-        void actor_avatar_url;
-        ({ data: insertedActivity, error: activityError } = await supabase
-          .from("activities")
-          .insert(legacy)
-          .select("*")
-          .single());
-      }
-
-      if (activityError) {
-        throw activityError;
-      }
-
+      if (atomicError) throw atomicError;
+      if (!atomicActivity) throw new Error("Atomic activity recording returned no row");
       return {
-        ...(insertedActivity as Activity),
+        ...(atomicActivity as Activity),
         team_name: team.name
       };
     }
@@ -639,20 +672,28 @@ export async function recordActivity(input: {
     ? store.teams.find((candidate) => candidate.id === input.teamId)
     : undefined;
 
+  if (input.teamId && !team) return null;
+
   if (!team && input.githubRepo) {
-    team = store.teams.find((candidate) => candidate.github_repo === input.githubRepo);
+    const matchingTeams = store.teams.filter(
+      (candidate) => candidate.github_repo?.toLowerCase() === input.githubRepo?.toLowerCase()
+    );
+    team = matchingTeams.length === 1 ? matchingTeams[0] : undefined;
     // Supabase側と同じく、未登録リポジトリの通知は捨てる。
     if (!team) return null;
   }
 
-  team ??= store.teams[0];
-
   if (!team) return null;
+
+  const scoreConfig = await getScoreConfig(team.event_id);
+  const scoreDelta = scoreConfig[input.type];
 
   const duplicateActivity = store.activities.find((activity) => {
     const activityMetadata = activity.metadata ?? {};
     return (
-      (input.githubDeliveryId && activityMetadata.githubDeliveryId === input.githubDeliveryId) ||
+      (input.githubDeliveryId &&
+        activity.team_id === team?.id &&
+        activityMetadata.githubDeliveryId === input.githubDeliveryId) ||
       (typeof metadata.commitSha === "string" &&
         activityMetadata.commitSha === metadata.commitSha &&
         activity.team_id === team?.id)
@@ -695,11 +736,47 @@ export async function recordActivity(input: {
   };
 }
 
+/** 同じリポジトリを使う複数イベントへ、1回のGitHub通知をそれぞれ記録する。 */
+export async function recordRepositoryActivity(input: {
+  type: ActivityType;
+  githubRepo: string;
+  fallbackTeamName?: string;
+  githubDeliveryId?: string;
+  actorLogin?: string;
+  actorAvatarUrl?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<ActivityView[]> {
+  const githubRepo = input.githubRepo.trim();
+  if (!githubRepo) return [];
+
+  let teamIds: string[];
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+      .from("teams")
+      .select("id")
+      .ilike("github_repo", githubRepo);
+    if (error) throw error;
+    teamIds = (data ?? []).map((team) => team.id as string);
+  } else {
+    teamIds = getMemoryStore().teams
+      .filter((team) => team.github_repo?.toLowerCase() === githubRepo.toLowerCase())
+      .map((team) => team.id);
+  }
+
+  const recorded = await Promise.all(
+    teamIds.map((teamId) => recordActivity({ ...input, githubRepo, teamId }))
+  );
+  return recorded.filter((activity): activity is ActivityView => activity !== null);
+}
+
 /**
  * GitHubログインした運営もDMの宛先にできるよう、最初にDM画面を開いた時点で
  * 公開プロフィールだけを users に同期する。既存メンターの specialty は上書きしない。
  */
 export async function syncDirectMessageProfile(input: {
+  eventId: string;
   githubUsername: string;
   displayName: string;
   avatarUrl: string | null;
@@ -711,40 +788,69 @@ export async function syncDirectMessageProfile(input: {
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
-      const { error } = await supabase.from("users").upsert(
+      const { data: user, error } = await supabase
+        .from("users")
+        .upsert(
+          {
+            github_username: githubUsername,
+            display_name: input.displayName.trim() || githubUsername,
+            avatar_url: input.avatarUrl,
+            role: input.role
+          },
+          { onConflict: "github_username" }
+        )
+        .select("id")
+        .single();
+      if (error || !user) throw error ?? new Error("プロフィールを保存できませんでした。");
+
+      const { error: membershipError } = await supabase.from("event_members").upsert(
         {
-          github_username: githubUsername,
-          display_name: input.displayName.trim() || githubUsername,
-          avatar_url: input.avatarUrl,
-          role: input.role
+          event_id: input.eventId,
+          user_id: user.id,
+          role: input.role,
+          specialty: null
         },
-        { onConflict: "github_username" }
+        { onConflict: "event_id,user_id" }
       );
-      if (error) throw error;
+      if (membershipError) throw membershipError;
       return;
     }
   }
 
   const store = getMemoryStore();
-  const existing = store.users.find(
+  let existing = store.users.find(
     (user) => user.github_username.toLowerCase() === githubUsername.toLowerCase()
   );
   if (existing) {
     existing.display_name = input.displayName.trim() || githubUsername;
     existing.avatar_url = input.avatarUrl;
     existing.role = input.role;
-    return;
+  } else {
+    existing = {
+      id: randomUUID(),
+      github_username: githubUsername,
+      display_name: input.displayName.trim() || githubUsername,
+      avatar_url: input.avatarUrl,
+      role: input.role,
+      specialty: null,
+      created_at: new Date().toISOString()
+    };
+    store.users.push(existing);
   }
 
-  store.users.push({
-    id: randomUUID(),
-    github_username: githubUsername,
-    display_name: input.displayName.trim() || githubUsername,
-    avatar_url: input.avatarUrl,
-    role: input.role,
-    specialty: null,
-    created_at: new Date().toISOString()
-  });
+  const membership = store.eventMembers.find(
+    (member) => member.event_id === input.eventId && member.user_id === existing.id
+  );
+  if (membership) {
+    membership.role = input.role;
+  } else {
+    store.eventMembers.push({
+      event_id: input.eventId,
+      user_id: existing.id,
+      role: input.role,
+      specialty: null
+    });
+  }
 }
 
 function dmRecipientRoles(role: UserRole): UserRole[] {
@@ -766,6 +872,7 @@ function toDirectMessageContact(user: User): DirectMessageContact {
 
 /** 役割に応じて、DMを開始できる相手だけを返す。 */
 export async function getDirectMessageContacts(input: {
+  eventId: string;
   viewerLogin: string;
   viewerRole: UserRole;
 }): Promise<DirectMessageContact[]> {
@@ -775,25 +882,72 @@ export async function getDirectMessageContacts(input: {
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
-      const { data, error } = await supabase
-        .from("users")
-        .select("github_username,display_name,avatar_url,role,specialty")
+      const { data: memberRows, error: membershipError } = await supabase
+        .from("event_members")
+        .select("user_id,role,specialty")
+        .eq("event_id", input.eventId)
         .in("role", allowedRoles)
+      if (membershipError) throw membershipError;
+      const memberships = (memberRows ?? []) as Pick<
+        EventMember,
+        "user_id" | "role" | "specialty"
+      >[];
+      if (memberships.length === 0) return [];
+
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id,github_username,display_name,avatar_url")
+        .in("id", memberships.map((member) => member.user_id))
         .order("display_name", { ascending: true });
-      if (error) throw error;
-      return ((data ?? []) as DirectMessageContact[]).filter(
-        (user) => user.github_username.toLowerCase() !== input.viewerLogin.toLowerCase()
+      if (usersError) throw usersError;
+      const membershipByUser = new Map(
+        memberships.map((membership) => [membership.user_id, membership])
       );
+      return ((users ?? []) as Array<
+        Pick<User, "id" | "github_username" | "display_name" | "avatar_url">
+      >)
+        .filter(
+          (user) => user.github_username.toLowerCase() !== input.viewerLogin.toLowerCase()
+        )
+        .flatMap((user) => {
+          const membership = membershipByUser.get(user.id);
+          return membership
+            ? [
+                {
+                  github_username: user.github_username,
+                  display_name: user.display_name,
+                  avatar_url: user.avatar_url,
+                  role: membership.role,
+                  specialty: membership.specialty
+                }
+              ]
+            : [];
+        });
     }
   }
 
-  return getMemoryStore()
-    .users.filter(
+  const store = getMemoryStore();
+  const membershipByUser = new Map(
+    store.eventMembers
+      .filter(
+        (member) => member.event_id === input.eventId && allowedRoles.includes(member.role)
+      )
+      .map((member) => [member.user_id, member])
+  );
+  return store.users
+    .filter(
       (user) =>
-        allowedRoles.includes(user.role) &&
+        membershipByUser.has(user.id) &&
         user.github_username.toLowerCase() !== input.viewerLogin.toLowerCase()
     )
-    .map(toDirectMessageContact)
+    .map((user) => {
+      const membership = membershipByUser.get(user.id) as EventMember;
+      return {
+        ...toDirectMessageContact(user),
+        role: membership.role,
+        specialty: membership.specialty
+      };
+    })
     .sort((a, b) => a.display_name.localeCompare(b.display_name));
 }
 
@@ -856,20 +1010,30 @@ export async function createDirectMessage(input: {
     throw new Error("この役割ではDMを利用できません。");
   }
 
-  let recipient: Pick<User, "github_username" | "role"> | undefined;
+  let recipient: Pick<User, "id" | "github_username"> | undefined;
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
       const { data, error } = await supabase
         .from("users")
-        .select("github_username,role")
+        .select("id,github_username")
         .ilike("github_username", recipientLogin)
         .maybeSingle();
       if (error) throw error;
-      recipient = data as Pick<User, "github_username" | "role"> | null ?? undefined;
+      recipient = data as Pick<User, "id" | "github_username"> | null ?? undefined;
 
-      if (!recipient || !allowedRoles.includes(recipient.role)) {
+      if (!recipient) {
         throw new Error("この相手にはDMを送れません。");
+      }
+      const { data: recipientMembership, error: membershipError } = await supabase
+        .from("event_members")
+        .select("role")
+        .eq("event_id", eventId)
+        .eq("user_id", recipient.id)
+        .maybeSingle();
+      if (membershipError) throw membershipError;
+      if (!recipientMembership || !allowedRoles.includes(recipientMembership.role as UserRole)) {
+        throw new Error("このイベントの相手にはDMを送れません。");
       }
 
       const message: DirectMessage = {
@@ -896,7 +1060,12 @@ export async function createDirectMessage(input: {
   recipient = store.users.find(
     (user) => user.github_username.toLowerCase() === recipientLogin.toLowerCase()
   );
-  if (!recipient || !allowedRoles.includes(recipient.role)) {
+  const recipientMembership = recipient
+    ? store.eventMembers.find(
+        (member) => member.event_id === eventId && member.user_id === recipient?.id
+      )
+    : undefined;
+  if (!recipient || !recipientMembership || !allowedRoles.includes(recipientMembership.role)) {
     throw new Error("この相手にはDMを送れません。");
   }
 
@@ -956,10 +1125,8 @@ export async function createChatMessage(input: {
         .insert(message)
         .select("*")
         .single();
-
-      if (!error && data) {
-        return data as ChatMessage;
-      }
+      if (error || !data) throw error ?? new Error("メッセージを保存できませんでした。");
+      return data as ChatMessage;
     }
   }
 
@@ -979,6 +1146,18 @@ export async function createHelpPost(input: {
   anonymous?: boolean;
 }): Promise<HelpPostView> {
   const status = input.status ?? "open";
+  const title = input.title.trim();
+  const body = input.body.trim();
+  const category = input.category.trim();
+  if (!title || title.length > 100) {
+    throw new Error("タイトルは1〜100文字で入力してください。");
+  }
+  if (!body || body.length > 2000) {
+    throw new Error("質問の詳細は1〜2000文字で入力してください。");
+  }
+  if (!category || category.length > 50) {
+    throw new Error("カテゴリは1〜50文字で入力してください。");
+  }
 
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
@@ -1030,9 +1209,9 @@ export async function createHelpPost(input: {
         id: randomUUID(),
         user_id: author?.id ?? "unknown-user",
         team_id: selectedTeam.id,
-        title: input.title,
-        body: input.body,
-        category: input.category,
+        title,
+        body,
+        category,
         is_anonymous: input.anonymous === true,
         status,
         created_at: new Date().toISOString()
@@ -1040,18 +1219,24 @@ export async function createHelpPost(input: {
 
       const { error: insertError } = await supabase.from("help_posts").insert(post);
       if (insertError) throw insertError;
+      const { user_id: _privateUserId, ...publicPost } = post;
+      void _privateUserId;
       return {
-        ...post,
+        ...publicPost,
         author_name: input.anonymous ? "匿名" : author?.display_name ?? input.authorName ?? "参加者",
-        author_github: author?.github_username ?? input.authorGithub ?? null,
+        author_github: input.anonymous
+          ? null
+          : author?.github_username ?? input.authorGithub ?? null,
         team_name: selectedTeam.name,
-        replies: []
+        replies: [],
+        can_accept: true
       };
     }
   }
 
   const store = getMemoryStore();
-  const team = store.teams.find((candidate) => candidate.id === input.teamId) ?? store.teams[0];
+  const team = store.teams.find((candidate) => candidate.id === input.teamId);
+  if (!team) throw new Error("選択されたチームが見つかりません。");
 
   let user = input.authorGithub
     ? store.users.find((candidate) => candidate.github_username === input.authorGithub)
@@ -1076,9 +1261,9 @@ export async function createHelpPost(input: {
     id: randomUUID(),
     user_id: user.id,
     team_id: team.id,
-    title: input.title,
-    body: input.body,
-    category: input.category,
+    title,
+    body,
+    category,
     is_anonymous: input.anonymous === true,
     status,
     created_at: new Date().toISOString()
@@ -1086,12 +1271,16 @@ export async function createHelpPost(input: {
 
   store.helpPosts.unshift(post);
 
+  const { user_id: _privateUserId, ...publicPost } = post;
+  void _privateUserId;
+
   return {
-    ...post,
+    ...publicPost,
     author_name: input.anonymous ? "匿名" : user.display_name,
-    author_github: user.github_username,
+    author_github: input.anonymous ? null : user.github_username,
     team_name: team.name,
-    replies: []
+    replies: [],
+    can_accept: true
   };
 }
 
@@ -1203,10 +1392,53 @@ export async function acceptHelpReply(input: {
   }
 }
 
-/** 掲示板の投稿を1件取得する。権限チェック用。 */
-export async function getHelpPostById(id: string): Promise<HelpPostView | null> {
-  const state = await getHackVerseState();
-  return state.helpPosts.find((post) => post.id === id) ?? null;
+/** 掲示板の投稿者を、API内の権限チェックだけに使う。公開レスポンスには含めない。 */
+export async function getHelpPostById(
+  id: string,
+  eventId?: string
+): Promise<{ id: string; author_github: string | null; event_id: string } | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: post, error: postError } = await supabase
+        .from("help_posts")
+        .select("id,user_id,team_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (postError) throw postError;
+      if (!post) return null;
+
+      const [teamResult, userResult] = await Promise.all([
+        supabase.from("teams").select("event_id").eq("id", post.team_id).maybeSingle(),
+        supabase.from("users").select("github_username").eq("id", post.user_id).maybeSingle()
+      ]);
+      if (teamResult.error || userResult.error) {
+        throw teamResult.error ?? userResult.error;
+      }
+
+      const postEventId = (teamResult.data as { event_id?: string } | null)?.event_id;
+      if (!postEventId || (eventId && postEventId !== eventId)) return null;
+
+      return {
+        id: post.id as string,
+        author_github:
+          (userResult.data as { github_username?: string } | null)?.github_username ?? null,
+        event_id: postEventId
+      };
+    }
+  }
+
+  const store = getMemoryStore();
+  const post = store.helpPosts.find((candidate) => candidate.id === id);
+  if (!post) return null;
+  const team = store.teams.find((candidate) => candidate.id === post.team_id);
+  if (!team || (eventId && team.event_id !== eventId)) return null;
+  const user = store.users.find((candidate) => candidate.id === post.user_id);
+  return {
+    id: post.id,
+    author_github: user?.github_username ?? null,
+    event_id: team.event_id
+  };
 }
 
 function makeJoinCode(): string {
@@ -1220,21 +1452,24 @@ function makeJoinCode(): string {
   return `${code.slice(0, 4)}-${code.slice(4)}`;
 }
 
-/** 開催中のイベント（1件のみ運用）。未設定なら null。 */
+/** 指定イベント、または最後に作成したイベント。 */
 export async function getEvent(eventId?: string | null): Promise<HackEvent | null> {
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
       const query = supabase.from("events").select("*");
-      const { data } = eventId
+      const { data, error } = eventId
         ? await query.eq("id", eventId).maybeSingle()
         : await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
-      if (data) return data as HackEvent;
+      if (error) throw error;
+      return (data as HackEvent | null) ?? null;
     }
   }
 
-  const event = getMemoryStore().event;
-  return !eventId || event?.id === eventId ? event : null;
+  const store = getMemoryStore();
+  return eventId
+    ? store.events.find((event) => event.id === eventId) ?? null
+    : store.event ?? store.events.at(-1) ?? null;
 }
 
 export async function getEventByJoinCode(code: string | undefined): Promise<HackEvent | null> {
@@ -1254,8 +1489,9 @@ export async function getEventByJoinCode(code: string | undefined): Promise<Hack
     }
   }
 
-  const event = getMemoryStore().event;
-  return event?.join_code.toUpperCase() === joinCode ? event : null;
+  return getMemoryStore().events.find(
+    (event) => event.join_code.toUpperCase() === joinCode
+  ) ?? null;
 }
 
 /** GitHubログインした人が、自分だけが管理できるイベントを作成する。 */
@@ -1280,11 +1516,59 @@ export async function createEvent(input: {
     if (supabase) {
       const { data, error } = await supabase.from("events").insert(event).select("*").single();
       if (error || !data) throw error ?? new Error("イベントを作成できませんでした。");
+      const { data: ownerUser, error: ownerError } = await supabase
+        .from("users")
+        .upsert(
+          {
+            github_username: owner,
+            display_name: owner,
+            role: "admin"
+          },
+          { onConflict: "github_username" }
+        )
+        .select("id")
+        .single();
+      if (ownerError || !ownerUser) {
+        throw ownerError ?? new Error("主催者情報を保存できませんでした。");
+      }
+      const { error: membershipError } = await supabase.from("event_members").upsert(
+        {
+          event_id: data.id,
+          user_id: ownerUser.id,
+          role: "admin",
+          specialty: null
+        },
+        { onConflict: "event_id,user_id" }
+      );
+      if (membershipError) throw membershipError;
       return data as HackEvent;
     }
   }
 
-  getMemoryStore().event = event;
+  const store = getMemoryStore();
+  store.event = event;
+  store.events.push(event);
+  let ownerUser = store.users.find(
+    (user) => user.github_username.toLowerCase() === owner.toLowerCase()
+  );
+  if (!ownerUser) {
+    ownerUser = {
+      id: randomUUID(),
+      github_username: owner,
+      display_name: owner,
+      avatar_url: null,
+      role: "admin",
+      specialty: null,
+      created_at: new Date().toISOString()
+    };
+    store.users.push(ownerUser);
+  }
+  store.eventMembers.push({
+    event_id: event.id,
+    user_id: ownerUser.id,
+    role: "admin",
+    specialty: null
+  });
   return event;
 }
 
@@ -1314,15 +1598,53 @@ export async function getEventsOwnedBy(githubUsername: string | undefined): Prom
       return (data ?? []) as HackEvent[];
     }
   }
-  const event = getMemoryStore().event;
-  return event?.owner_github_username.toLowerCase() === owner.toLowerCase() ? [event] : [];
+  return getMemoryStore().events
+    .filter((event) => event.owner_github_username.toLowerCase() === owner.toLowerCase())
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
-/** 参加者が切り替えられる、所属チームを持つイベント。 */
+/** ログイン中の人が切り替えられるイベントと、そのイベントでの役割。 */
 export type JoinedEvent = HackEvent & {
-  teamId: string;
-  teamName: string;
+  role: UserRole;
+  teamId?: string;
+  teamName?: string;
 };
+
+export async function getEventMemberRole(input: {
+  eventId: string;
+  githubUsername: string;
+}): Promise<UserRole | null> {
+  const login = input.githubUsername.trim();
+  if (!login) return null;
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("github_username", login)
+        .maybeSingle();
+      if (userError) throw userError;
+      if (!user) return null;
+      const { data: member, error: memberError } = await supabase
+        .from("event_members")
+        .select("role")
+        .eq("event_id", input.eventId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (memberError) throw memberError;
+      return (member?.role as UserRole | undefined) ?? null;
+    }
+  }
+  const store = getMemoryStore();
+  const user = store.users.find(
+    (candidate) => candidate.github_username.toLowerCase() === login.toLowerCase()
+  );
+  if (!user) return null;
+  return store.eventMembers.find(
+    (member) => member.event_id === input.eventId && member.user_id === user.id
+  )?.role ?? null;
+}
 
 export async function getMembershipInEvent(input: {
   eventId: string;
@@ -1384,64 +1706,91 @@ export async function getEventsJoinedBy(githubUsername: string | undefined): Pro
       const { data: user, error: userError } = await supabase
         .from("users")
         .select("id")
-        .eq("github_username", login)
+        .ilike("github_username", login)
         .maybeSingle();
       if (userError) throw userError;
       if (!user) return [];
 
       const { data: memberships, error: membershipError } = await supabase
-        .from("team_members")
-        .select("team_id")
+        .from("event_members")
+        .select("event_id,role")
         .eq("user_id", user.id);
       if (membershipError) throw membershipError;
-      const teamIds = [...new Set((memberships ?? []).map((membership) => membership.team_id))];
-      if (teamIds.length === 0) return [];
-
-      const { data: teams, error: teamError } = await supabase
-        .from("teams")
-        .select("id,event_id,name")
-        .in("id", teamIds);
-      if (teamError) throw teamError;
-      const eventIds = [...new Set((teams ?? []).map((team) => team.event_id))];
+      const eventIds = [...new Set((memberships ?? []).map((membership) => membership.event_id))];
       if (eventIds.length === 0) return [];
 
-      const { data: events, error: eventError } = await supabase
-        .from("events")
-        .select("*")
-        .in("id", eventIds)
-        .order("created_at", { ascending: false });
-      if (eventError) throw eventError;
-      const teamsByEvent = new Map((teams ?? []).map((team) => [team.event_id, team]));
-      return (events ?? []).flatMap((event) => {
-        const team = teamsByEvent.get(event.id);
-        return team ? [{ ...(event as HackEvent), teamId: team.id, teamName: team.name }] : [];
+      const [eventsResult, teamMembershipsResult] = await Promise.all([
+        supabase.from("events").select("*").in("id", eventIds).order("created_at", { ascending: false }),
+        supabase.from("team_members").select("team_id").eq("user_id", user.id)
+      ]);
+      if (eventsResult.error || teamMembershipsResult.error) {
+        throw eventsResult.error ?? teamMembershipsResult.error;
+      }
+      const teamIds = (teamMembershipsResult.data ?? []).map((member) => member.team_id);
+      const teamsResult = teamIds.length
+        ? await supabase.from("teams").select("id,event_id,name").in("id", teamIds)
+        : { data: [], error: null };
+      if (teamsResult.error) throw teamsResult.error;
+
+      const roleByEvent = new Map((memberships ?? []).map((member) => [member.event_id, member.role as UserRole]));
+      const teamByEvent = new Map((teamsResult.data ?? []).map((team) => [team.event_id, team]));
+      return (eventsResult.data ?? []).flatMap((event) => {
+        const role = roleByEvent.get(event.id);
+        if (!role) return [];
+        const team = teamByEvent.get(event.id);
+        if (role === "participant" && !team) return [];
+        return [{
+          ...(event as HackEvent),
+          role,
+          teamId: team?.id,
+          teamName: team?.name
+        }];
       });
     }
   }
 
   const store = getMemoryStore();
-  const user = store.users.find((candidate) => candidate.github_username === login);
-  if (!user) return [];
-  const teamIds = new Set(
-    store.teamMembers
-      .filter((membership) => membership.user_id === user.id)
-      .map((membership) => membership.team_id)
+  const user = store.users.find(
+    (candidate) => candidate.github_username.toLowerCase() === login.toLowerCase()
   );
-  const activeEvent = store.event;
-  return store.teams.flatMap((team) => {
-    if (!teamIds.has(team.id) || activeEvent?.id !== team.event_id) return [];
-    return [{ ...activeEvent, teamId: team.id, teamName: team.name }];
-  });
+  if (!user) return [];
+  return store.eventMembers.flatMap((membership) => {
+    if (membership.user_id !== user.id) return [];
+    const event = store.events.find((candidate) => candidate.id === membership.event_id);
+    if (!event) return [];
+    const team = store.teams.find(
+      (candidate) =>
+        candidate.event_id === membership.event_id &&
+        store.teamMembers.some(
+          (member) => member.user_id === user.id && member.team_id === candidate.id
+        )
+    );
+    if (membership.role === "participant" && !team) return [];
+    return [{
+      ...event,
+      role: membership.role,
+      teamId: team?.id,
+      teamName: team?.name
+    }];
+  }).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
-function resetMemoryEventData(store: MemoryStore) {
-  store.teams = [];
-  store.teamMembers = [];
-  store.teamInvites = [];
-  store.activities = [];
-  store.helpPosts = [];
-  store.helpReplies = [];
-  store.messages = [];
+function resetMemoryEventData(store: MemoryStore, eventId: string) {
+  const teamIds = new Set(
+    store.teams.filter((team) => team.event_id === eventId).map((team) => team.id)
+  );
+  const postIds = new Set(
+    store.helpPosts.filter((post) => teamIds.has(post.team_id)).map((post) => post.id)
+  );
+  store.teams = store.teams.filter((team) => !teamIds.has(team.id));
+  store.teamMembers = store.teamMembers.filter((member) => !teamIds.has(member.team_id));
+  store.teamInvites = store.teamInvites.filter((invite) => !teamIds.has(invite.team_id));
+  store.activities = store.activities.filter((activity) => !teamIds.has(activity.team_id));
+  store.helpPosts = store.helpPosts.filter((post) => !postIds.has(post.id));
+  store.helpReplies = store.helpReplies.filter((reply) => !postIds.has(reply.help_post_id));
+  store.messages = store.messages.filter((message) => message.event_id !== eventId);
+  store.directMessages = store.directMessages.filter((message) => message.event_id !== eventId);
+  store.eventMembers = store.eventMembers.filter((member) => member.event_id !== eventId);
 }
 
 async function resetSupabaseEventData(
@@ -1466,7 +1815,6 @@ export async function saveEvent(input: {
   if (!name) throw new Error("イベント名を入力してください。");
 
   const existing = await getEvent(input.eventId);
-  const shouldReset = false;
   const joinCode = existing?.join_code ?? makeJoinCode();
 
   if (isSupabaseConfigured()) {
@@ -1479,9 +1827,8 @@ export async function saveEvent(input: {
           .eq("id", existing.id)
           .select("*")
           .single();
-        if (!error && data) {
-          return data as HackEvent;
-        }
+        if (error || !data) throw error ?? new Error("イベントを更新できませんでした。");
+        return data as HackEvent;
       } else {
         const event: HackEvent = {
           id: randomUUID(),
@@ -1495,14 +1842,14 @@ export async function saveEvent(input: {
           .insert(event)
           .select("*")
           .single();
-        if (!error && data) return data as HackEvent;
+        if (error || !data) throw error ?? new Error("イベントを作成できませんでした。");
+        return data as HackEvent;
       }
     }
   }
 
   const store = getMemoryStore();
-  if (shouldReset) resetMemoryEventData(store);
-  store.event = {
+  const savedEvent: HackEvent = {
     id: existing?.id ?? randomUUID(),
     name,
     join_code: joinCode,
@@ -1510,7 +1857,11 @@ export async function saveEvent(input: {
       existing?.owner_github_username ?? input.ownerGithubUsername?.trim() ?? "test-owner",
     created_at: existing?.created_at ?? new Date().toISOString()
   };
-  return store.event;
+  const existingIndex = store.events.findIndex((event) => event.id === savedEvent.id);
+  if (existingIndex >= 0) store.events[existingIndex] = savedEvent;
+  else store.events.push(savedEvent);
+  store.event = savedEvent;
+  return savedEvent;
 }
 
 /**
@@ -1520,14 +1871,9 @@ export async function saveEvent(input: {
  * 保存されている値が壊れていても normalizeScoreConfig が既定値で埋める。
  */
 export async function getScoreConfig(eventId?: string): Promise<ScoreConfig> {
-  try {
-    const event = await getEvent(eventId);
-    if (!event?.score_config) return { ...DEFAULT_SCORE_BY_ACTIVITY };
-    return normalizeScoreConfig(event.score_config);
-  } catch {
-    // 設定が読めないだけで記録を止めたくない。
-    return { ...DEFAULT_SCORE_BY_ACTIVITY };
-  }
+  const event = await getEvent(eventId);
+  if (!event?.score_config) return { ...DEFAULT_SCORE_BY_ACTIVITY };
+  return normalizeScoreConfig(event.score_config);
 }
 
 /**
@@ -1536,7 +1882,7 @@ export async function getScoreConfig(eventId?: string): Promise<ScoreConfig> {
  * 途中で配点を変えると、変更前と変更後の活動が混ざって順位の意味が壊れる。
  * それを避けるため、変更時は必ず過去分もそろえる。
  */
-export async function recalculateScores(config: ScoreConfig): Promise<{
+export async function recalculateScores(config: ScoreConfig, eventId: string): Promise<{
   updatedActivities: number;
   updatedTeams: number;
 }> {
@@ -1561,9 +1907,21 @@ export async function recalculateScores(config: ScoreConfig): Promise<{
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
+      const { data: teamRows, error: teamsError } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("event_id", eventId);
+      if (teamsError) throw teamsError;
+
+      const teamIds = ((teamRows ?? []) as { id: string }[]).map((team) => team.id);
+      if (teamIds.length === 0) {
+        return { updatedActivities: 0, updatedTeams: 0 };
+      }
+
       const { data, error } = await supabase
         .from("activities")
         .select("id,team_id,type,score_delta,metadata")
+        .in("team_id", teamIds)
         .limit(10000);
       if (error) throw error;
 
@@ -1587,11 +1945,6 @@ export async function recalculateScores(config: ScoreConfig): Promise<{
       }
       updatedActivities = changed.length;
 
-      const { data: teamRows, error: teamsError } = await supabase
-        .from("teams")
-        .select("id");
-      if (teamsError) throw teamsError;
-
       for (const team of (teamRows ?? []) as { id: string }[]) {
         const bucket = totals.get(team.id) ?? { score: 0, commits: 0 };
         const { error: updateError } = await supabase
@@ -1610,7 +1963,11 @@ export async function recalculateScores(config: ScoreConfig): Promise<{
   }
 
   const store = getMemoryStore();
-  for (const activity of store.activities) {
+  const eventTeamIds = new Set(
+    store.teams.filter((team) => team.event_id === eventId).map((team) => team.id)
+  );
+
+  for (const activity of store.activities.filter((item) => eventTeamIds.has(item.team_id))) {
     const nextDelta = applyActivity(activity);
     if (nextDelta !== activity.score_delta) {
       activity.score_delta = nextDelta;
@@ -1618,14 +1975,15 @@ export async function recalculateScores(config: ScoreConfig): Promise<{
     }
   }
 
-  for (const team of store.teams) {
+  const eventTeams = store.teams.filter((team) => team.event_id === eventId);
+  for (const team of eventTeams) {
     const bucket = totals.get(team.id) ?? { score: 0, commits: 0 };
     team.score = bucket.score;
     team.commit_count = bucket.commits;
     team.house_level = getHouseLevel(bucket.score);
   }
 
-  return { updatedActivities, updatedTeams: store.teams.length };
+  return { updatedActivities, updatedTeams: eventTeams.length };
 }
 
 /** 配点を保存し、過去の記録も同じ配点でそろえる。 */
@@ -1660,11 +2018,11 @@ export async function saveScoreConfig(input: unknown, eventId?: string): Promise
   }
 
   const store = getMemoryStore();
-  if (store.event) {
-    store.event = { ...store.event, score_config: config };
-  }
+  const eventIndex = store.events.findIndex((candidate) => candidate.id === event.id);
+  if (eventIndex >= 0) store.events[eventIndex] = { ...store.events[eventIndex], score_config: config };
+  if (store.event?.id === event.id) store.event = { ...store.event, score_config: config };
 
-  const result = await recalculateScores(config);
+  const result = await recalculateScores(config, event.id);
   return { config, ...result };
 }
 
@@ -1697,9 +2055,9 @@ export async function deleteEvent(eventId?: string): Promise<void> {
   }
 
   const store = getMemoryStore();
-  resetMemoryEventData(store);
-  store.users = store.users.filter((user) => user.role === "admin");
-  store.event = null;
+  resetMemoryEventData(store, event.id);
+  store.events = store.events.filter((candidate) => candidate.id !== event.id);
+  store.event = store.events.at(-1) ?? null;
 }
 
 /** 参加コードの照合。イベント未設定ならコード無しで通す（ローカルデモ用）。 */
@@ -1711,16 +2069,10 @@ export async function verifyJoinCode(code: string | undefined): Promise<boolean>
 
 /** イベント参加コードまたはチーム招待コードを検証する。 */
 export async function verifyMentorInviteCode(code: string | undefined): Promise<boolean> {
-  if (await getEventByJoinCode(code)) return true;
-
-  const normalized = (code ?? "").trim().toUpperCase();
-  if (!normalized) return false;
-
-  const invites = await getTeamInvites();
-  return invites.some((invite) => invite.code.toUpperCase() === normalized);
+  return Boolean(code && (await getEventIdForAccessCode(code)));
 }
 
-async function getEventIdForMentorCode(code: string): Promise<string | undefined> {
+export async function getEventIdForAccessCode(code: string): Promise<string | undefined> {
   const event = await getEventByJoinCode(code);
   if (event) return event.id;
 
@@ -1772,10 +2124,15 @@ export async function joinMentorByCode(input: {
       "招待コードが違います。イベント参加コードまたはチーム招待コードを確認してください。"
     );
   }
-  const eventId = await getEventIdForMentorCode(code);
+  const eventId = await getEventIdForAccessCode(code);
   if (!eventId) throw new Error("このコードのイベントが見つかりません。");
 
-  const role: UserRole = input.role === "admin" ? "admin" : "mentor";
+  // 別イベントでの運営ロールを引き継がない。主催者本人が同じイベントへ
+  // メンター用コードで入り直した場合だけ、そのイベントの運営を維持する。
+  const role: UserRole = await isEventOwner({
+    eventId,
+    githubUsername
+  }) ? "admin" : "mentor";
 
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
@@ -1795,6 +2152,17 @@ export async function joinMentorByCode(input: {
         .single();
 
       if (error) throw error;
+
+      const { error: membershipError } = await supabase.from("event_members").upsert(
+        {
+          event_id: eventId,
+          user_id: data.id,
+          role,
+          specialty
+        },
+        { onConflict: "event_id,user_id" }
+      );
+      if (membershipError) throw membershipError;
 
       return {
         role,
@@ -1827,6 +2195,21 @@ export async function joinMentorByCode(input: {
     user.display_name = displayName;
     user.role = role;
     user.specialty = specialty;
+  }
+
+  const membership = store.eventMembers.find(
+    (member) => member.event_id === eventId && member.user_id === user.id
+  );
+  if (membership) {
+    membership.role = role;
+    membership.specialty = specialty;
+  } else {
+    store.eventMembers.push({
+      event_id: eventId,
+      user_id: user.id,
+      role,
+      specialty
+    });
   }
 
   return {
@@ -1905,10 +2288,19 @@ export async function setTeamRepo(input: {
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
+      const { data: target, error: targetError } = await supabase
+        .from("teams")
+        .select("id,event_id")
+        .eq("id", input.teamId)
+        .maybeSingle();
+      if (targetError) throw targetError;
+      if (!target) throw new Error("チームが見つかりません。");
+
       const { data: taken } = await supabase
         .from("teams")
         .select("id")
-        .eq("github_repo", githubRepo)
+        .ilike("github_repo", githubRepo)
+        .eq("event_id", target.event_id)
         .maybeSingle();
       if (taken && (taken as { id: string }).id !== input.teamId) {
         throw new Error("そのリポジトリは別のチームが使っています。");
@@ -1926,13 +2318,16 @@ export async function setTeamRepo(input: {
   }
 
   const store = getMemoryStore();
-  const taken = store.teams.find(
-    (team) => team.github_repo === githubRepo && team.id !== input.teamId
-  );
-  if (taken) throw new Error("そのリポジトリは別のチームが使っています。");
-
   const team = store.teams.find((candidate) => candidate.id === input.teamId);
   if (!team) throw new Error("チームが見つかりません。");
+
+  const taken = store.teams.find(
+    (candidate) =>
+      candidate.event_id === team.event_id &&
+      candidate.github_repo?.toLowerCase() === githubRepo.toLowerCase() &&
+      candidate.id !== input.teamId
+  );
+  if (taken) throw new Error("そのリポジトリは別のチームが使っています。");
 
   team.github_repo = githubRepo;
   return team;
@@ -1955,10 +2350,19 @@ export async function updateTeam(input: {
   if (isSupabaseConfigured()) {
     const supabase = createServerSupabaseClient();
     if (supabase) {
+      const { data: target, error: targetError } = await supabase
+        .from("teams")
+        .select("id,event_id")
+        .eq("id", input.teamId)
+        .maybeSingle();
+      if (targetError) throw targetError;
+      if (!target) throw new Error("チームが見つかりません。");
+
       const { data: duplicateName } = await supabase
         .from("teams")
         .select("id")
         .ilike("name", name)
+        .eq("event_id", target.event_id)
         .neq("id", input.teamId)
         .maybeSingle();
       if (duplicateName) throw new Error("同じ名前のチームがすでにあります。");
@@ -1967,7 +2371,8 @@ export async function updateTeam(input: {
         const { data: duplicateRepo } = await supabase
           .from("teams")
           .select("id")
-          .eq("github_repo", githubRepo)
+          .ilike("github_repo", githubRepo)
+          .eq("event_id", target.event_id)
           .neq("id", input.teamId)
           .maybeSingle();
         if (duplicateRepo) throw new Error("そのリポジトリは別のチームが使っています。");
@@ -1990,13 +2395,18 @@ export async function updateTeam(input: {
 
   const duplicateName = store.teams.find(
     (candidate) =>
-      candidate.id !== input.teamId && candidate.name.trim().toLowerCase() === name.toLowerCase()
+      candidate.event_id === team.event_id &&
+      candidate.id !== input.teamId &&
+      candidate.name.trim().toLowerCase() === name.toLowerCase()
   );
   if (duplicateName) throw new Error("同じ名前のチームがすでにあります。");
 
   const duplicateRepo = githubRepo
-    ? store.teams.find(
-        (candidate) => candidate.id !== input.teamId && candidate.github_repo === githubRepo
+      ? store.teams.find(
+        (candidate) =>
+          candidate.event_id === team.event_id &&
+          candidate.id !== input.teamId &&
+          candidate.github_repo?.toLowerCase() === githubRepo.toLowerCase()
       )
     : undefined;
   if (duplicateRepo) throw new Error("そのリポジトリは別のチームが使っています。");
@@ -2358,6 +2768,7 @@ export async function joinTeamWithInvite(input: {
   displayName: string;
   githubUsername?: string;
   role?: UserRole;
+  expectedEventId?: string;
 }): Promise<AppSession> {
   const code = input.code.trim().toUpperCase();
   const displayName = input.displayName.trim();
@@ -2387,6 +2798,9 @@ export async function joinTeamWithInvite(input: {
         .single();
 
       if (teamError) throw teamError;
+      if (input.expectedEventId && (team as Team).event_id !== input.expectedEventId) {
+        throw new Error("この部屋番号は、入力したイベントのものではありません。");
+      }
 
       const role = input.role ?? "participant";
       const { data: existingUser, error: existingUserError } = await supabase
@@ -2451,6 +2865,17 @@ export async function joinTeamWithInvite(input: {
 
       if (memberError) throw memberError;
 
+      const { error: eventMemberError } = await supabase.from("event_members").upsert(
+        {
+          event_id: (team as Team).event_id,
+          user_id: user.id,
+          role,
+          specialty: null
+        },
+        { onConflict: "event_id,user_id" }
+      );
+      if (eventMemberError) throw eventMemberError;
+
       return {
         role,
         displayName,
@@ -2472,6 +2897,9 @@ export async function joinTeamWithInvite(input: {
   const team = store.teams.find((candidate) => candidate.id === invite.team_id);
   if (!team) {
     throw new Error("このコードに対応するチームが見つかりません。運営に確認してください。");
+  }
+  if (input.expectedEventId && team.event_id !== input.expectedEventId) {
+    throw new Error("この部屋番号は、入力したイベントのものではありません。");
   }
 
   const role = input.role ?? "participant";
@@ -2519,6 +2947,20 @@ export async function joinTeamWithInvite(input: {
     });
   }
 
+  const eventMember = store.eventMembers.find(
+    (member) => member.event_id === team.event_id && member.user_id === user.id
+  );
+  if (eventMember) {
+    eventMember.role = role;
+  } else {
+    store.eventMembers.push({
+      event_id: team.event_id,
+      user_id: user.id,
+      role,
+      specialty: null
+    });
+  }
+
   return {
     role,
     displayName,
@@ -2540,6 +2982,7 @@ export async function joinTeamByName(input: {
   const displayName = input.displayName.trim();
   const githubUsername =
     input.githubUsername?.trim() || `guest-${randomUUID().slice(0, 8)}`;
+  const role = input.role ?? "participant";
 
   if (!teamName || !displayName) {
     throw new Error("Team name and display name are required.");
@@ -2563,7 +3006,7 @@ export async function joinTeamByName(input: {
           {
             github_username: githubUsername,
             display_name: displayName,
-            role: input.role ?? "participant"
+            role
           },
           { onConflict: "github_username" }
         )
@@ -2582,10 +3025,22 @@ export async function joinTeamByName(input: {
 
       if (memberError) throw memberError;
 
+      const { error: eventMemberError } = await supabase.from("event_members").upsert(
+        {
+          event_id: team.event_id,
+          user_id: user.id,
+          role,
+          specialty: null
+        },
+        { onConflict: "event_id,user_id" }
+      );
+      if (eventMemberError) throw eventMemberError;
+
       return {
-        role: input.role ?? "participant",
+        role,
         displayName,
         githubUsername,
+        eventId: team.event_id,
         teamId: team.id,
         teamName: team.name
       };
@@ -2610,7 +3065,7 @@ export async function joinTeamByName(input: {
       github_username: githubUsername,
       display_name: displayName,
       avatar_url: null,
-      role: input.role ?? "participant",
+      role,
       created_at: new Date().toISOString()
     };
     store.users.push(user);
@@ -2628,10 +3083,25 @@ export async function joinTeamByName(input: {
     });
   }
 
+  const eventMember = store.eventMembers.find(
+    (member) => member.event_id === team.event_id && member.user_id === user.id
+  );
+  if (eventMember) {
+    eventMember.role = role;
+  } else {
+    store.eventMembers.push({
+      event_id: team.event_id,
+      user_id: user.id,
+      role,
+      specialty: null
+    });
+  }
+
   return {
-    role: input.role ?? "participant",
+    role,
     displayName,
     githubUsername,
+    eventId: team.event_id,
     teamId: team.id,
     teamName: team.name
   };

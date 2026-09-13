@@ -56,28 +56,32 @@ export function DashboardClient({
   const [sessionViewer, setSessionViewer] = useState<Viewer | null>(null);
 
   useEffect(() => {
-    const raw = window.localStorage.getItem("hackverse-session");
-    if (!raw) return;
+    const restoreSession = window.setTimeout(() => {
+      const raw = window.localStorage.getItem("hackverse-session");
+      if (!raw) return;
 
-    try {
-      const session = JSON.parse(raw) as {
-        teamId?: string;
-        role?: UserRole;
-        displayName?: string;
-        githubUsername?: string;
-      };
-      setMyTeamId(session.teamId ?? null);
-      if (session.role && session.displayName) {
-        setSessionViewer({
-          login: session.githubUsername ?? "local-user",
-          displayName: session.displayName,
-          role: session.role
-        });
+      try {
+        const session = JSON.parse(raw) as {
+          teamId?: string;
+          role?: UserRole;
+          displayName?: string;
+          githubUsername?: string;
+        };
+        setMyTeamId(session.teamId ?? null);
+        if (session.role && session.displayName) {
+          setSessionViewer({
+            login: session.githubUsername ?? "local-user",
+            displayName: session.displayName,
+            role: session.role
+          });
+        }
+      } catch {
+        setMyTeamId(null);
+        setSessionViewer(null);
       }
-    } catch {
-      setMyTeamId(null);
-      setSessionViewer(null);
-    }
+    }, 0);
+
+    return () => window.clearTimeout(restoreSession);
   }, [viewer]);
 
   const activeViewer = viewer ?? sessionViewer;
@@ -137,8 +141,6 @@ export function DashboardClient({
         {!isJudge && (
           <HelpBoard
             posts={state.helpPosts}
-            viewerGithub={activeViewer?.login ?? null}
-            viewerRole={activeViewer?.role}
             onReply={createHelpReply}
             onAccept={acceptHelpReply}
           />

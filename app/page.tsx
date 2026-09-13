@@ -11,7 +11,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const { isConfigured, identity } = getAuthStatus();
+  const { isConfigured, identity } = await getAuthStatus();
   const [invites, state, hackEvent, ownedEvents, joinedEvents] = await Promise.all([
     // チームの部屋番号は運営だけが一覧で確認できるようにする。
     identity?.role === "admin" && identity.eventId ? getTeamInvites(identity.eventId) : Promise.resolve([]),

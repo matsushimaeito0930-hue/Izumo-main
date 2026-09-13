@@ -9,10 +9,6 @@ import type {
   User
 } from "@/lib/types";
 
-const now = new Date();
-const minutesAgo = (minutes: number) =>
-  new Date(now.getTime() - minutes * 60 * 1000).toISOString();
-
 export const seedUsers: User[] = [];
 
 export const seedTeams: Team[] = [];

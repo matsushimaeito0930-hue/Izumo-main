@@ -50,21 +50,20 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
   };
 
   useEffect(() => {
-    void load();
+    const initialLoad = window.setTimeout(() => void load(), 0);
     const interval = window.setInterval(() => void load(true), 5000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
+    };
     // viewer のログインが切り替わった時だけDMを読み直す。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer?.login]);
 
-  useEffect(() => {
-    if (selectedLogin && contacts.some((contact) => contact.github_username === selectedLogin)) {
-      return;
-    }
-    setSelectedLogin(contacts[0]?.github_username ?? "");
-  }, [contacts, selectedLogin]);
-
-  const selected = contacts.find((contact) => contact.github_username === selectedLogin) ?? null;
+  const activeLogin = contacts.some((contact) => contact.github_username === selectedLogin)
+    ? selectedLogin
+    : contacts[0]?.github_username ?? "";
+  const selected = contacts.find((contact) => contact.github_username === activeLogin) ?? null;
   const groupedContacts = useMemo(
     () => ({
       admins: contacts.filter((contact) => contact.role === "admin"),
@@ -136,7 +135,7 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
                   <h3 className="px-2 pb-1 text-xs font-bold text-muted">{group.title}</h3>
                   <div className="space-y-1">
                     {group.contacts.map((contact) => {
-                      const active = contact.github_username === selectedLogin;
+                      const active = contact.github_username === activeLogin;
                       return (
                         <button
                           key={contact.github_username}

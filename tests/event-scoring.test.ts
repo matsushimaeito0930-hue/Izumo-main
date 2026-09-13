@@ -4,7 +4,9 @@ import {
   createTeamByName,
   getHackVerseState,
   recordActivity,
-  saveScoreConfig
+  recordRepositoryActivity,
+  saveScoreConfig,
+  setTeamRepo
 } from "@/lib/store";
 
 describe("event activity scoring", () => {
@@ -54,5 +56,85 @@ describe("event activity scoring", () => {
     const scoredTeam = state.teams.find((candidate) => candidate.id === team.id);
     expect(scoredTeam?.score).toBe(51);
     expect(scoredTeam?.commit_count).toBe(2);
+  });
+
+  it("keeps scoring isolated when another event has different points", async () => {
+    const firstEvent = await createEvent({
+      name: "First scoring event",
+      ownerGithubUsername: "first-owner"
+    });
+    const firstTeam = await createTeamByName({ name: "First team", eventId: firstEvent.id });
+
+    await saveScoreConfig({ push: 1 }, firstEvent.id);
+    await recordActivity({
+      type: "push",
+      teamId: firstTeam.id,
+      metadata: { commitCount: 1, commitSha: "first-before-second-event" }
+    });
+
+    const secondEvent = await createEvent({
+      name: "Second scoring event",
+      ownerGithubUsername: "second-owner"
+    });
+    const secondTeam = await createTeamByName({ name: "Second team", eventId: secondEvent.id });
+    await saveScoreConfig({ push: 9 }, secondEvent.id);
+
+    const firstActivity = await recordActivity({
+      type: "push",
+      teamId: firstTeam.id,
+      metadata: { commitCount: 1, commitSha: "first-after-second-event" }
+    });
+    const secondActivity = await recordActivity({
+      type: "push",
+      teamId: secondTeam.id,
+      metadata: { commitCount: 1, commitSha: "second-event-push" }
+    });
+
+    expect(firstActivity?.score_delta).toBe(1);
+    expect(secondActivity?.score_delta).toBe(9);
+
+    const firstState = await getHackVerseState(firstEvent.id);
+    const secondState = await getHackVerseState(secondEvent.id);
+    expect(firstState.teams.find((team) => team.id === firstTeam.id)?.score).toBe(2);
+    expect(secondState.teams.find((team) => team.id === secondTeam.id)?.score).toBe(9);
+  });
+
+  it("fans out one repository webhook to the matching team in each event", async () => {
+    const firstEvent = await createEvent({
+      name: "Shared repository event A",
+      ownerGithubUsername: "shared-owner-a"
+    });
+    const firstTeam = await createTeamByName({ name: "Shared A", eventId: firstEvent.id });
+    await setTeamRepo({ teamId: firstTeam.id, githubRepo: "shared/example" });
+    await saveScoreConfig({ push: 1 }, firstEvent.id);
+
+    const secondEvent = await createEvent({
+      name: "Shared repository event B",
+      ownerGithubUsername: "shared-owner-b"
+    });
+    const secondTeam = await createTeamByName({ name: "Shared B", eventId: secondEvent.id });
+    await setTeamRepo({ teamId: secondTeam.id, githubRepo: "SHARED/example" });
+    await saveScoreConfig({ push: 7 }, secondEvent.id);
+
+    const recorded = await recordRepositoryActivity({
+      type: "push",
+      githubRepo: "shared/example",
+      githubDeliveryId: "shared-delivery",
+      metadata: { commitCount: 1, commitSha: "shared-sha" }
+    });
+    expect(recorded).toHaveLength(2);
+
+    // GitHubの再送は各イベントとも二重加点しない。
+    await recordRepositoryActivity({
+      type: "push",
+      githubRepo: "shared/example",
+      githubDeliveryId: "shared-delivery",
+      metadata: { commitCount: 1, commitSha: "shared-sha" }
+    });
+
+    const firstState = await getHackVerseState(firstEvent.id);
+    const secondState = await getHackVerseState(secondEvent.id);
+    expect(firstState.teams.find((team) => team.id === firstTeam.id)?.score).toBe(1);
+    expect(secondState.teams.find((team) => team.id === secondTeam.id)?.score).toBe(7);
   });
 });

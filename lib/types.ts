@@ -157,11 +157,13 @@ export type HelpReply = {
   created_at: string;
 };
 
-export type HelpPostView = HelpPost & {
+export type HelpPostView = Omit<HelpPost, "user_id"> & {
   author_name: string;
   author_github: string | null;
   team_name: string;
   replies: HelpReply[];
+  /** 匿名投稿でも投稿者本人と運営だけにtrueを返し、本人IDは公開しない。 */
+  can_accept: boolean;
 };
 
 /** チームに誰が入っているか。同じ部屋番号で複数人が参加するため一覧で見せる。 */

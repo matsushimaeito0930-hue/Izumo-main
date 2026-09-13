@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseGitHubWebhook, verifyGitHubSignature } from "@/lib/github";
-import { recordActivity } from "@/lib/store";
+import { recordRepositoryActivity } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -41,13 +41,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const activity = await recordActivity({
+    const activities = await recordRepositoryActivity({
       ...parsedActivity,
       // 誰の操作かはGitHubのsenderから来る。参加者の自己申告ではない。
       githubDeliveryId: request.headers.get("x-github-delivery") ?? undefined
     });
 
-    if (!activity) {
+    if (activities.length === 0) {
       // どのチームにも登録されていないリポジトリ。200で返して配信は成功扱いにする。
       return NextResponse.json({
         ok: true,
@@ -59,7 +59,13 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ ok: true, eventName, activity });
+    return NextResponse.json({
+      ok: true,
+      eventName,
+      activity: activities[0],
+      activities,
+      affectedTeams: activities.length
+    });
   } catch (error) {
     return NextResponse.json(
       {

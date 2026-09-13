@@ -30,14 +30,10 @@ function formatTime(value: string) {
 
 export function HelpThread({
   post,
-  viewerGithub,
-  viewerRole,
   onReply,
   onAccept
 }: {
   post: HelpPostView;
-  viewerGithub?: string | null;
-  viewerRole?: UserRole;
   onReply: (input: { helpPostId: string; body: string }) => Promise<void>;
   onAccept: (input: { helpPostId: string; replyId: string }) => Promise<void>;
 }) {
@@ -49,8 +45,7 @@ export function HelpThread({
   // ベストアンサーを選ぶのは質問した本人。
   // 本人が席を外したまま解決した質問を閉じられるよう、運営だけ代われる。
   // メンターは回答する側なので、自分の回答を自分で採用できないようにする。
-  const canAccept =
-    !viewerGithub || post.author_github === viewerGithub || viewerRole === "admin";
+  const canAccept = post.can_accept;
 
   async function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

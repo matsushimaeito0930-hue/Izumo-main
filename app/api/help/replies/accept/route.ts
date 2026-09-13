@@ -6,7 +6,7 @@ import { acceptHelpReply, getHelpPostById } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   // 審査員は閲覧専用。画面を書き換えて送っても通さない。
   if (identity?.role === "judge") {
@@ -28,7 +28,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const post = await getHelpPostById(body.helpPostId);
+  if (isGitHubAuthConfigured() && !identity) {
+    return NextResponse.json(
+      { error: "GitHubでログインしてください。" },
+      { status: 401 }
+    );
+  }
+  if (isGitHubAuthConfigured() && identity && !identity.eventId) {
+    return NextResponse.json({ error: "イベントを選択してください。" }, { status: 400 });
+  }
+
+  const post = await getHelpPostById(body.helpPostId, identity?.eventId);
 
   if (!post) {
     return NextResponse.json({ error: "投稿が見つかりません。" }, { status: 404 });
@@ -36,16 +46,9 @@ export async function POST(request: Request) {
 
   // 採用できるのは質問者本人と運営のみ。
   if (isGitHubAuthConfigured()) {
-    if (!identity) {
-      return NextResponse.json(
-        { error: "GitHubでログインしてください。" },
-        { status: 401 }
-      );
-    }
-
     // 質問者が離席したまま解決した質問を、運営が閉じられるようにしておく。
-    const isAuthor = post.author_github === identity.login;
-    if (!isAuthor && identity.role !== "admin") {
+    const isAuthor = post.author_github?.toLowerCase() === identity?.login.toLowerCase();
+    if (!isAuthor && identity?.role !== "admin") {
       return NextResponse.json(
         { error: "ベストアンサーを選べるのは質問者本人か運営だけです。" },
         { status: 403 }

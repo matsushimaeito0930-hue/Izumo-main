@@ -7,7 +7,7 @@ import { joinTeamWithInvite } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
   const authRequired = isGitHubAuthConfigured();
 
   if (authRequired && !identity) {

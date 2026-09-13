@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 /** ログイン済みの人が、自分だけが管理できる新規イベントを作成する。 */
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
   if (!identity) {
     return NextResponse.json({ error: "主催するにはGitHubでログインしてください。" }, { status: 401 });
   }

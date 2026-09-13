@@ -99,7 +99,9 @@ function Collapsible({
   const [isOpen, setIsOpen] = useState(openByDefault);
 
   useEffect(() => {
-    if (openByDefault) setIsOpen(true);
+    if (!openByDefault) return;
+    const open = window.setTimeout(() => setIsOpen(true), 0);
+    return () => window.clearTimeout(open);
   }, [openByDefault]);
 
   return (
@@ -233,52 +235,56 @@ export function OnboardingClient({
     authConfigured && !viewer && pickedRole !== "mentor" && pickedRole !== "judge";
 
   useEffect(() => {
-    // 招待URL（/?code=イベント&room=部屋番号）で来た人は、入力欄を自動で埋める。
-    const sharedCode = searchParams.get("code");
-    if (sharedCode) setJoinCode(sharedCode.trim().toUpperCase());
+    const restoreDraft = window.setTimeout(() => {
+      // 招待URL（/?code=イベント&room=部屋番号）で来た人は、入力欄を自動で埋める。
+      const sharedCode = searchParams.get("code");
+      if (sharedCode) setJoinCode(sharedCode.trim().toUpperCase());
 
-    const sharedRoom = searchParams.get("room");
-    if (sharedRoom) setRoomCode(sharedRoom.trim().toUpperCase());
+      const sharedRoom = searchParams.get("room");
+      if (sharedRoom) setRoomCode(sharedRoom.trim().toUpperCase());
 
-    const sharedTeam = searchParams.get("team");
-    if (sharedTeam) setInviteTeamName(sharedTeam);
+      const sharedTeam = searchParams.get("team");
+      if (sharedTeam) setInviteTeamName(sharedTeam);
     
     // Discordなどから招待URLで来た場合は、参加者画面を直接開く。
     // 参加確定は認証後の「チームに参加する」で行うため、URLを開いただけでは登録しない。
-    if (sharedCode && sharedRoom) {
-      setParticipantJoinMode("url");
-      setShowInviteConfirm(true);
-    }
+      if (sharedCode && sharedRoom) {
+        setParticipantJoinMode("url");
+        setShowInviteConfirm(true);
+      }
 
     // 認可の往復で役割が消えないよう、URLに残しておいたものを戻す。
-    const sharedRole = searchParams.get("role");
-    if (sharedRole === "participant" || sharedRole === "mentor" || sharedRole === "admin") {
-      setPickedRole(sharedRole);
-    } else if (sharedCode && sharedRoom) {
-      setPickedRole("participant");
-    }
+      const sharedRole = searchParams.get("role");
+      if (sharedRole === "participant" || sharedRole === "mentor" || sharedRole === "admin") {
+        setPickedRole(sharedRole);
+      } else if (sharedCode && sharedRoom) {
+        setPickedRole("participant");
+      }
 
     // 「プライベートも表示する」は GitHub の認可画面を経由する。
     // URL に含めない入力値を、戻ってきたときに一度だけ復元する。
-    try {
-      const savedDraft = window.sessionStorage.getItem(participantDraftStorageKey);
-      if (savedDraft) {
-        const draft = JSON.parse(savedDraft) as Partial<ParticipantDraft>;
-        if (!sharedCode && typeof draft.joinCode === "string") setJoinCode(draft.joinCode);
-        if (!sharedRoom && typeof draft.roomCode === "string") setRoomCode(draft.roomCode);
-        if (typeof draft.githubRepo === "string") setGithubRepo(draft.githubRepo);
-        if (typeof draft.manualRepo === "boolean") setManualRepo(draft.manualRepo);
-        if (!sharedRole && draft.pickedRole === "participant") setPickedRole("participant");
-        window.sessionStorage.removeItem(participantDraftStorageKey);
+      try {
+        const savedDraft = window.sessionStorage.getItem(participantDraftStorageKey);
+        if (savedDraft) {
+          const draft = JSON.parse(savedDraft) as Partial<ParticipantDraft>;
+          if (!sharedCode && typeof draft.joinCode === "string") setJoinCode(draft.joinCode);
+          if (!sharedRoom && typeof draft.roomCode === "string") setRoomCode(draft.roomCode);
+          if (typeof draft.githubRepo === "string") setGithubRepo(draft.githubRepo);
+          if (typeof draft.manualRepo === "boolean") setManualRepo(draft.manualRepo);
+          if (!sharedRole && draft.pickedRole === "participant") setPickedRole("participant");
+          window.sessionStorage.removeItem(participantDraftStorageKey);
+        }
+      } catch {
+        // 保存領域が使えない場合でも、認可そのものは続ける。
       }
-    } catch {
-      // 保存領域が使えない場合でも、認可そのものは続ける。
-    }
 
-    const authError = searchParams.get("auth_error");
-    if (authError) {
-      setMessage(authErrorMessages[authError] ?? "ログインに失敗しました。");
-    }
+      const authError = searchParams.get("auth_error");
+      if (authError) {
+        setMessage(authErrorMessages[authError] ?? "ログインに失敗しました。");
+      }
+    }, 0);
+
+    return () => window.clearTimeout(restoreDraft);
   }, [initialInvites, searchParams]);
 
   function preserveParticipantDraft() {
@@ -304,7 +310,7 @@ export function OnboardingClient({
     if (!viewer) return;
 
     let cancelled = false;
-    setReposState("loading");
+    const markLoading = window.setTimeout(() => setReposState("loading"), 0);
 
     fetch("/api/github/repos")
       .then(async (response) => {
@@ -334,6 +340,7 @@ export function OnboardingClient({
 
     return () => {
       cancelled = true;
+      window.clearTimeout(markLoading);
     };
   }, [viewer]);
 
@@ -448,14 +455,14 @@ export function OnboardingClient({
     }
   }
 
-  async function openJoinedEvent(eventId: string) {
+  async function openJoinedEvent(eventId: string, role: UserRole) {
     setIsBusy(true);
     setMessage("");
     try {
       const response = await fetch("/api/events/activate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ eventId, role: "participant" })
+        body: JSON.stringify({ eventId, role })
       });
       const payload = (await response.json().catch(() => ({}))) as {
         session?: AppSession;
@@ -928,24 +935,26 @@ export function OnboardingClient({
                 役割を選び直す
               </button>
 
-              {pickedRole === "participant" && myJoinedEvents.length > 0 && (
+              {pickedRole !== "admin" && myJoinedEvents.some((event) => event.role === pickedRole) && (
                 <div className="mb-4 rounded-xl border border-line bg-paper p-4 shadow-inset">
                   <p className="text-sm font-bold text-ink">参加中のハッカソン</p>
                   <p className="mt-1 text-xs leading-5 text-muted">
-                    別のイベントに切り替えると、そのイベントのチーム画面を開きます。
+                    別のイベントに切り替えると、そのイベントでの役割で開きます。
                   </p>
                   <div className="mt-3 space-y-2">
-                    {myJoinedEvents.map((event) => (
+                    {myJoinedEvents.filter((event) => event.role === pickedRole).map((event) => (
                       <button
                         key={event.id}
                         type="button"
-                        onClick={() => void openJoinedEvent(event.id)}
+                        onClick={() => void openJoinedEvent(event.id, event.role)}
                         disabled={isBusy}
                         className="flex w-full items-center justify-between rounded-lg border border-line px-3 py-2 text-left text-sm text-ink2 transition hover:bg-surface disabled:opacity-50"
                       >
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{event.name}</span>
-                          <span className="block truncate text-xs text-muted">{event.teamName}</span>
+                          <span className="block truncate text-xs text-muted">
+                            {event.teamName ?? roleLabels[event.role]}
+                          </span>
                         </span>
                         <span className="ml-3 shrink-0 text-xs font-medium text-pulse">開く</span>
                       </button>

@@ -11,15 +11,19 @@ export async function GET() {
     return NextResponse.json({ configured: false });
   }
 
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
   if (!identity) {
     return NextResponse.json({ error: "Login is required." }, { status: 401 });
   }
+  if (!identity.eventId) {
+    return NextResponse.json({ error: "イベントを選択してください。" }, { status: 400 });
+  }
 
   try {
-    const event = await getEvent();
+    const event = await getEvent(identity.eventId);
     const summary = await getWakaTimeDashboardSummary({
       githubLogin: identity.login,
+      eventId: identity.eventId,
       eventStartedAt: event?.created_at ?? null
     });
     return NextResponse.json({ configured: true, ...summary }, {
@@ -34,7 +38,7 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
   if (!identity) {
     return NextResponse.json({ error: "Login is required." }, { status: 401 });
   }

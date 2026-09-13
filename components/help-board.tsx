@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { HelpThread } from "@/components/help-thread";
 import { Panel } from "@/components/panel";
-import type { HelpPostView, UserRole } from "@/lib/types";
+import type { HelpPostView } from "@/lib/types";
 
 type Filter = "unanswered" | "unsolved" | "all";
 
@@ -15,14 +15,10 @@ const filterLabels: Record<Filter, string> = {
 
 export function HelpBoard({
   posts,
-  viewerGithub,
-  viewerRole,
   onReply,
   onAccept
 }: {
   posts: HelpPostView[];
-  viewerGithub?: string | null;
-  viewerRole?: UserRole;
   onReply: (input: { helpPostId: string; body: string }) => Promise<void>;
   onAccept: (input: { helpPostId: string; replyId: string }) => Promise<void>;
 }) {
@@ -77,8 +73,6 @@ export function HelpBoard({
             <HelpThread
               key={post.id}
               post={post}
-              viewerGithub={viewerGithub}
-              viewerRole={viewerRole}
               onReply={onReply}
               onAccept={onAccept}
             />

@@ -2,7 +2,7 @@
 
 Vercel + Supabase で公開する手順です。上から順にやれば動きます。
 
-所要時間の目安は30〜40分。**Supabaseの設定は本番では必須**です（理由は最後に書いています）。
+**Supabaseの設定は本番では必須**です（理由は最後に書いています）。既存の本番DBがある場合は、アプリを更新する前にバックアップと移行SQLの適用が必要です。
 
 ---
 
@@ -26,12 +26,9 @@ npm run build
 
 1. https://supabase.com でプロジェクトを作る（無料枠でよい）
 2. 左メニューの **SQL Editor** を開く
-3. このリポジトリの `supabase/schema.sql` の中身を貼り付けて実行する
-
-既存のSupabaseプロジェクトを使っている場合は、メンター登録を有効にするために
-`supabase/mentor-migration.sql` もSQL Editorで1回だけ実行してください。
-この更新を行わないと、メンター登録時に `specialty` 列または `mentor` ロールの制約で失敗します。
-4. **Settings → API** から次の3つを控える
+3. **新規DB**なら `supabase/schema.sql` を実行する。**既存DB**なら先にバックアップを取り、`supabase/migrations/20260913_event_isolation_and_webhook_atomic.sql` を実行する。既存DBに新規用スキーマを丸ごと再実行しない
+4. 既存DBで移行が失敗した場合は、SQLのトランザクションがロールバックされる。表示された不足データ（イベント所有者、チーム・過去の会話のイベントID、同一イベント内の重複リポジトリ）を確認し、推測で埋めずに修正してから再実行する
+5. **Settings → API** から次の3つを控える
 
 | 控える値 | 環境変数名 |
 | --- | --- |
@@ -41,15 +38,19 @@ npm run build
 
 `service_role` キーはサーバー専用です。**絶対に `NEXT_PUBLIC_` を付けないでください。**
 
+既存DBの移行後は、SQL Editorで次を確認してください。`record_activity_atomic` が1行、`app_change_signal` が1行、`event_members` に既存の所属が復元されていることが目安です。
+
+```sql
+select count(*) from pg_proc where proname = 'record_activity_atomic';
+select count(*) from public.app_change_signal;
+select role, count(*) from public.event_members group by role;
+```
+
 ---
 
 ## 2. GitHubにpushする
 
-```bash
-git add -A
-git commit -m "HackVerse: ダッシュボード刷新・GitHubログイン・質問掲示板"
-git push
-```
+DB移行が成功してから、変更対象を確認してコミット・pushします。移行前にアプリだけ公開するとWebhook記録が失敗します。
 
 `.env.local` は `.gitignore` で除外されているので、鍵がGitHubに上がることはありません。
 
@@ -81,10 +82,9 @@ git push
 | `GITHUB_OAUTH_CALLBACK_URL` | ● | `本番URL/api/auth/github/callback` |
 | `APP_BASE_URL` | ✅ | Webhookの自動登録先にするドメイン（例 `https://izumo-main.vercel.app`、末尾スラッシュなし） |
 | `GITHUB_WEBHOOK_SECRET` | ● | 自分で決めた長い文字列（手順5で使う） |
-| `ADMIN_GITHUB_LOGINS` | ● | 運営のGitHubユーザー名（カンマ区切り） |
 | `ENABLE_DEMO_MODE` | | `false`（審査でデモ操作を見せたい場合のみ `true`） |
 
-**`ADMIN_GITHUB_LOGINS` を空のままにしないでください。** 空だと、ログインした人なら誰でも招待コードを作れてしまいます。
+運営の固定allowlistは不要です。GitHubログイン後にイベントを作成した本人だけが、そのイベントを管理できます。
 
 ---
 
@@ -123,9 +123,9 @@ git push
 ## 6. チームを登録する
 
 1. 本番URLを開く
-2. GitHubでログインする（`ADMIN_GITHUB_LOGINS` に入れたアカウントで）
-3. 「運営の方：チームを登録する」を開く
-4. チーム名を入力し、**GitHubリポジトリをプルダウンから選ぶ**
+2. GitHubでログインする
+3. 「このイベントを主催する」からイベントを作成する
+4. 運営設定でチーム名を登録し、発行された部屋番号または招待URLを共有する
 
 リポジトリはログイン中のアカウントの一覧から選べるので、打ち間違いは起きません。
 一覧に出るのはパブリックリポジトリのみです。プライベートリポジトリを使う場合は
@@ -140,13 +140,15 @@ git push
 
 - [ ] 本番URLが開ける
 - [ ] 「GitHubでログイン」でGitHubに飛び、戻ってきてアバターと名前が出る
-- [ ] GitHubログイン後、チーム名を選んで参加でき、`/dashboard` に移動する
+- [ ] GitHubログイン後、イベントコードとチームの部屋番号（または招待URL）で参加でき、`/dashboard` に移動する
 - [ ] ダッシュボードに自分のチームが「自分のチーム」バッジ付きで出る
 - [ ] リポジトリに何かpushすると、10秒以内に「みんなの動き」に増える
 - [ ] スコアとランキングが動く
 - [ ] `/help` で質問を投稿できる
 - [ ] 別アカウントでその質問に回答でき、質問者が「これで解決した」を押すと解決済みになる
 - [ ] 運営への相談にメッセージを送れる
+- [ ] 同じGitHubアカウントで別イベントへ参加・切替でき、前のイベントのチーム・点数・質問が混ざらない
+- [ ] WakaTimeを2人以上が連携し、個人時間とチーム合計を確認できる（連携を使う場合）
 
 pushしても反映されない場合は、GitHub側の Recent Deliveries を見てください。
 
@@ -179,8 +181,9 @@ OAuth Appのコールバックが `本番URL/api/auth/github/callback` と完全
 `AUTH_SECRET` を変更すると、既存のcookieが全部無効になります。変更した場合は再ログインが必要です。セッションの有効期限は12時間です。
 
 **運営の画面にならない（参加コードが右上に出ない）**
-`ADMIN_GITHUB_LOGINS` にそのGitHubユーザー名が入っているか確認。
-変更後は再デプロイし、さらに一度ログインし直してください（ロールはログイン時のcookieに焼き込まれます）。
+トップへ戻り、「主催しているイベント」から対象イベントを開いてください。
+別のGitHubアカウントで作ったイベントは管理できません。
 
 **スコアがおかしい**
-同時に大量のイベントが来ると加算が落ちることがあります。Supabaseの `teams` テーブルで直接直せます。
+新規DBなら`supabase/schema.sql`、既存DBなら上記の移行SQLが適用されているか確認してください。Webhookの重複排除・履歴追加・加点は
+DB内の1トランザクションで行われるため、同時配信でも上書きによる点数欠落を防ぎます。

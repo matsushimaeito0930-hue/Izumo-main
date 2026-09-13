@@ -12,7 +12,7 @@ import { getMentorJoinErrorMessage } from "@/lib/mentor-errors";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   // メンターはリポジトリを持たないので、GitHubログインを必須にしない。
   // 招待コードを知っていることが唯一の関門になる。
@@ -52,11 +52,11 @@ export async function POST(request: Request) {
       maxAge: SESSION_MAX_AGE
     };
 
-    if (identity && identity.role !== "admin") {
-      // GitHubログイン済みの人がメンター登録した場合は、そのまま権限だけ変える。
+    if (identity) {
+      // イベントを切り替える場合も、そのイベントで確定した役割とIDに更新する。
       response.cookies.set(
         SESSION_COOKIE,
-        serializeIdentity({ ...identity, role: "mentor", eventId: session.eventId }),
+        serializeIdentity({ ...identity, role: session.role, eventId: session.eventId }),
         cookieOptions
       );
     } else if (!identity) {

@@ -4,7 +4,7 @@ import { getAuthStatus } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { isConfigured, identity } = getAuthStatus();
+  const { isConfigured, identity } = await getAuthStatus();
 
   return NextResponse.json({
     isConfigured,

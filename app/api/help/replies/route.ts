@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { isDemoModeEnabled } from "@/lib/env";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { createHelpReply } from "@/lib/store";
+import { createHelpReply, getHelpPostById } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   // 審査員は閲覧専用。画面を書き換えて送っても通さない。
   if (identity?.role === "judge") {
@@ -22,6 +22,10 @@ export async function POST(request: Request) {
       { error: "GitHubでログインしてから回答してください。" },
       { status: 401 }
     );
+  }
+
+  if (isGitHubAuthConfigured() && identity && !identity.eventId) {
+    return NextResponse.json({ error: "イベントを選択してください。" }, { status: 400 });
   }
 
   // 運営も回答できる。小規模な会では運営が技術サポートを兼ねるため、
@@ -49,6 +53,13 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (identity?.eventId) {
+      const post = await getHelpPostById(body.helpPostId, identity.eventId);
+      if (!post) {
+        return NextResponse.json({ error: "このイベントの投稿が見つかりません。" }, { status: 404 });
+      }
+    }
+
     const reply = await createHelpReply({
       helpPostId: body.helpPostId,
       authorName,

@@ -13,7 +13,7 @@ import {
 export const dynamic = "force-dynamic";
 
 async function requireEventOwner() {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   if (!isGitHubAuthConfigured()) return null; // ローカルデモは素通し
 
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       const team = await createTeamByName({ name: body.teamName, eventId: access.event.id });
       const invite = await createTeamInviteForTeam({
         teamId: team.id,
-        invitedBy: getCurrentIdentity()?.displayName ?? "HackRadar 運営"
+        invitedBy: access.identity.displayName ?? "HackRadar 運営"
       });
       return NextResponse.json({ team, invite });
     }

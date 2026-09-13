@@ -75,4 +75,22 @@ describe("team invite onboarding", () => {
     expect(firstSession.eventId).toBe("parallel-event-one");
     expect(secondSession.eventId).toBe("parallel-event-two");
   });
+
+  it("rejects a room code that belongs to another selected event", async () => {
+    const invite = await createTeamInvite({
+      teamName: "Wrong Event Room",
+      githubRepo: "demo/wrong-event-room",
+      invitedBy: "HackRadar Admin",
+      eventId: "actual-event"
+    });
+
+    await expect(
+      joinTeamWithInvite({
+        code: invite.code,
+        displayName: "Wrong Event User",
+        githubUsername: "wrong-event-user",
+        expectedEventId: "selected-event"
+      })
+    ).rejects.toThrow("入力したイベントのものではありません");
+  });
 });

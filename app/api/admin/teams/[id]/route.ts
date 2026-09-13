@@ -6,8 +6,8 @@ import { deleteTeam, getTeamById, moveTeamMember, removeTeamMember, updateTeam }
 
 export const dynamic = "force-dynamic";
 
-function requireAdmin() {
-  const identity = getCurrentIdentity();
+async function requireAdmin() {
+  const identity = await getCurrentIdentity();
 
   if (!isGitHubAuthConfigured()) return null;
   if (!identity) {
@@ -21,12 +21,13 @@ function requireAdmin() {
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = requireAdmin();
+  const { id } = await params;
+  const denied = await requireAdmin();
   if (denied) return denied;
   const access = await getActiveEventOwner();
-  const team = await getTeamById(params.id);
+  const team = await getTeamById(id);
   if (!access || !team || team.event_id !== access.event.id) {
     return NextResponse.json({ error: "このイベントのチームではありません。" }, { status: 403 });
   }
@@ -42,7 +43,7 @@ export async function PATCH(
   try {
     if (body.removeMember) {
       await removeTeamMember({
-        teamId: params.id,
+        teamId: id,
         githubUsername: body.removeMember
       });
       return NextResponse.json({ ok: true });
@@ -55,14 +56,14 @@ export async function PATCH(
       }
       await moveTeamMember({
         githubUsername: body.moveMember.githubUsername,
-        fromTeamId: params.id,
+        fromTeamId: id,
         toTeamId: body.moveMember.toTeamId
       });
       return NextResponse.json({ ok: true });
     }
 
     const team = await updateTeam({
-      teamId: params.id,
+      teamId: id,
       name: body.name ?? "",
       githubRepo: body.githubRepo
     });
@@ -77,19 +78,20 @@ export async function PATCH(
 
 /** チームを削除する。所属・部屋番号・活動履歴も一緒に消える。 */
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = requireAdmin();
+  const { id } = await params;
+  const denied = await requireAdmin();
   if (denied) return denied;
   const access = await getActiveEventOwner();
-  const team = await getTeamById(params.id);
+  const team = await getTeamById(id);
   if (!access || !team || team.event_id !== access.event.id) {
     return NextResponse.json({ error: "このイベントのチームではありません。" }, { status: 403 });
   }
 
   try {
-    await deleteTeam(params.id);
+    await deleteTeam(id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

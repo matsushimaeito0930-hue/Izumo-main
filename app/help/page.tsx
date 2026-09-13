@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { DashboardClient } from "@/components/dashboard-client";
 import { Shell } from "@/components/shell";
 import { getAuthStatus } from "@/lib/session";
@@ -6,8 +7,12 @@ import { getHackVerseState } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export default async function HelpPage() {
-  const { identity } = getAuthStatus();
-  const state = await getHackVerseState(identity?.eventId);
+  const { isConfigured, identity } = await getAuthStatus();
+  if (isConfigured && (!identity || !identity.eventId)) redirect("/");
+  const state = await getHackVerseState(
+    identity?.eventId,
+    identity ? { githubUsername: identity.login, role: identity.role } : undefined
+  );
   const viewer = identity
     ? {
         login: identity.login,

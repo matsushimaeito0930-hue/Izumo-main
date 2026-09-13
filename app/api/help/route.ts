@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { isDemoModeEnabled } from "@/lib/env";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { createHelpPost, isTeamMember } from "@/lib/store";
+import { createHelpPost, getMembershipInEvent, getTeamById } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   // 審査員は閲覧専用。画面を書き換えて送っても通さない。
   if (identity?.role === "judge") {
@@ -22,6 +22,10 @@ export async function POST(request: Request) {
       { error: "GitHubでログインしてから質問を投稿してください。" },
       { status: 401 }
     );
+  }
+
+  if (isGitHubAuthConfigured() && identity && !identity.eventId) {
+    return NextResponse.json({ error: "イベントを選択してください。" }, { status: 400 });
   }
 
   // 運営は回答する側。全員に伝えたいことはお知らせを使う。
@@ -47,9 +51,22 @@ export async function POST(request: Request) {
     );
   }
 
+  if (identity?.eventId) {
+    const team = await getTeamById(body.teamId);
+    if (!team || team.event_id !== identity.eventId) {
+      return NextResponse.json({ error: "このイベントのチームではありません。" }, { status: 403 });
+    }
+  }
+
   if (identity?.role === "participant") {
     try {
-      if (!(await isTeamMember({ githubUsername: identity.login, teamId: body.teamId }))) {
+      const membership = identity.eventId
+        ? await getMembershipInEvent({
+            eventId: identity.eventId,
+            githubUsername: identity.login
+          })
+        : null;
+      if (membership?.teamId !== body.teamId) {
         return NextResponse.json(
           { error: "自分が所属しているチームにだけ質問を投稿できます。" },
           { status: 403 }

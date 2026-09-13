@@ -11,8 +11,7 @@ import { getCurrentIdentity } from "@/lib/session";
 import {
   getEventByJoinCode,
   joinTeamWithInvite,
-  setTeamRepo,
-  verifyJoinCode
+  setTeamRepo
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +38,7 @@ function setEventSession(
 }
 
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   // 審査員は閲覧専用。画面を書き換えて送っても通さない。
   if (identity?.role === "judge") {
@@ -96,12 +95,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!(await verifyJoinCode(eventCode))) {
-      return NextResponse.json(
-        { error: "招待コードが違います。運営から配られたコードを確認してください。" },
-        { status: 403 }
-      );
-    }
   }
 
   // 2つの欄を取り違えたときは、その場で気づけるようにする。
@@ -120,6 +113,7 @@ export async function POST(request: Request) {
       code: body.joinCode,
       displayName,
       githubUsername,
+      expectedEventId: event?.id,
       // 招待から入るイベントでは、以前の主催者ロールを引き継がない。
       role: "participant"
     });

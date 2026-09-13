@@ -18,7 +18,7 @@ export function useHackVerseState(initialState: HackVerseState) {
   const [lastActivityId, setLastActivityId] = useState("");
   const newestActivityIdRef = useRef(initialState.activities[0]?.id ?? "");
   const [realtimeStatus, setRealtimeStatus] =
-    useState<RealtimeStatus>("fallback-polling");
+    useState<RealtimeStatus>("connecting");
 
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -45,12 +45,14 @@ export function useHackVerseState(initialState: HackVerseState) {
     const supabase = createBrowserSupabaseClient();
 
     if (!supabase) {
-      setRealtimeStatus("fallback-polling");
+      const markFallback = window.setTimeout(() => setRealtimeStatus("fallback-polling"), 0);
       const interval = window.setInterval(refresh, 2200);
-      return () => window.clearInterval(interval);
+      return () => {
+        window.clearTimeout(markFallback);
+        window.clearInterval(interval);
+      };
     }
 
-    setRealtimeStatus("connecting");
     let refreshTimeout: number | undefined;
 
     const scheduleRefresh = () => {
@@ -67,27 +69,8 @@ export function useHackVerseState(initialState: HackVerseState) {
       .channel("hackverse-lobby")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "activities" },
-        scheduleRefresh
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "teams" },
-        scheduleRefresh
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "help_posts" },
-        scheduleRefresh
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "help_replies" },
-        scheduleRefresh
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_messages" },
+        // 本文や個人情報を含むテーブルをanonへ公開せず、時刻だけの通知を受け取る。
+        { event: "UPDATE", schema: "public", table: "app_change_signal" },
         scheduleRefresh
       )
       .subscribe((status: string) => {

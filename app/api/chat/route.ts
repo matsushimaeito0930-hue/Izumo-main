@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { isDemoModeEnabled } from "@/lib/env";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { createChatMessage, isTeamMember } from "@/lib/store";
+import { createChatMessage, getTeamById, isTeamMember } from "@/lib/store";
 import type { ChatChannel, ChatMessage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   // 審査員は閲覧専用。画面を書き換えて送っても通さない。
   if (identity?.role === "judge") {
@@ -51,6 +51,13 @@ export async function POST(request: Request) {
   }
 
   const isAnnouncement = !body.teamId;
+
+  if (body.teamId && identity?.eventId) {
+    const team = await getTeamById(body.teamId);
+    if (!team || team.event_id !== identity.eventId) {
+      return NextResponse.json({ error: "このイベントのチームではありません。" }, { status: 403 });
+    }
+  }
 
   if (identity?.role === "admin" && !isAnnouncement) {
     return NextResponse.json(

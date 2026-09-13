@@ -5,25 +5,36 @@ import {
   serializeIdentity
 } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { getEvent, getMembershipInEvent, isEventOwner } from "@/lib/store";
+import { getEvent, getEventsJoinedBy, getMembershipInEvent, isEventOwner } from "@/lib/store";
+import type { UserRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 /** 所有イベントを開き、以降の画面・APIをそのイベントに固定する。 */
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
   const body = (await request.json().catch(() => ({}))) as { eventId?: string; role?: string };
   if (!identity || !body.eventId) {
     return NextResponse.json({ error: "イベントを開くにはログインが必要です。" }, { status: 401 });
   }
 
-  const isOwner = await isEventOwner({ eventId: body.eventId, githubUsername: identity.login });
-  const membership = await getMembershipInEvent({
-    eventId: body.eventId,
-    githubUsername: identity.login
-  });
-  const role = body.role === "participant" ? "participant" : "admin";
-  if ((role === "admin" && !isOwner) || (role === "participant" && !membership)) {
+  const role: UserRole =
+    body.role === "participant" || body.role === "mentor" || body.role === "judge"
+      ? body.role
+      : "admin";
+  const [isOwner, joinedEvents] = await Promise.all([
+    isEventOwner({ eventId: body.eventId, githubUsername: identity.login }),
+    getEventsJoinedBy(identity.login)
+  ]);
+  const joined = joinedEvents.find((event) => event.id === body.eventId);
+  const membership = role === "participant"
+    ? await getMembershipInEvent({ eventId: body.eventId, githubUsername: identity.login })
+    : null;
+  if (
+    (role === "admin" && !isOwner) ||
+    (role === "participant" && (joined?.role !== "participant" || !membership)) ||
+    ((role === "mentor" || role === "judge") && joined?.role !== role)
+  ) {
     return NextResponse.json({ error: "このイベントを管理する権限がありません。" }, { status: 403 });
   }
 
@@ -37,8 +48,8 @@ export async function POST(request: Request) {
       githubUsername: identity.login,
       eventId: event.id,
       eventName: event.name,
-      teamId: membership?.teamId,
-      teamName: membership?.teamName
+      teamId: role === "participant" ? membership?.teamId : undefined,
+      teamName: role === "participant" ? membership?.teamName : undefined
     }
   });
   response.cookies.set(

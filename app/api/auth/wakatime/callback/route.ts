@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     return redirect(request, "wakatime_error", "not_configured");
   }
 
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
   if (!identity) {
     return redirect(request, "wakatime_error", "login_required");
   }
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const state = requestUrl.searchParams.get("state");
-  const expectedState = cookies().get(WAKATIME_STATE_COOKIE)?.value;
+  const expectedState = (await cookies()).get(WAKATIME_STATE_COOKIE)?.value;
 
   if (requestUrl.searchParams.get("error")) {
     return redirect(request, "wakatime_error", "denied");

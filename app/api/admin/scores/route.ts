@@ -6,8 +6,8 @@ import { getScoreConfig, saveScoreConfig } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-function requireAdmin() {
-  const identity = getCurrentIdentity();
+async function requireAdmin() {
+  const identity = await getCurrentIdentity();
 
   if (!isGitHubAuthConfigured()) return null; // ローカルデモは素通し
 
@@ -24,7 +24,7 @@ function requireAdmin() {
 
 /** いまの配点を返す。 */
 export async function GET() {
-  const denied = requireAdmin();
+  const denied = await requireAdmin();
   if (denied) return denied;
   const access = await getActiveEventOwner();
   if (!access) {
@@ -41,7 +41,7 @@ export async function GET() {
  * そうしないと、変更前の活動と変更後の活動が混ざって順位の意味が壊れる。
  */
 export async function POST(request: Request) {
-  const denied = requireAdmin();
+  const denied = await requireAdmin();
   if (denied) return denied;
   const access = await getActiveEventOwner();
   if (!access) {

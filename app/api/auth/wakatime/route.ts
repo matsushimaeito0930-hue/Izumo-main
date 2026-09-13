@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(failure);
   }
 
-  if (!getCurrentIdentity()) {
+  if (!(await getCurrentIdentity())) {
     failure.searchParams.set("wakatime_error", "login_required");
     return NextResponse.redirect(failure);
   }

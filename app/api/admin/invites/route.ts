@@ -10,8 +10,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function requireAdmin() {
-  const identity = getCurrentIdentity();
+async function requireAdmin() {
+  const identity = await getCurrentIdentity();
 
   if (!isGitHubAuthConfigured()) return null;
   if (!identity) {
@@ -30,7 +30,7 @@ function requireAdmin() {
 }
 
 export async function GET() {
-  const denied = requireAdmin();
+  const denied = await requireAdmin();
   if (denied) return denied;
   const access = await getActiveEventOwner();
   if (!access) {
@@ -42,14 +42,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const denied = requireAdmin();
+  const denied = await requireAdmin();
   if (denied) return denied;
   const access = await getActiveEventOwner();
   if (!access) {
     return NextResponse.json({ error: "このイベントを管理する権限がありません。" }, { status: 403 });
   }
 
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   const body = (await request.json().catch(() => ({}))) as {
     teamId?: string;

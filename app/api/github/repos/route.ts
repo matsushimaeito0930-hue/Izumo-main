@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * アクセストークンはcookieの中だけで使い、クライアントには返さない。
  */
 export async function GET() {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   if (!identity) {
     return NextResponse.json(

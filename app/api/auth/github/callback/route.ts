@@ -34,7 +34,8 @@ export async function GET(request: Request) {
 
   const code = requestUrl.searchParams.get("code");
   const state = requestUrl.searchParams.get("state");
-  const expectedState = cookies().get(STATE_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const expectedState = cookieStore.get(STATE_COOKIE)?.value;
 
   if (!code || !state || !expectedState || state !== expectedState) {
     return redirectWithError(origin, "state_mismatch");
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
     const identity = await fetchGitHubUser(accessToken, scopes);
 
     // 認可前に見ていた場所へ戻す。無ければトップ。
-    const returnTo = cookies().get(RETURN_TO_COOKIE)?.value;
+    const returnTo = cookieStore.get(RETURN_TO_COOKIE)?.value;
     const safeReturnTo =
       returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
         ? returnTo

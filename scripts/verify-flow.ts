@@ -82,7 +82,10 @@ const pushPayload = (repo: string, login: string, commits: number, sha: string) 
 // ---------------------------------------------------------------- 運営の準備
 section("[1] 運営がイベントとチームを作る");
 
-const event = await saveEvent({ name: "テスト運用ハッカソン" });
+const event = await saveEvent({
+  name: "テスト運用ハッカソン",
+  ownerGithubUsername: "organizer"
+});
 check("イベント名", event.name, "テスト運用ハッカソン");
 check("招待コードの形", /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(event.join_code), true);
 

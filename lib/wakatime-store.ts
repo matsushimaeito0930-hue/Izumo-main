@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase";
+import { getMembershipInEvent } from "@/lib/store";
 import {
   fetchWakaTimeSeconds,
   refreshWakaTimeToken,
@@ -169,9 +170,11 @@ async function secondsForConnection(
 
 export async function getWakaTimeDashboardSummary({
   githubLogin,
+  eventId,
   eventStartedAt
 }: {
   githubLogin: string;
+  eventId: string;
   eventStartedAt: string | null;
 }): Promise<WakaTimeDashboardSummary> {
   const supabase = createServerSupabaseClient();
@@ -194,14 +197,12 @@ export async function getWakaTimeDashboardSummary({
     };
   }
 
-  const { data: viewerMembership, error: membershipError } = await supabase
-    .from("team_members")
-    .select("team_id")
-    .eq("user_id", viewer.id)
-    .maybeSingle();
-
-  if (membershipError) throw membershipError;
-  const teamId = (viewerMembership as { team_id?: string } | null)?.team_id ?? null;
+  // 同じ利用者が複数イベントのチームに所属できるため、現在のイベントで必ず絞る。
+  const viewerMembership = await getMembershipInEvent({
+    eventId,
+    githubUsername: githubLogin
+  });
+  const teamId = viewerMembership?.teamId ?? null;
 
   const { data: viewerConnection, error: viewerConnectionError } = await supabase
     .from("wakatime_connections")

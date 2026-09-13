@@ -17,16 +17,17 @@ function unauthorized() {
 }
 
 async function syncViewer() {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
   if (!identity || identity.role === "judge" || !identity.eventId) return null;
 
   await syncDirectMessageProfile({
+    eventId: identity.eventId,
     githubUsername: identity.login,
     displayName: identity.displayName,
     avatarUrl: identity.avatarUrl,
     role: identity.role
   });
-  return identity;
+  return { ...identity, eventId: identity.eventId };
 }
 
 export async function GET() {
@@ -36,6 +37,7 @@ export async function GET() {
 
     const [contacts, messages] = await Promise.all([
       getDirectMessageContacts({
+        eventId: identity.eventId,
         viewerLogin: identity.login,
         viewerRole: identity.role
       }),

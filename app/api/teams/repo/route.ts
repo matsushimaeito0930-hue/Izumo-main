@@ -3,13 +3,13 @@ import { isDemoModeEnabled } from "@/lib/env";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { ensureRepoWebhook } from "@/lib/github-webhook-setup";
 import { getCurrentIdentity } from "@/lib/session";
-import { isTeamMember, setTeamRepo } from "@/lib/store";
+import { getTeamById, isEventOwner, isTeamMember, setTeamRepo } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 /** チームにGitHubリポジトリを紐づける。参加後にいつでも変更できる。 */
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
+  const identity = await getCurrentIdentity();
 
   // 審査員は閲覧専用。画面を書き換えて送っても通さない。
   if (identity?.role === "judge") {
@@ -25,6 +25,9 @@ export async function POST(request: Request) {
       { status: 401 }
     );
   }
+  if (isGitHubAuthConfigured() && identity && !identity.eventId) {
+    return NextResponse.json({ error: "イベントを選択してください。" }, { status: 400 });
+  }
 
   const body = (await request.json().catch(() => ({}))) as {
     teamId?: string;
@@ -38,9 +41,25 @@ export async function POST(request: Request) {
     );
   }
 
-  if (identity?.role === "participant") {
+  if (identity) {
     try {
-      if (!(await isTeamMember({ githubUsername: identity.login, teamId: body.teamId }))) {
+      const team = await getTeamById(body.teamId);
+      if (!team || team.event_id !== identity.eventId) {
+        return NextResponse.json(
+          { error: "現在開いているイベントのチームだけ設定できます。" },
+          { status: 403 }
+        );
+      }
+
+      const mayEdit =
+        (identity.role === "participant" &&
+          (await isTeamMember({ githubUsername: identity.login, teamId: body.teamId }))) ||
+        (identity.role === "admin" &&
+          (await isEventOwner({
+            eventId: identity.eventId,
+            githubUsername: identity.login
+          })));
+      if (!mayEdit) {
         return NextResponse.json(
           { error: "自分が所属しているチームのリポジトリだけ設定できます。" },
           { status: 403 }

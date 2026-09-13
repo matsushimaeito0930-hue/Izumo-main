@@ -48,7 +48,7 @@ export function AnnouncementBadge() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const initialLoad = window.setTimeout(() => void load(), 0);
 
     const interval = window.setInterval(load, 8000);
     const onSeen = () => void load();
@@ -57,6 +57,7 @@ export function AnnouncementBadge() {
     window.addEventListener("storage", onSeen);
 
     return () => {
+      window.clearTimeout(initialLoad);
       window.clearInterval(interval);
       window.removeEventListener(SEEN_EVENT, onSeen);
       window.removeEventListener("storage", onSeen);

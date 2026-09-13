@@ -37,13 +37,10 @@ const judgeNavItems = [
 
 export function Nav({
   authConfigured = false,
-  viewer = null,
-  joinCode = null
+  viewer = null
 }: {
   authConfigured?: boolean;
   viewer?: Viewer | null;
-  /** 運営のときだけ渡ってくる参加コード。参加者には渡さない。 */
-  joinCode?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();

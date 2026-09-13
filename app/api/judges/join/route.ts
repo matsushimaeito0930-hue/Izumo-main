@@ -6,83 +6,96 @@ import {
   serializeIdentity
 } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
-import { verifyMentorInviteCode } from "@/lib/store";
+import {
+  getEvent,
+  getEventIdForAccessCode,
+  getEventsJoinedBy,
+  isEventOwner,
+  syncDirectMessageProfile
+} from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-/**
- * 審査員として入る。
- *
- * 審査員は開発状況とお知らせを見るだけなので、GitHubログインもチーム所属も要らない。
- * 招待コードを知っていることが唯一の関門で、DBには何も書き込まない。
- */
+/** 招待コードからイベントを確定し、審査員の閲覧セッションを発行する。 */
 export async function POST(request: Request) {
-  const identity = getCurrentIdentity();
-
+  const identity = await getCurrentIdentity();
   const body = (await request.json().catch(() => ({}))) as {
     code?: string;
     displayName?: string;
   };
-
   const displayName = body.displayName?.trim() || identity?.displayName;
-
   if (!displayName || !body.code?.trim()) {
-    return NextResponse.json(
-      { error: "招待コードと名前を入力してください。" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "招待コードと名前を入力してください。" }, { status: 400 });
   }
 
-  // イベントの招待コード、またはチームの部屋番号のどちらでも入れる。
-  if (!(await verifyMentorInviteCode(body.code))) {
-    return NextResponse.json(
-      { error: "招待コードが違います。運営から配られたコードを確認してください。" },
-      { status: 403 }
-    );
-  }
-
-  // すでにログインしている人は、その役割のまま通す。
-  //
-  // 審査員にできることは運営にできることの一部なので、運営を審査員に
-  // 引き下げる意味がない。参加者の場合も、上書きするとGitHubのトークンが
-  // 消えてリポジトリ選択が壊れる。審査員として入るのはログインしていない人だけ。
-  if (identity) {
-    return NextResponse.json({
-      session: {
-        role: identity.role,
-        displayName: identity.displayName,
-        githubUsername: identity.login
-      },
-      keptRole: identity.role
-    });
-  }
-
-  const session = {
-    role: "judge" as const,
-    displayName
-  };
-
-  const response = NextResponse.json({ session });
-
-  // 名乗った名前をcookieに焼き込む。以後の表示はこの値が使われる。
-  response.cookies.set(
-    SESSION_COOKIE,
-    serializeIdentity({
-      githubId: 0,
-      login: `judge-${randomUUID().slice(0, 8)}`,
-      displayName,
-      avatarUrl: null,
-      role: "judge",
-      issuedAt: Math.floor(Date.now() / 1000)
-    }),
-    {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: SESSION_MAX_AGE
+  try {
+    const eventId = await getEventIdForAccessCode(body.code);
+    if (!eventId) {
+      return NextResponse.json(
+        { error: "招待コードが違います。運営から配られたコードを確認してください。" },
+        { status: 403 }
+      );
     }
-  );
+    const event = await getEvent(eventId);
+    if (!event) return NextResponse.json({ error: "イベントが見つかりません。" }, { status: 404 });
 
-  return response;
+    const login = identity?.login ?? `judge-${randomUUID().slice(0, 8)}`;
+    const existingEvent = identity
+      ? (await getEventsJoinedBy(login)).find((joined) => joined.id === eventId)
+      : undefined;
+    const existingRole = existingEvent?.role;
+    const owner = identity
+      ? await isEventOwner({ eventId, githubUsername: login })
+      : false;
+    // 同じイベントの既存参加者・主催者は、その権限を失わせない。
+    const role = owner ? "admin" : existingRole ?? "judge";
+    if (!existingRole && !owner) {
+      await syncDirectMessageProfile({
+        eventId,
+        githubUsername: login,
+        displayName,
+        avatarUrl: identity?.avatarUrl ?? null,
+        role: "judge"
+      });
+    }
+
+    const response = NextResponse.json({
+      session: {
+        role,
+        displayName,
+        githubUsername: login,
+        eventId,
+        eventName: event.name,
+        teamId: role === "participant" ? existingEvent?.teamId : undefined,
+        teamName: role === "participant" ? existingEvent?.teamName : undefined
+      }
+    });
+    response.cookies.set(
+      SESSION_COOKIE,
+      serializeIdentity({
+        githubId: identity?.githubId ?? 0,
+        login,
+        displayName,
+        avatarUrl: identity?.avatarUrl ?? null,
+        role,
+        eventId,
+        issuedAt: Math.floor(Date.now() / 1000),
+        accessToken: identity?.accessToken,
+        scopes: identity?.scopes
+      }),
+      {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: SESSION_MAX_AGE
+      }
+    );
+    return response;
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "審査員として参加できませんでした。" },
+      { status: 503 }
+    );
+  }
 }

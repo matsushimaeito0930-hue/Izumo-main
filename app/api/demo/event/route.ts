@@ -38,7 +38,8 @@ export async function POST(request: Request) {
     );
   }
 
-  if (isGitHubAuthConfigured() && getCurrentIdentity()?.role !== "admin") {
+  const identity = await getCurrentIdentity();
+  if (isGitHubAuthConfigured() && identity?.role !== "admin") {
     return NextResponse.json(
       { error: "デモイベントを実行できるのは運営だけです。" },
       { status: 403 }

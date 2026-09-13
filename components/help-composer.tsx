@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Send } from "lucide-react";
 import { Panel } from "@/components/panel";
 import type { Team } from "@/lib/types";
@@ -37,14 +37,7 @@ export function HelpComposer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (lockedTeamId) {
-      setTeamId(lockedTeamId);
-    } else if (!teamId && teams[0]) {
-      setTeamId(teams[0].id);
-    }
-  }, [lockedTeamId, teamId, teams]);
-
+  const effectiveTeamId = lockedTeamId ?? (teamId || teams[0]?.id || "");
   const selectedCategory = category === "その他" ? customCategory.trim() : category;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -52,7 +45,7 @@ export function HelpComposer({
     setIsSubmitting(true);
     setError("");
     try {
-      await onSubmit({ teamId, title, body, category: selectedCategory, anonymous });
+      await onSubmit({ teamId: effectiveTeamId, title, body, category: selectedCategory, anonymous });
       setTitle("");
       setBody("");
       setCategory(categories[0]);
@@ -77,7 +70,7 @@ export function HelpComposer({
           <label className="block">
             <span className={labelClass}>チーム</span>
             <select
-              value={teamId}
+              value={effectiveTeamId}
               onChange={(event) => setTeamId(event.target.value)}
               disabled={teams.length === 0}
               className={`h-10 ${fieldClass}`}
@@ -169,7 +162,7 @@ export function HelpComposer({
 
         <button
           type="submit"
-          disabled={isSubmitting || !teamId || !selectedCategory}
+          disabled={isSubmitting || !effectiveTeamId || !selectedCategory}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
         >
           <Send className="size-4" />

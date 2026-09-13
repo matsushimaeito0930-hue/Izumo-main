@@ -255,16 +255,16 @@ console.log("\n[3] ログインセッション（JWT / HS256）");
   process.env.AUTH_SECRET = "test-auth-secret";
 }
 
-console.log("\n[4] 役割のallowlist");
+console.log("\n[4] ログイン直後の役割");
 {
   delete process.env.ADMIN_GITHUB_LOGINS;
   check("既定は参加者", resolveRole("matsu"), "participant");
 
   process.env.ADMIN_GITHUB_LOGINS = "alice, bob";
-  check("運営判定", resolveRole("alice"), "admin");
-  check("空白入りでも判定できる", resolveRole("bob"), "admin");
+  check("旧allowlistがあっても権限を付けない", resolveRole("alice"), "participant");
+  check("別の登録名にも権限を付けない", resolveRole("bob"), "participant");
   check("該当なしは参加者", resolveRole("matsu"), "participant");
-  check("大文字小文字を無視する", resolveRole("ALICE"), "admin");
+  check("大文字でもログイン直後は参加者", resolveRole("ALICE"), "participant");
 }
 
 console.log("\n[5] 認可URLの組み立て");
