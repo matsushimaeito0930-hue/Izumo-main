@@ -1805,7 +1805,7 @@ async function resetSupabaseEventData(
   if (error) throw error;
 }
 
-/** イベント名を保存する。名前を変更したときはチームと進捗を新イベント用に初期化する。 */
+/** イベント名を保存する。既存のチームと進捗、配点は保持する。 */
 export async function saveEvent(input: {
   name: string;
   ownerGithubUsername?: string;
@@ -1855,6 +1855,7 @@ export async function saveEvent(input: {
     join_code: joinCode,
     owner_github_username:
       existing?.owner_github_username ?? input.ownerGithubUsername?.trim() ?? "test-owner",
+    score_config: existing?.score_config,
     created_at: existing?.created_at ?? new Date().toISOString()
   };
   const existingIndex = store.events.findIndex((event) => event.id === savedEvent.id);
@@ -1888,6 +1889,8 @@ export async function recalculateScores(config: ScoreConfig, eventId: string): P
 }> {
   const totals = new Map<string, { score: number; commits: number }>();
   let updatedActivities = 0;
+  const targetEventId = eventId ?? (await getEvent())?.id;
+  if (!targetEventId) throw new Error("再計算するイベントを選択してください。");
 
   const applyActivity = (activity: Activity) => {
     const nextDelta = config[activity.type] ?? 0;

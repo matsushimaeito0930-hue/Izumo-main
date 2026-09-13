@@ -3,6 +3,8 @@ node_modules/
 .next/
 out/
 dist/
+artifacts/
+.artifacts/
 *.tsbuildinfo
 
 # Optional: ignore npm debug logs

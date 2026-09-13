@@ -52,7 +52,7 @@ export async function GET() {
   return NextResponse.json({ event: access.event });
 }
 
-/** イベント名を登録・変更する。イベント名を変えると全体コードも更新する。 */
+/** イベント名を登録・変更する。既存イベントの招待コードは維持する。 */
 export async function POST(request: Request) {
   const access = await requireEventOwner();
   if (!access || access instanceof NextResponse) {

@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
  *
  * 本文まではバッジに要らないので、idと時刻だけを返す。
  * 未読の判定はブラウザ側（最後に開いた時刻との比較）で行う。
+ * 他イベントのお知らせが混ざらないよう、必ず自分のイベントに絞る。
  */
 export async function GET() {
   const identity = await getCurrentIdentity();

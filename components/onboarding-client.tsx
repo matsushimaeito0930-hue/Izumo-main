@@ -302,6 +302,7 @@ export function OnboardingClient({
     const params = new URLSearchParams({ role: "participant" });
     if (joinCode.trim()) params.set("code", joinCode.trim().toUpperCase());
     if (roomCode.trim()) params.set("room", roomCode.trim().toUpperCase());
+    if (inviteTeamName.trim()) params.set("team", inviteTeamName.trim());
     return `/?${params.toString()}`;
   }
 
@@ -858,6 +859,11 @@ export function OnboardingClient({
         type="button"
         onClick={() => {
           setShowInviteConfirm(false);
+          setPickedRole(null);
+          setJoinCode("");
+          setRoomCode("");
+          setInviteTeamName("");
+          setParticipantJoinMode("code");
           router.replace("/");
         }}
         className="rounded-xl border border-line px-3 py-3 text-sm font-medium text-ink"

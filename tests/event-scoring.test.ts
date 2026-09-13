@@ -1,15 +1,66 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/env", () => ({ isSupabaseConfigured: () => false }));
 import {
   createEvent,
   createTeamByName,
+  deleteEvent,
+  getEvent,
+  getEventByJoinCode,
+  getEventsOwnedBy,
   getHackVerseState,
   recordActivity,
   recordRepositoryActivity,
   saveScoreConfig,
   setTeamRepo
 } from "@/lib/store";
+import { ACTIVITY_TYPES } from "@/lib/constants";
+
+beforeEach(() => {
+  globalThis.hackVerseMemoryStore = undefined;
+  globalThis.hackVerseMemoryStoreVersion = undefined;
+});
 
 describe("event activity scoring", () => {
+  it("retains previous memory events and deletes only the selected event", async () => {
+    const a = await createEvent({ name: "A", ownerGithubUsername: "owner" });
+    const ta = await createTeamByName({ name: "A team", eventId: a.id });
+    const b = await createEvent({ name: "B", ownerGithubUsername: "owner" });
+    const tb = await createTeamByName({ name: "B team", eventId: b.id });
+    expect((await getEventByJoinCode(a.join_code))?.id).toBe(a.id);
+    expect(await getEventsOwnedBy("owner")).toHaveLength(2);
+    await deleteEvent(a.id);
+    expect(await getEvent(a.id)).toBeNull();
+    expect(await getEventByJoinCode(a.join_code)).toBeNull();
+    expect((await getHackVerseState(a.id)).teams).toEqual([]);
+    expect((await getHackVerseState(b.id)).teams.map((team) => team.id)).toEqual([tb.id]);
+    expect((await getHackVerseState()).teams.map((team) => team.id)).not.toContain(ta.id);
+    await deleteEvent(b.id);
+    expect(await getEvent()).toBeNull();
+  });
+  it("keeps two events' five activity scores separate, including after recalculation", async () => {
+    const a = await createEvent({ name: "A", ownerGithubUsername: "owner-a" });
+    const ta = await createTeamByName({ name: "A team", eventId: a.id });
+    const configA = { push: 1, pull_request_opened: 2, pull_request_merged: 3, issue_closed: 2, review: 2 };
+    await saveScoreConfig(configA, a.id);
+    const b = await createEvent({ name: "B", ownerGithubUsername: "owner-b" });
+    const tb = await createTeamByName({ name: "B team", eventId: b.id });
+    const configB = { push: 4, pull_request_opened: 5, pull_request_merged: 6, issue_closed: 7, review: 8 };
+    await saveScoreConfig(configB, b.id);
+    for (const type of ACTIVITY_TYPES) {
+      expect((await recordActivity({ type, teamId: ta.id }))?.score_delta).toBe(configA[type]);
+      expect((await recordActivity({ type, teamId: tb.id }))?.score_delta).toBe(configB[type]);
+    }
+    const beforeB = await getHackVerseState(b.id);
+    expect(beforeB.teams[0].score).toBe(30);
+    expect((await getHackVerseState(a.id)).teams[0].score).toBe(10);
+    const result = await saveScoreConfig({ ...configA, push: 9 }, a.id);
+    expect(result.updatedTeams).toBe(1);
+    expect((await getHackVerseState(a.id)).teams[0].score).toBe(18);
+    const afterB = await getHackVerseState(b.id);
+    expect(afterB.teams[0].score).toBe(30);
+    expect(afterB.activities.map((activity) => activity.score_delta)).toEqual(beforeB.activities.map((activity) => activity.score_delta));
+    expect((await recordActivity({ type: "push", teamId: tb.id }))?.score_delta).toBe(4);
+  });
   it("applies the event's configured points to push, PR, issue, and review activities", async () => {
     const event = await createEvent({
       name: "Scoring event",
