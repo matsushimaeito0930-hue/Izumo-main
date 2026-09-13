@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { CircleHelp, Github, LayoutDashboard, LogOut } from "lucide-react";
 import { AnnouncementBadge } from "@/components/announcement-badge";
 import { HackRadarLogo } from "@/components/hackradar-logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { UserRole } from "@/lib/types";
 
 type Viewer = {
@@ -87,8 +88,10 @@ export function Nav({
           })}
         </div>
 
-        {viewer ? (
-          <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
+          <ThemeToggle />
+          {viewer ? (
+            <>
             <span className="hidden items-center gap-2 rounded-xl border border-line/70 bg-surface py-1 pl-1.5 pr-3 shadow-soft sm:flex">
               {viewer.avatarUrl ? (
                 <Image
@@ -120,18 +123,17 @@ export function Nav({
             >
               <LogOut className="size-4" />
             </button>
-          </div>
-        ) : authConfigured ? (
-          <a
-            href="/api/auth/github"
-            className="flex h-9 shrink-0 items-center gap-2 rounded-xl bg-ink px-3 text-sm font-medium text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed"
-          >
-            <Github className="size-4" />
-            <span className="hidden sm:inline">ログイン</span>
-          </a>
-        ) : (
-          <span className="w-9" />
-        )}
+            </>
+          ) : authConfigured ? (
+            <a
+              href="/api/auth/github"
+              className="flex h-9 shrink-0 items-center gap-2 rounded-xl bg-ink px-3 text-sm font-medium text-white shadow-btn transition-[box-shadow,background-color,transform] hover:bg-ink2 active:translate-y-px active:shadow-pressed"
+            >
+              <Github className="size-4" />
+              <span className="hidden sm:inline">ログイン</span>
+            </a>
+          ) : null}
+        </div>
       </div>
     </nav>
   );

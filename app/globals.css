@@ -9,6 +9,10 @@
   background: var(--color-paper);
 }
 
+html[data-theme="navy"] {
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -54,6 +58,15 @@ select:focus-visible {
 ::selection {
   color: #ffffff;
   background: var(--color-pulse);
+}
+
+/* text-ink は本文用に明るくするため、濃紺テーマの主要操作だけは専用の暗色を使う。 */
+html[data-theme="navy"] .bg-ink {
+  background-color: rgb(var(--color-control-rgb) / var(--tw-bg-opacity, 1));
+}
+
+html[data-theme="navy"] .hover\:bg-ink2:hover {
+  background-color: rgb(var(--color-control-hover-rgb) / var(--tw-bg-opacity, 1));
 }
 
 @keyframes flash {

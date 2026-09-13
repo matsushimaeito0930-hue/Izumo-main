@@ -8,6 +8,7 @@ import { HackRadarLogo } from "@/components/hackradar-logo";
 import { RolePicker, type OnboardingRole } from "@/components/role-picker";
 import { ScoreConfigEditor } from "@/components/score-config-editor";
 import { ShareLinkButton } from "@/components/share-link-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { WebhookNotice, type WebhookResult } from "@/components/webhook-notice";
 import {
   ChevronDown,
@@ -822,7 +823,10 @@ export function OnboardingClient({
   }
 
   return (
-    <main className="min-h-screen bg-paper px-4 py-10 sm:px-6">
+    <main className="relative min-h-screen bg-paper px-4 py-10 sm:px-6">
+      <div className="absolute right-4 top-4 sm:right-6 sm:top-6">
+        <ThemeToggle />
+      </div>
       <div className="mx-auto w-full max-w-md space-y-5">
         <div className="text-center">
           <HackRadarLogo className="mx-auto size-14" />

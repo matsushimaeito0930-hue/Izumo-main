@@ -21,10 +21,12 @@ export function RealtimeStatusBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium shadow-soft ${
+      role="status"
+      aria-live="polite"
+      className={`fixed right-3 top-[4.5rem] z-40 inline-flex items-center gap-1.5 rounded-full border bg-paper/95 px-2.5 py-1 text-xs font-medium shadow-soft backdrop-blur sm:right-6 ${
         isConnected
-          ? "border-field/30 bg-field/10 text-field"
-          : "border-sun/30 bg-sun/10 text-sun"
+          ? "border-field/50 text-field"
+          : "border-sun/50 text-sun"
       }`}
     >
       <Icon className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`} />

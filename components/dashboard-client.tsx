@@ -171,12 +171,10 @@ export function DashboardClient({
               : "GitHubにプッシュすると、この画面が自動で更新されます。"}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <RealtimeStatusBadge status={realtimeStatus} isRefreshing={isRefreshing} />
-          {demoEnabled && (isAdmin || !viewer && !sessionViewer) && (
-            <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
-          )}
-        </div>
+        <RealtimeStatusBadge status={realtimeStatus} isRefreshing={isRefreshing} />
+        {demoEnabled && (isAdmin || !viewer && !sessionViewer) && (
+          <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
+        )}
       </header>
 
       {myTeam && !myTeam.github_repo && (

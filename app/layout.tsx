@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const themeInitializer = `try {
+  if (localStorage.getItem("hackradar-theme") === "navy") {
+    document.documentElement.dataset.theme = "navy";
+  }
+} catch {}`;
+
 export const metadata: Metadata = {
   title: "HackRadar | チーム開発ダッシュボード",
   description:
@@ -13,7 +19,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
+    <html lang="ja" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitializer }} />
+      </head>
       <body>{children}</body>
     </html>
   );

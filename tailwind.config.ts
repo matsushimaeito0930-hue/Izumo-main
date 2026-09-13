@@ -9,31 +9,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        paper: "#faf7f1",
-        paper2: "#f2ece1",
-        surface: "#fffdfa",
-        sand: "#f7f3ea",
-        line: "#e6dfd2",
-        lineStrong: "#d6cdbb",
-        ink: "#23201c",
-        ink2: "#4a443c",
-        muted: "#7a7266",
-        pulse: "#0f8b7e",
-        hot: "#c05575",
-        sun: "#b5771a",
-        field: "#2e7d5b"
+        paper: "rgb(var(--color-paper-rgb) / <alpha-value>)",
+        paper2: "rgb(var(--color-paper-2-rgb) / <alpha-value>)",
+        surface: "rgb(var(--color-surface-rgb) / <alpha-value>)",
+        sand: "rgb(var(--color-sand-rgb) / <alpha-value>)",
+        line: "rgb(var(--color-line-rgb) / <alpha-value>)",
+        lineStrong: "rgb(var(--color-line-strong-rgb) / <alpha-value>)",
+        ink: "rgb(var(--color-ink-rgb) / <alpha-value>)",
+        ink2: "rgb(var(--color-ink-2-rgb) / <alpha-value>)",
+        muted: "rgb(var(--color-muted-rgb) / <alpha-value>)",
+        pulse: "rgb(var(--color-pulse-rgb) / <alpha-value>)",
+        hot: "rgb(var(--color-hot-rgb) / <alpha-value>)",
+        sun: "rgb(var(--color-sun-rgb) / <alpha-value>)",
+        field: "rgb(var(--color-field-rgb) / <alpha-value>)"
       },
       boxShadow: {
         // Soft UI: 右下に影、左上にハイライト。境界線は残すのでコントラストは落とさない。
-        soft: "3px 3px 8px rgba(160, 148, 128, 0.16), -2px -2px 6px rgba(255, 255, 255, 0.85)",
-        card: "4px 4px 12px rgba(160, 148, 128, 0.18), -3px -3px 9px rgba(255, 255, 255, 0.9)",
-        lift: "6px 6px 18px rgba(160, 148, 128, 0.22), -4px -4px 12px rgba(255, 255, 255, 0.95)",
+        soft: "var(--shadow-soft)",
+        card: "var(--shadow-card)",
+        lift: "var(--shadow-card)",
         // 溝。プログレスバーの下地や入力欄に使う。
-        inset:
-          "inset 2px 2px 4px rgba(160, 148, 128, 0.22), inset -1px -1px 3px rgba(255, 255, 255, 0.75)",
+        inset: "var(--shadow-inset)",
         // 押し込み。ボタンの :active 用。
-        pressed: "inset 3px 3px 6px rgba(160, 148, 128, 0.32)",
-        btn: "3px 3px 8px rgba(160, 148, 128, 0.28)"
+        pressed: "var(--shadow-pressed)",
+        btn: "var(--shadow-soft)"
       }
     }
   },
