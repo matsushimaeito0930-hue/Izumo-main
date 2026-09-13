@@ -44,6 +44,12 @@ describe("WakaTime OAuth", () => {
     expect(getWakaTimeCallbackUrl(new Request("https://radar.example/dashboard"))).toBe(
       "https://app.example/callback"
     );
+
+    // 環境変数をフォームから貼り付けた際の末尾改行で、OAuthの完全一致判定に失敗しないようにする。
+    process.env.WAKATIME_OAUTH_CALLBACK_URL = "https://app.example/callback\n";
+    expect(getWakaTimeCallbackUrl(new Request("https://radar.example/dashboard"))).toBe(
+      "https://app.example/callback"
+    );
   });
 
   it("requires both OAuth credentials and creates unpredictable state", () => {

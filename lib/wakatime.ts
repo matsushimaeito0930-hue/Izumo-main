@@ -21,8 +21,9 @@ export function createWakaTimeState(): string {
 }
 
 export function getWakaTimeCallbackUrl(request: Request): string {
-  if (process.env.WAKATIME_OAUTH_CALLBACK_URL) {
-    return process.env.WAKATIME_OAUTH_CALLBACK_URL;
+  const configuredCallbackUrl = process.env.WAKATIME_OAUTH_CALLBACK_URL?.trim();
+  if (configuredCallbackUrl) {
+    return configuredCallbackUrl;
   }
 
   return new URL("/api/auth/wakatime/callback", new URL(request.url).origin).toString();
