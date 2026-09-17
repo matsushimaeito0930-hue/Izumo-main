@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Clock3, Link2, LoaderCircle, RefreshCw, Unplug, Users } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { CheckCircle2, Clock3, Link2, LoaderCircle, RefreshCw, Unplug, Users } from "lucide-react";
 
 type MemberSummary = {
   githubUsername: string;
@@ -32,10 +33,24 @@ function formatDuration(seconds: number): string {
 }
 
 export function WakaTimePanel({ viewerLogin }: { viewerLogin: string | null }) {
+  const searchParams = useSearchParams();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const oauthError = searchParams.get("wakatime_error");
+  const oauthErrorMessage =
+    oauthError === "exchange_failed"
+      ? "WakaTimeの認可は完了しましたが、連携情報の保存に失敗しました。運営はWAKATIME_CLIENT_SECRETの設定を確認してください。"
+      : oauthError === "denied"
+        ? "WakaTime連携がキャンセルされました。"
+        : oauthError === "state_mismatch"
+          ? "連携確認の有効期限が切れました。もう一度WakaTimeを連携してください。"
+          : oauthError === "login_required"
+            ? "連携するにはHackRadarへログインしてください。"
+            : oauthError === "not_configured"
+              ? "WakaTime連携はまだ設定されていません。"
+              : null;
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -148,15 +163,22 @@ export function WakaTimePanel({ viewerLogin }: { viewerLogin: string | null }) {
             <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
           </button>
           {summary?.connected ? (
-            <button
-              type="button"
-              onClick={() => void disconnect()}
-              disabled={isDisconnecting}
-              className="flex h-9 items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-xs font-medium text-muted transition-colors hover:border-danger/30 hover:text-danger disabled:opacity-50"
-            >
-              {isDisconnecting ? <LoaderCircle className="size-3.5 animate-spin" /> : <Unplug className="size-3.5" />}
-              連携解除
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 items-center gap-1.5 rounded-lg border border-field/30 bg-field/10 px-3 text-xs font-bold text-field">
+                <CheckCircle2 className="size-3.5" />
+                WakaTime連携済み
+              </span>
+              <button
+                type="button"
+                onClick={() => void disconnect()}
+                disabled={isDisconnecting}
+                className="grid size-9 place-items-center rounded-lg border border-line bg-paper text-muted transition-colors hover:border-danger/30 hover:text-danger disabled:opacity-50"
+                aria-label="WakaTime連携を解除"
+                title="連携を解除"
+              >
+                {isDisconnecting ? <LoaderCircle className="size-3.5 animate-spin" /> : <Unplug className="size-3.5" />}
+              </button>
+            </div>
           ) : (
             <a
               href="/api/auth/wakatime"
@@ -169,7 +191,11 @@ export function WakaTimePanel({ viewerLogin }: { viewerLogin: string | null }) {
         </div>
       </div>
 
-      {error && <p className="mt-4 rounded-lg bg-hot/10 px-3 py-2 text-sm text-hot">{error}</p>}
+      {(error || oauthErrorMessage) && (
+        <p className="mt-4 rounded-lg bg-hot/10 px-3 py-2 text-sm text-hot">
+          {error ?? oauthErrorMessage}
+        </p>
+      )}
 
       <dl className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-line bg-paper p-3 shadow-inset">

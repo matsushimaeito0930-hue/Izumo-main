@@ -50,7 +50,11 @@ export async function GET(request: Request) {
     const response = redirect(request, "wakatime", "connected");
     response.cookies.delete(WAKATIME_STATE_COOKIE);
     return response;
-  } catch {
+  } catch (error) {
+    // トークンや認可コードを含めず、運営がVercel Runtime Logsで設定不備を切り分けられるようにする。
+    console.error("WakaTime token exchange failed", {
+      message: error instanceof Error ? error.message : "Unknown error"
+    });
     return redirect(request, "wakatime_error", "exchange_failed");
   }
 }
