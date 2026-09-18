@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiFailure } from "@/lib/api-error";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
 import { acceptHelpReply, getHelpPostById } from "@/lib/store";
@@ -60,9 +61,6 @@ export async function POST(request: Request) {
     await acceptHelpReply({ helpPostId: body.helpPostId, replyId: body.replyId });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "採用に失敗しました。" },
-      { status: 400 }
-    );
+    return apiFailure("help-accept", error, "採用に失敗しました。");
   }
 }

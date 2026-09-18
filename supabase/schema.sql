@@ -210,6 +210,10 @@ alter table public.direct_messages
 alter table public.direct_messages
   drop constraint if exists direct_messages_body_check;
 
+-- 追加する前に必ず落とす。これが無いと2回目の実行が 42710 で止まる。
+alter table public.direct_messages
+  drop constraint if exists direct_messages_body_or_attachment_check;
+
 alter table public.direct_messages
   add constraint direct_messages_body_or_attachment_check
   check (
@@ -484,3 +488,8 @@ alter table public.chat_messages
 
 -- 旧 mentors テーブルは新コードでは参照しないが、既存データの確認・移行が
 -- 済むまでは自動削除しない。
+
+-- PostgRESTは表の定義をキャッシュしている。
+-- これを忘れると、列を足したのに
+-- 「Could not find the '...' column ... in the schema cache」と言われ続ける。
+notify pgrst, 'reload schema';

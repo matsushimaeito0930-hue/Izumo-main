@@ -1,3 +1,7 @@
+-- このファイルは2つを直します。
+--   1. DMの画像添付（列・バケット・Realtime通知）
+--   2. 匿名質問の is_anonymous 列。schema.sql にしか無く、移行SQLから漏れていた。
+--
 -- DM画像は非公開バケットに保存し、Next.js APIが当事者向けに期限付きURLを発行する。
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -21,6 +25,10 @@ alter table public.direct_messages
 -- 画像だけのDMも許可する。本文は空文字を許可するが、本文と画像の両方が空は許可しない。
 alter table public.direct_messages
   drop constraint if exists direct_messages_body_check;
+
+-- 追加する前に必ず落とす。これが無いと2回目の実行が 42710 で止まる。
+alter table public.direct_messages
+  drop constraint if exists direct_messages_body_or_attachment_check;
 
 alter table public.direct_messages
   add constraint direct_messages_body_or_attachment_check
@@ -51,3 +59,17 @@ drop trigger if exists direct_messages_touch_app_change_signal on public.direct_
 create trigger direct_messages_touch_app_change_signal
 after insert or update or delete on public.direct_messages
 for each statement execute function public.touch_app_change_signal();
+
+-- 匿名質問の列。schema.sql には入っていたが、移行SQLから漏れていた。
+-- この列が無いと、質問の投稿そのものが失敗する。
+alter table public.help_posts
+  add column if not exists is_anonymous boolean not null default false;
+
+-- 併せて、古いDBに欠けている可能性のある列も埋めておく。
+alter table public.teams
+  add column if not exists commit_count integer not null default 0;
+
+-- PostgRESTは表の定義をキャッシュしている。
+-- これを忘れると、列を足したのに
+-- 「Could not find the '...' column ... in the schema cache」と言われ続ける。
+notify pgrst, 'reload schema';

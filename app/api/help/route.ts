@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiFailure } from "@/lib/api-error";
 import { isDemoModeEnabled } from "@/lib/env";
 import { isGitHubAuthConfigured } from "@/lib/github-auth";
 import { getCurrentIdentity } from "@/lib/session";
@@ -93,9 +94,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ post });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "質問を投稿できませんでした。" },
-      { status: 400 }
-    );
+    return apiFailure("help", error, "質問を投稿できませんでした。");
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { apiFailure } from "@/lib/api-error";
 import { getCurrentIdentity } from "@/lib/session";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import {
@@ -27,74 +28,8 @@ function unauthorized() {
   );
 }
 
-/**
- * 失敗の理由を取り出す。
- *
- * Supabaseのエラーは Error のインスタンスではなく
- * `{ message, details, hint, code }` の素のオブジェクトで返る。
- * instanceof だけで判定すると理由が消え、画面に汎用文しか出なくなる。
- */
-function describe(error: unknown, fallback: string) {
-  if (error instanceof Error) {
-    return { message: error.message, code: undefined as string | undefined };
-  }
-
-  if (error && typeof error === "object") {
-    const source = error as {
-      message?: unknown;
-      details?: unknown;
-      hint?: unknown;
-      code?: unknown;
-    };
-    const parts = [source.message, source.details, source.hint]
-      .filter((part): part is string => typeof part === "string" && part.length > 0)
-      .join(" / ");
-
-    if (parts) {
-      return {
-        message: parts,
-        code: typeof source.code === "string" ? source.code : undefined
-      };
-    }
-  }
-
-  return { message: fallback, code: undefined as string | undefined };
-}
-
-/**
- * DBのエラーコードを、次の一手が分かる日本語にする。
- * ここに出るものはほぼ移行SQLの未実行が原因なので、実行すべきファイル名まで書く。
- */
-const DB_HINTS: Record<string, string> = {
-  "42P01": "DMの表がまだありません。Supabaseで supabase/schema.sql を実行してください。",
-  "42703":
-    "DMの表に画像添付用の項目がありません。Supabaseで supabase/migrations/20260918_direct_message_attachments.sql を実行してください。",
-  PGRST204:
-    "DMの表に画像添付用の項目がありません。Supabaseで supabase/migrations/20260918_direct_message_attachments.sql を実行してください。",
-  "42501":
-    "DBへの書き込みが拒否されました。VercelのSUPABASE_SERVICE_ROLE_KEYを確認してください。",
-  "23503":
-    "参加中のイベントがDBに見つかりません。ログアウトして入り直してください。",
-  "23514":
-    "メッセージの内容がDBの条件に合いません。画像添付用の移行SQLが未実行の可能性があります。",
-  "22P02": "イベントIDの形式が不正です。ログアウトして入り直してください。"
-};
-
 function failure(error: unknown, fallback: string) {
-  const { message, code } = describe(error, fallback);
-  const hint = code ? DB_HINTS[code] : undefined;
-
-  // バケット未作成はコードが付かないことがあるので、本文からも拾う。
-  const bucketMissing = /bucket/i.test(message) && /not found|does not exist/i.test(message);
-  const resolved = hint
-    ? `${hint}（${code}: ${message}）`
-    : bucketMissing
-      ? `画像の保存先がまだありません。Supabaseで supabase/migrations/20260918_direct_message_attachments.sql を実行してください。（${message}）`
-      : message;
-
-  console.error("[direct-messages]", code ?? "-", message, error);
-
-  return NextResponse.json({ error: resolved, code }, { status: 400 });
+  return apiFailure("direct-messages", error, fallback);
 }
 
 async function syncViewer() {
