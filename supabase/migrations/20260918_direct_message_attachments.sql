@@ -43,3 +43,11 @@ alter table public.direct_messages
       and attachment_size between 1 and 5242880
     )
   ) not valid;
+
+-- 個人DMもRealtimeの通知対象にする。
+-- これが無いと、相手に届くまでポーリングの間隔だけ待つことになる。
+-- 通知されるのは app_change_signal の時刻だけで、DMの本文は流れない。
+drop trigger if exists direct_messages_touch_app_change_signal on public.direct_messages;
+create trigger direct_messages_touch_app_change_signal
+after insert or update or delete on public.direct_messages
+for each statement execute function public.touch_app_change_signal();

@@ -468,9 +468,11 @@ Supabaseの環境変数が未設定の場合は、メモリ上のシードデー
 5. anonキーを `NEXT_PUBLIC_SUPABASE_ANON_KEY` に設定する
 6. service roleキーを `SUPABASE_SERVICE_ROLE_KEY` に設定する
 
-環境変数が設定されると、ブラウザは通知専用の`app_change_signal`だけをRealtime購読します。活動・チーム・質問・チャット本文は認証済みAPIから取得し、ブラウザのSupabaseキーから直接読み取れません。
+環境変数が設定されると、ブラウザは通知専用の`app_change_signal`だけをRealtime購読します。活動・チーム・質問・チャット・個人DMの本文は認証済みAPIから取得し、ブラウザのSupabaseキーから直接読み取れません。
 
-Realtime接続が切れてもデモが止まらないよう、低頻度の再取得も併用しています。
+個人DMも`app_change_signal`のトリガー対象です。相手が送った瞬間に通知が飛び、画面はAPIから取り直します。流れるのは更新時刻だけで、DM本文はRealtimeに載りません。
+
+Realtime接続が切れてもデモが止まらないよう、低頻度の再取得も併用しています（ダッシュボードは12秒、個人DMは15秒）。
 
 ## GitHub Webhookの設定
 

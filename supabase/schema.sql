@@ -412,6 +412,12 @@ create trigger chat_messages_touch_app_change_signal
 after insert or update or delete on public.chat_messages
 for each statement execute function public.touch_app_change_signal();
 
+-- 個人DMも通知対象にする。これが無いと、届くまでポーリングの間隔だけ待つことになる。
+drop trigger if exists direct_messages_touch_app_change_signal on public.direct_messages;
+create trigger direct_messages_touch_app_change_signal
+after insert or update or delete on public.direct_messages
+for each statement execute function public.touch_app_change_signal();
+
 revoke all privileges on table public.app_change_signal from anon, authenticated;
 grant select on table public.app_change_signal to anon, authenticated;
 

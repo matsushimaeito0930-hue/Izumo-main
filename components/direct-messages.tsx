@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, MessageCircle, Send, X } from "lucide-react";
 import { Panel } from "@/components/panel";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { formatDateTime } from "@/lib/datetime";
 import type { DirectMessage, DirectMessageContact, UserRole } from "@/lib/types";
 
@@ -53,10 +54,42 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
-    const interval = window.setInterval(() => void load(true), 5000);
+    const supabase = createBrowserSupabaseClient();
+
+    // Supabaseが未設定のローカルでは、これまで通り短い間隔で取り直す。
+    if (!supabase) {
+      const interval = window.setInterval(() => void load(true), 5000);
+      return () => {
+        window.clearTimeout(initialLoad);
+        window.clearInterval(interval);
+      };
+    }
+
+    // 立て続けの更新でAPIを叩きすぎないよう、少しだけまとめる。
+    let pending: number | undefined;
+    const scheduleReload = () => {
+      if (pending) window.clearTimeout(pending);
+      pending = window.setTimeout(() => void load(true), 120);
+    };
+
+    const channel = supabase
+      .channel("hackverse-direct-messages")
+      .on(
+        "postgres_changes",
+        // 流れてくるのは時刻だけ。DMの本文はここには載せず、APIから取り直す。
+        { event: "UPDATE", schema: "public", table: "app_change_signal" },
+        scheduleReload
+      )
+      .subscribe();
+
+    // 接続が切れていても取り残されないための保険。通常はWebSocketが先に届く。
+    const safetyPoll = window.setInterval(() => void load(true), 15000);
+
     return () => {
       window.clearTimeout(initialLoad);
-      window.clearInterval(interval);
+      if (pending) window.clearTimeout(pending);
+      window.clearInterval(safetyPoll);
+      void supabase.removeChannel(channel);
     };
     // viewer のログインが切り替わった時だけDMを読み直す。
     // eslint-disable-next-line react-hooks/exhaustive-deps
