@@ -77,11 +77,15 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
   const conversation = useMemo(
     () =>
       selected
-        ? messages.filter(
-            (message) =>
-              message.sender_login === selected.github_username ||
-              message.recipient_login === selected.github_username
-          )
+        ? messages.filter((message) => {
+            // GitHubのアカウント名は大文字小文字を区別しない。
+            // ここで厳密に比べると、記録された綴りが違うだけで会話が消える。
+            const partner = selected.github_username.toLowerCase();
+            return (
+              message.sender_login.toLowerCase() === partner ||
+              message.recipient_login.toLowerCase() === partner
+            );
+          })
         : [],
     [messages, selected]
   );
@@ -187,7 +191,13 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
               <div className="flex flex-1 flex-col justify-end gap-3 py-3">
                 {conversation.length > 0 ? (
                   conversation.map((message) => {
-                    const own = message.sender_login === viewer.login;
+                    // 相手が送ったもの以外は自分のもの、と決める。
+                    // viewer.login はセッションの作り方によって実際のGitHub名と
+                    // ずれることがあり、それで突き合わせると左右が全部片側に寄る。
+                    // APIは自分が関わるDMしか返さないので、この判定なら狂わない。
+                    const own =
+                      message.sender_login.toLowerCase() !==
+                      selected.github_username.toLowerCase();
                     return (
                       <div key={message.id} className={`flex ${own ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[85%] ${own ? "text-right" : "text-left"}`}>
