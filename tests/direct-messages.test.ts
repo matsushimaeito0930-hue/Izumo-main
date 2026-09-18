@@ -113,4 +113,39 @@ describe("direct messages", () => {
       })
     ).rejects.toThrow("この相手にはDMを送れません。");
   });
+
+  it("allows an image-only DM and keeps attachment metadata with the message", async () => {
+    const event = await createEvent({ name: "DM attachment event", ownerGithubUsername: "dm-owner-c" });
+    await syncDirectMessageProfile({
+      eventId: event.id,
+      githubUsername: "dm-image-sender",
+      displayName: "Image sender",
+      avatarUrl: null,
+      role: "participant"
+    });
+    await syncDirectMessageProfile({
+      eventId: event.id,
+      githubUsername: "dm-image-mentor",
+      displayName: "Image mentor",
+      avatarUrl: null,
+      role: "mentor"
+    });
+
+    const message = await createDirectMessage({
+      eventId: event.id,
+      senderLogin: "dm-image-sender",
+      senderName: "Image sender",
+      senderRole: "participant",
+      recipientLogin: "dm-image-mentor",
+      body: "",
+      attachmentPath: `${event.id}/example.png`,
+      attachmentName: "example.png",
+      attachmentMimeType: "image/png",
+      attachmentSize: 1024
+    });
+
+    expect(message.body).toBe("");
+    expect(message.attachment_path).toBe(`${event.id}/example.png`);
+    expect(message.attachment_mime_type).toBe("image/png");
+  });
 });

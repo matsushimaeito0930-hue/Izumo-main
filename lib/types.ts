@@ -142,6 +142,13 @@ export type DirectMessage = {
   sender_name: string;
   sender_role: UserRole;
   body: string;
+  /** Supabase Storage 内の非公開パス。ブラウザにはそのまま渡さない。 */
+  attachment_path?: string | null;
+  attachment_name?: string | null;
+  attachment_mime_type?: string | null;
+  attachment_size?: number | null;
+  /** APIが当事者向けに発行する、期限付きの画像URL。 */
+  attachment_url?: string | null;
   created_at: string;
 };
 

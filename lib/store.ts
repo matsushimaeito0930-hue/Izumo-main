@@ -970,7 +970,27 @@ export async function getDirectMessages(
         .order("created_at", { ascending: true })
         .limit(300);
       if (error) throw error;
-      return (data ?? []) as DirectMessage[];
+      const messages = (data ?? []) as DirectMessage[];
+      const attachmentPaths = messages
+        .map((message) => message.attachment_path)
+        .filter((path): path is string => Boolean(path));
+
+      if (attachmentPaths.length === 0) return messages;
+
+      const { data: signedUrls, error: signedUrlError } = await supabase.storage
+        .from("direct-message-attachments")
+        .createSignedUrls(attachmentPaths, 60 * 60);
+      if (signedUrlError) throw signedUrlError;
+
+      const urlByPath = new Map(
+        (signedUrls ?? []).map((item) => [item.path, item.signedUrl])
+      );
+      return messages.map((message) => ({
+        ...message,
+        attachment_url: message.attachment_path
+          ? urlByPath.get(message.attachment_path) ?? null
+          : null
+      }));
     }
   }
 
@@ -992,17 +1012,28 @@ export async function createDirectMessage(input: {
   senderRole: UserRole;
   recipientLogin: string;
   body: string;
+  attachmentPath?: string | null;
+  attachmentName?: string | null;
+  attachmentMimeType?: string | null;
+  attachmentSize?: number | null;
 }): Promise<DirectMessage> {
   const senderLogin = input.senderLogin.trim();
   const recipientLogin = input.recipientLogin.trim();
   const body = input.body.trim();
+  const attachmentPath = input.attachmentPath?.trim() || null;
+  const attachmentName = input.attachmentName?.trim() || null;
+  const attachmentMimeType = input.attachmentMimeType?.trim() || null;
+  const attachmentSize = input.attachmentSize ?? null;
   const eventId = input.eventId ?? (await getEvent())?.id ?? "memory-event";
 
   if (!senderLogin || !recipientLogin || senderLogin.toLowerCase() === recipientLogin.toLowerCase()) {
     throw new Error("DMの相手を選択してください。");
   }
-  if (!body || body.length > 1000) {
-    throw new Error("メッセージは1〜1000文字で入力してください。");
+  if ((!body && !attachmentPath) || body.length > 1000) {
+    throw new Error("メッセージか画像を入力してください。本文は1000文字までです。");
+  }
+  if (attachmentPath && (!attachmentName || !attachmentMimeType || !attachmentSize)) {
+    throw new Error("画像の情報が不完全です。もう一度選択してください。");
   }
 
   const allowedRoles = dmRecipientRoles(input.senderRole);
@@ -1044,6 +1075,10 @@ export async function createDirectMessage(input: {
         sender_name: input.senderName.trim() || senderLogin,
         sender_role: input.senderRole,
         body,
+        attachment_path: attachmentPath,
+        attachment_name: attachmentName,
+        attachment_mime_type: attachmentMimeType,
+        attachment_size: attachmentSize,
         created_at: new Date().toISOString()
       };
       const { data: saved, error: insertError } = await supabase
@@ -1077,6 +1112,10 @@ export async function createDirectMessage(input: {
     sender_name: input.senderName.trim() || senderLogin,
     sender_role: input.senderRole,
     body,
+    attachment_path: attachmentPath,
+    attachment_name: attachmentName,
+    attachment_mime_type: attachmentMimeType,
+    attachment_size: attachmentSize,
     created_at: new Date().toISOString()
   };
   store.directMessages.push(message);

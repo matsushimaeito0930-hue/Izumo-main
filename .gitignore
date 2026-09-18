@@ -6,7 +6,7 @@ dist/
 artifacts/
 .artifacts/
 *.tsbuildinfo
-
+*.png
 # Optional: ignore npm debug logs
 npm-debug.log*
 *.pptx

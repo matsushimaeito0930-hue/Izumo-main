@@ -189,13 +189,61 @@ create table if not exists public.direct_messages (
   recipient_login text not null,
   sender_name text not null,
   sender_role text not null check (sender_role in ('participant', 'mentor', 'admin', 'judge')),
-  body text not null check (char_length(body) between 1 and 1000),
+  body text not null check (char_length(body) <= 1000),
+  attachment_path text,
+  attachment_name text,
+  attachment_mime_type text,
+  attachment_size integer,
   created_at timestamptz not null default now(),
   check (lower(sender_login) <> lower(recipient_login))
 );
 
 alter table public.direct_messages
   add column if not exists event_id uuid references public.events(id) on delete cascade;
+
+alter table public.direct_messages
+  add column if not exists attachment_path text,
+  add column if not exists attachment_name text,
+  add column if not exists attachment_mime_type text,
+  add column if not exists attachment_size integer;
+
+alter table public.direct_messages
+  drop constraint if exists direct_messages_body_check;
+
+alter table public.direct_messages
+  add constraint direct_messages_body_or_attachment_check
+  check (
+    char_length(body) <= 1000
+    and (char_length(body) > 0 or attachment_path is not null)
+  ) not valid;
+
+alter table public.direct_messages
+  drop constraint if exists direct_messages_attachment_metadata_check;
+
+alter table public.direct_messages
+  add constraint direct_messages_attachment_metadata_check
+  check (
+    (attachment_path is null and attachment_name is null and attachment_mime_type is null and attachment_size is null)
+    or (
+      attachment_path is not null
+      and attachment_name is not null
+      and attachment_mime_type in ('image/jpeg', 'image/png', 'image/gif', 'image/webp')
+      and attachment_size between 1 and 5242880
+    )
+  ) not valid;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'direct-message-attachments',
+  'direct-message-attachments',
+  false,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+)
+on conflict (id) do update
+set public = false,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
 
 create index if not exists activities_created_at_idx on public.activities(created_at desc);
 create index if not exists activities_team_id_idx on public.activities(team_id);

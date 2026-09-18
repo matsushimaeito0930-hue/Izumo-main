@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { MessageCircle, Send } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ImagePlus, MessageCircle, Send, X } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { formatDateTime } from "@/lib/datetime";
 import type { DirectMessage, DirectMessageContact, UserRole } from "@/lib/types";
@@ -24,9 +24,11 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [selectedLogin, setSelectedLogin] = useState("");
   const [text, setText] = useState("");
+  const [attachment, setAttachment] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const load = async (quiet = false) => {
     if (!viewer) return;
@@ -86,14 +88,19 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !text.trim()) return;
+    if (!selected || (!text.trim() && !attachment)) return;
     setIsSending(true);
     setError("");
     try {
       const response = await fetch("/api/direct-messages", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ recipientLogin: selected.github_username, body: text })
+        body: (() => {
+          const formData = new FormData();
+          formData.set("recipientLogin", selected.github_username);
+          formData.set("body", text);
+          if (attachment) formData.set("attachment", attachment);
+          return formData;
+        })()
       });
       const payload = (await response.json().catch(() => ({}))) as {
         message?: DirectMessage;
@@ -104,6 +111,10 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
       }
       setMessages((current) => [...current, payload.message as DirectMessage]);
       setText("");
+      setAttachment(null);
+      if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+      // 添付画像には期限付きURLが必要なので、送信直後もサーバーから最新状態を取り直す。
+      void load(true);
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "DMを送信できませんでした。");
     } finally {
@@ -180,18 +191,34 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
                     return (
                       <div key={message.id} className={`flex ${own ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[85%] ${own ? "text-right" : "text-left"}`}>
-                          <p className="mb-1 text-xs text-muted">
-                            {own ? viewer.displayName : message.sender_name}
+                          <p className={`mb-1 text-xs font-bold ${own ? "text-pulse" : "text-hot"}`}>
+                            {own ? "あなた" : message.sender_name}
                           </p>
-                          <p
-                            className={`rounded-xl border px-3 py-2 text-left text-sm leading-6 shadow-soft ${
+                          <div
+                            className={`rounded-2xl border-2 px-3 py-2 text-left text-sm leading-6 shadow-soft ${
                               own
-                                ? "border-pulse/25 bg-pulse/10 text-ink"
-                                : "border-line bg-surface text-ink2"
+                                ? "border-pulse/55 bg-pulse/10 text-ink"
+                                : "border-hot/55 bg-hot/10 text-ink"
                             }`}
                           >
-                            {message.body}
-                          </p>
+                            {message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>}
+                            {message.attachment_url && (
+                              <a
+                                href={message.attachment_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`block ${message.body ? "mt-2" : ""}`}
+                              >
+                                <img
+                                  src={message.attachment_url}
+                                  alt={message.attachment_name ?? "添付画像"}
+                                  className="max-h-64 max-w-full rounded-xl border border-line object-contain"
+                                  loading="lazy"
+                                />
+                                <span className="mt-1 block text-xs underline">画像を開く</span>
+                              </a>
+                            )}
+                          </div>
                           <time className="mt-1 block text-xs text-muted">
                             {formatDateTime(message.created_at)}
                           </time>
@@ -208,22 +235,67 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
                   </div>
                 )}
               </div>
-              <form onSubmit={submit} className="flex gap-2 border-t border-line pt-3">
-                <input
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  maxLength={1000}
-                  placeholder={`${selected.display_name} さんにメッセージを書く`}
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 text-sm text-ink outline-none transition-colors placeholder:text-muted/70 focus:border-pulse"
-                />
-                <button
-                  type="submit"
-                  disabled={isSending || !text.trim()}
-                  className="flex h-11 shrink-0 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition hover:bg-ink2 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Send className="size-4" />
-                  <span className="hidden sm:inline">送信</span>
-                </button>
+              <form onSubmit={submit} className="border-t border-line pt-3">
+                {attachment && (
+                  <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-pulse/35 bg-pulse/10 px-3 py-2 text-xs text-ink">
+                    <span className="truncate">画像: {attachment.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAttachment(null);
+                        if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+                      }}
+                      className="grid size-6 shrink-0 place-items-center rounded-md text-muted hover:bg-paper"
+                      aria-label="添付画像を取り消す"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      if (file && file.size > 5 * 1024 * 1024) {
+                        setAttachment(null);
+                        event.target.value = "";
+                        setError("画像は5MB以下にしてください。");
+                        return;
+                      }
+                      setAttachment(file);
+                      setError("");
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => attachmentInputRef.current?.click()}
+                    className="grid size-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted transition hover:border-pulse hover:text-pulse"
+                    title="画像を添付（PNG・JPEG・GIF・WebP、5MBまで）"
+                    aria-label="画像を添付"
+                  >
+                    <ImagePlus className="size-5" />
+                  </button>
+                  <input
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    maxLength={1000}
+                    placeholder={`${selected.display_name} さんにメッセージを書く`}
+                    className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 text-sm text-ink outline-none transition-colors placeholder:text-muted/70 focus:border-pulse"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSending || (!text.trim() && !attachment)}
+                    className="flex h-11 shrink-0 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white shadow-btn transition hover:bg-ink2 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Send className="size-4" />
+                    <span className="hidden sm:inline">送信</span>
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-muted">画像はPNG・JPEG・GIF・WebP、5MBまで添付できます。</p>
               </form>
             </>
           ) : (
