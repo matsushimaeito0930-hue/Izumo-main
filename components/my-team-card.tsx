@@ -26,9 +26,25 @@ export function MyTeamCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <span className="text-xs font-medium text-pulse">自分のチーム</span>
-          <h2 className="mt-0.5 truncate text-2xl font-bold tracking-tight text-ink sm:text-3xl">
-            {team.name}
-          </h2>
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="truncate text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+              {team.name}
+            </h2>
+            {team.github_repo ? (
+              <a
+                href={`https://github.com/${team.github_repo}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex max-w-full items-center gap-1 text-xs font-medium text-pulse underline-offset-2 hover:underline"
+                title={`${team.github_repo} をGitHubで開く`}
+              >
+                <GitBranch className="size-3.5 shrink-0" />
+                <span className="truncate">{team.github_repo}</span>
+              </a>
+            ) : (
+              <span className="text-xs text-muted">リポジトリ未設定</span>
+            )}
+          </div>
           <div className="mt-2.5">
             <TeamMembers members={members} viewerLogin={viewerLogin} />
           </div>
@@ -60,12 +76,6 @@ export function MyTeamCard({
       </dl>
 
       <div className="mt-4 space-y-1.5 text-sm">
-        <p className="flex items-center gap-2 text-muted">
-          <GitBranch className="size-4 shrink-0" />
-          <span className="truncate font-mono text-xs">
-            {team.github_repo ?? "リポジトリ未設定"}
-          </span>
-        </p>
         <p className="truncate text-xs leading-5 text-muted">
           {latestActivity?.message ?? "まだ活動がありません。プッシュすると反映されます。"}
         </p>
