@@ -8,9 +8,14 @@ export type TechStackLanguage = {
   percentage: number;
 };
 
+export type TechStackCategory = "frontend" | "backend" | "database";
+
+export type TechStackTechnologies = Record<TechStackCategory, string[]>;
+
 export type RepoTechStack = {
   repo: string;
   frameworks: string[];
+  technologies: TechStackTechnologies;
   languages: TechStackLanguage[];
   scannedAt: string;
   status: "ready" | "unavailable";
@@ -33,34 +38,57 @@ const manifestNames = [
   "composer.json"
 ];
 
-const packageFrameworks: Array<[string, string]> = [
-  ["next", "Next.js"],
-  ["react", "React"],
-  ["vue", "Vue.js"],
-  ["nuxt", "Nuxt"],
-  ["@angular/core", "Angular"],
-  ["svelte", "Svelte"],
-  ["astro", "Astro"],
-  ["@remix-run/react", "Remix"],
-  ["express", "Express"],
-  ["@nestjs/core", "NestJS"],
-  ["fastify", "Fastify"],
-  ["hono", "Hono"],
-  ["@supabase/supabase-js", "Supabase"],
-  ["prisma", "Prisma"],
-  ["@prisma/client", "Prisma"],
-  ["drizzle-orm", "Drizzle"],
-  ["tailwindcss", "Tailwind CSS"],
-  ["vite", "Vite"]
+const packageTechnologies: Array<[string, string, TechStackCategory]> = [
+  ["next", "Next.js", "frontend"],
+  ["react", "React", "frontend"],
+  ["vue", "Vue.js", "frontend"],
+  ["nuxt", "Nuxt", "frontend"],
+  ["@angular/core", "Angular", "frontend"],
+  ["svelte", "Svelte", "frontend"],
+  ["astro", "Astro", "frontend"],
+  ["@remix-run/react", "Remix", "frontend"],
+  ["tailwindcss", "Tailwind CSS", "frontend"],
+  ["vite", "Vite", "frontend"],
+  ["express", "Express", "backend"],
+  ["@nestjs/core", "NestJS", "backend"],
+  ["fastify", "Fastify", "backend"],
+  ["hono", "Hono", "backend"],
+  ["@supabase/supabase-js", "Supabase (PostgreSQL)", "database"],
+  ["prisma", "Prisma (ORM)", "database"],
+  ["@prisma/client", "Prisma (ORM)", "database"],
+  ["drizzle-orm", "Drizzle (ORM)", "database"],
+  ["mongoose", "MongoDB", "database"],
+  ["mongodb", "MongoDB", "database"],
+  ["pg", "PostgreSQL", "database"],
+  ["mysql2", "MySQL", "database"],
+  ["better-sqlite3", "SQLite", "database"],
+  ["sqlite3", "SQLite", "database"],
+  ["redis", "Redis", "database"],
+  ["ioredis", "Redis", "database"],
+  ["firebase", "Firebase (Firestore)", "database"]
 ];
 
-function addIfIncludes(target: Set<string>, text: string, marker: string, label: string) {
-  if (text.toLowerCase().includes(marker.toLowerCase())) target.add(label);
+function emptyTechnologies(): TechStackTechnologies {
+  return { frontend: [], backend: [], database: [] };
+}
+
+function addIfIncludes(
+  target: Record<TechStackCategory, Set<string>>,
+  text: string,
+  marker: string,
+  label: string,
+  category: TechStackCategory
+) {
+  if (text.toLowerCase().includes(marker.toLowerCase())) target[category].add(label);
 }
 
 /** 設定ファイルの文字列だけで判定できるよう分離し、ネットワーク無しでテスト可能にする。 */
-export function detectFrameworksFromManifests(manifests: Record<string, string>): string[] {
-  const detected = new Set<string>();
+export function detectTechnologiesFromManifests(manifests: Record<string, string>): TechStackTechnologies {
+  const detected: Record<TechStackCategory, Set<string>> = {
+    frontend: new Set(),
+    backend: new Set(),
+    database: new Set()
+  };
   const packageJson = manifests["package.json"];
 
   if (packageJson) {
@@ -73,8 +101,8 @@ export function detectFrameworksFromManifests(manifests: Record<string, string>)
         ...(parsed.dependencies ?? {}),
         ...(parsed.devDependencies ?? {})
       };
-      for (const [dependency, label] of packageFrameworks) {
-        if (dependency in dependencies) detected.add(label);
+      for (const [dependency, label, category] of packageTechnologies) {
+        if (dependency in dependencies) detected[category].add(label);
       }
     } catch {
       // 壊れたpackage.jsonは無視し、他の設定ファイルの判定を続ける。
@@ -82,28 +110,41 @@ export function detectFrameworksFromManifests(manifests: Record<string, string>)
   }
 
   const requirements = `${manifests["requirements.txt"] ?? ""}\n${manifests["pyproject.toml"] ?? ""}`;
-  addIfIncludes(detected, requirements, "fastapi", "FastAPI");
-  addIfIncludes(detected, requirements, "django", "Django");
-  addIfIncludes(detected, requirements, "flask", "Flask");
-  addIfIncludes(detected, requirements, "streamlit", "Streamlit");
+  addIfIncludes(detected, requirements, "fastapi", "FastAPI", "backend");
+  addIfIncludes(detected, requirements, "django", "Django", "backend");
+  addIfIncludes(detected, requirements, "flask", "Flask", "backend");
+  addIfIncludes(detected, requirements, "streamlit", "Streamlit", "frontend");
+  addIfIncludes(detected, requirements, "sqlalchemy", "SQLAlchemy (ORM)", "database");
+  addIfIncludes(detected, requirements, "psycopg", "PostgreSQL", "database");
+  addIfIncludes(detected, requirements, "pymongo", "MongoDB", "database");
 
   const java = `${manifests["pom.xml"] ?? ""}\n${manifests["build.gradle"] ?? ""}\n${manifests["build.gradle.kts"] ?? ""}`;
-  addIfIncludes(detected, java, "spring-boot", "Spring Boot");
+  addIfIncludes(detected, java, "spring-boot", "Spring Boot", "backend");
 
   const go = manifests["go.mod"] ?? "";
-  addIfIncludes(detected, go, "gin-gonic/gin", "Gin");
-  addIfIncludes(detected, go, "gofiber/fiber", "Fiber");
-  addIfIncludes(detected, go, "labstack/echo", "Echo");
+  addIfIncludes(detected, go, "gin-gonic/gin", "Gin", "backend");
+  addIfIncludes(detected, go, "gofiber/fiber", "Fiber", "backend");
+  addIfIncludes(detected, go, "labstack/echo", "Echo", "backend");
 
   const rust = manifests["Cargo.toml"] ?? "";
-  addIfIncludes(detected, rust, "actix-web", "Actix Web");
-  addIfIncludes(detected, rust, "axum", "Axum");
-  addIfIncludes(detected, rust, "rocket", "Rocket");
+  addIfIncludes(detected, rust, "actix-web", "Actix Web", "backend");
+  addIfIncludes(detected, rust, "axum", "Axum", "backend");
+  addIfIncludes(detected, rust, "rocket", "Rocket", "backend");
 
-  addIfIncludes(detected, manifests.Gemfile ?? "", "rails", "Ruby on Rails");
-  addIfIncludes(detected, manifests["composer.json"] ?? "", "laravel/framework", "Laravel");
+  addIfIncludes(detected, manifests.Gemfile ?? "", "rails", "Ruby on Rails", "backend");
+  addIfIncludes(detected, manifests["composer.json"] ?? "", "laravel/framework", "Laravel", "backend");
 
-  return [...detected].sort((left, right) => left.localeCompare(right));
+  return {
+    frontend: [...detected.frontend].sort((left, right) => left.localeCompare(right)),
+    backend: [...detected.backend].sort((left, right) => left.localeCompare(right)),
+    database: [...detected.database].sort((left, right) => left.localeCompare(right))
+  };
+}
+
+/** 既存の利用箇所向けに、分類済みの技術を平坦な一覧でも返す。 */
+export function detectFrameworksFromManifests(manifests: Record<string, string>): string[] {
+  const technologies = detectTechnologiesFromManifests(manifests);
+  return Object.values(technologies).flat().sort((left, right) => left.localeCompare(right));
 }
 
 function githubHeaders(accessToken?: string) {
@@ -167,6 +208,7 @@ function unavailable(repo: string, detail: string): RepoTechStack {
   return {
     repo,
     frameworks: [],
+    technologies: emptyTechnologies(),
     languages: [],
     scannedAt: new Date().toISOString(),
     status: "unavailable",
@@ -214,7 +256,8 @@ export async function inspectGitHubRepoTechStack(
       manifestContents.filter((entry): entry is readonly [string, string] => entry[1] !== null)
     );
     const languages = languagesResult.ok ? languagesFromPayload(languagesResult.body) : [];
-    const frameworks = detectFrameworksFromManifests(manifests);
+    const technologies = detectTechnologiesFromManifests(manifests);
+    const frameworks = Object.values(technologies).flat().sort((left, right) => left.localeCompare(right));
 
     if (!languagesResult.ok && !rootResult.ok) {
       return unavailable(repo, "GitHubから読み取れません。非公開リポジトリは審査員の閲覧権限が必要です。");
@@ -223,6 +266,7 @@ export async function inspectGitHubRepoTechStack(
     const value: RepoTechStack = {
       repo,
       frameworks,
+      technologies,
       languages,
       scannedAt: new Date().toISOString(),
       status: "ready"

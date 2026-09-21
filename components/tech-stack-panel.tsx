@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Github, RefreshCw, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/panel";
-import type { RepoTechStack, TechStackLanguage } from "@/lib/github-tech-stack";
+import type { RepoTechStack, TechStackLanguage, TechStackTechnologies } from "@/lib/github-tech-stack";
 import type { Team } from "@/lib/types";
 
 type TeamTechStack = RepoTechStack & {
@@ -22,6 +22,58 @@ function languageChart(languages: TechStackLanguage[]) {
     return segment;
   });
   return `conic-gradient(${segments.join(", ")})`;
+}
+
+const categoryLabels = {
+  frontend: "フロントエンド",
+  backend: "バックエンド",
+  database: "データベース・ORM"
+} as const;
+
+const emptyTechnologies: TechStackTechnologies = { frontend: [], backend: [], database: [] };
+
+function technologyChart(technologies: string[]) {
+  if (technologies.length === 0) return "#d8d3c9";
+  const segmentSize = 100 / technologies.length;
+  return `conic-gradient(${technologies
+    .map((_, index) => {
+      const start = Math.round(index * segmentSize * 10) / 10;
+      const end = Math.round((index + 1) * segmentSize * 10) / 10;
+      return `${chartColors[index % chartColors.length]} ${start}% ${end}%`;
+    })
+    .join(", ")})`;
+}
+
+function TechnologyPie({ category, technologies }: { category: keyof TechStackTechnologies; technologies: string[] }) {
+  return (
+    <section className="min-w-0 rounded-xl border border-line/80 bg-canvas/40 p-3">
+      <h4 className="text-xs font-bold text-ink">{categoryLabels[category]}</h4>
+      {technologies.length === 0 ? (
+        <p className="mt-2 text-xs leading-5 text-muted">設定ファイルからは検出できませんでした</p>
+      ) : (
+        <div className="mt-2 flex items-center gap-3">
+          <div
+            className="relative size-16 shrink-0 rounded-full"
+            style={{ background: technologyChart(technologies) }}
+            aria-label={`${categoryLabels[category]}の構成`}
+            role="img"
+          >
+            <div className="absolute inset-[27%] grid place-items-center rounded-full bg-paper text-[10px] font-bold text-muted">
+              {technologies.length}
+            </div>
+          </div>
+          <ul className="min-w-0 space-y-1">
+            {technologies.map((technology, index) => (
+              <li key={technology} className="flex items-center gap-1.5 text-xs text-ink2">
+                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: chartColors[index % chartColors.length] }} />
+                <span className="truncate">{technology}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function TechStackPanel({
@@ -68,8 +120,8 @@ export function TechStackPanel({
       title="技術スタック"
       description={
         scope === "own"
-          ? "自分のチームのGitHubリポジトリから、言語構成と依存定義を自動判定しています。"
-          : "各チームのGitHubリポジトリから、言語構成と依存定義を自動判定しています。評価・支援の補助情報です。"
+          ? "自分のチームのGitHubリポジトリから、言語・フロントエンド・バックエンド・DB/ORMを自動判定しています。"
+          : "各チームのGitHubリポジトリから、言語・フロントエンド・バックエンド・DB/ORMを自動判定しています。評価・支援の補助情報です。"
       }
       action={
         <button
@@ -120,7 +172,8 @@ export function TechStackPanel({
                   {stack.detail}
                 </p>
               ) : (
-                <div className="mt-3 grid gap-4 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
+                <div className="mt-3 space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
                   <div className="flex items-center gap-3 sm:block">
                     <div
                       className="relative size-24 shrink-0 rounded-full"
@@ -135,18 +188,7 @@ export function TechStackPanel({
                     )}
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-muted">検出した技術</p>
-                    {stack.frameworks.length ? (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {stack.frameworks.map((framework) => (
-                          <span key={framework} className="rounded-full bg-pulse/10 px-2 py-1 text-xs font-medium text-pulse">
-                            {framework}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-1 text-xs text-muted">主要な設定ファイルからは検出できませんでした。</p>
-                    )}
+                    <p className="text-xs font-medium text-muted">言語構成</p>
                     {stack.languages.length > 0 && (
                       <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5">
                         {stack.languages.map((language, index) => (
@@ -161,6 +203,19 @@ export function TechStackPanel({
                       </ul>
                     )}
                   </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted">検出した技術構成</p>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {(Object.keys(categoryLabels) as Array<keyof TechStackTechnologies>).map((category) => (
+                      <TechnologyPie
+                        key={category}
+                        category={category}
+                        technologies={stack.technologies?.[category] ?? emptyTechnologies[category]}
+                      />
+                    ))}
+                  </div>
+                </div>
                 </div>
               )}
             </article>
