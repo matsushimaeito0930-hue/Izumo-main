@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createTeamInvite, joinTeamWithInvite } from "@/lib/store";
+import {
+  createEvent,
+  createTeamInvite,
+  getEventsJoinedBy,
+  getHackVerseState,
+  getMembershipInEvent,
+  joinTeamWithInvite,
+  leaveEventAsParticipant
+} from "@/lib/store";
 
 describe("team invite onboarding", () => {
   it("joins the team resolved by its room code", async () => {
@@ -92,5 +100,30 @@ describe("team invite onboarding", () => {
         expectedEventId: "selected-event"
       })
     ).rejects.toThrow("入力したイベントのものではありません");
+  });
+
+  it("lets a participant leave an event without deleting the team", async () => {
+    const event = await createEvent({ name: "Finished Hackathon", ownerGithubUsername: "leave-owner" });
+    const invite = await createTeamInvite({
+      teamName: "Leaving Team",
+      githubRepo: "demo/leaving-team",
+      invitedBy: "HackRadar Admin",
+      eventId: event.id
+    });
+    await joinTeamWithInvite({
+      code: invite.code,
+      displayName: "Leaving Participant",
+      githubUsername: "leaving-participant",
+      expectedEventId: event.id
+    });
+
+    await leaveEventAsParticipant({
+      eventId: event.id,
+      githubUsername: "leaving-participant"
+    });
+
+    expect(await getMembershipInEvent({ eventId: event.id, githubUsername: "leaving-participant" })).toBeNull();
+    expect((await getEventsJoinedBy("leaving-participant")).map((joined) => joined.id)).not.toContain(event.id);
+    expect((await getHackVerseState(event.id)).teams.map((team) => team.name)).toContain("Leaving Team");
   });
 });

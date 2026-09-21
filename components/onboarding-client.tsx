@@ -193,7 +193,7 @@ export function OnboardingClient({
   const [members, setMembers] = useState(initialMembers);
   const [hackEvent, setHackEvent] = useState(initialEvent);
   const [myEvents] = useState(ownedEvents);
-  const myJoinedEvents = joinedEvents;
+  const [myJoinedEvents, setMyJoinedEvents] = useState(joinedEvents);
   const [eventName, setEventName] = useState(initialEvent?.name ?? "");
   // joinCode はイベントの招待コード、roomCode はチームの部屋番号。
   // 複数のハッカソンを動かしたときに部屋番号が衝突しないよう、参加時は両方もらう。
@@ -218,6 +218,7 @@ export function OnboardingClient({
   const [participantJoinMode, setParticipantJoinMode] = useState<"code" | "url">("code");
   const [inviteTeamName, setInviteTeamName] = useState("");
   const [showInviteConfirm, setShowInviteConfirm] = useState(false);
+  const [eventToLeave, setEventToLeave] = useState<JoinedEvent | null>(null);
   // 最初は役割未選択。選ぶまでその役割の入口を出さない。
   // GitHubの認可から戻ったときに選び直しにならないよう、URLの ?role= からも復元する。
   const [pickedRole, setPickedRole] = useState<OnboardingRole | null>(viewer?.role === "admin" ? "admin" : null);
@@ -478,6 +479,30 @@ export function OnboardingClient({
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "イベントを開けませんでした。");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function leaveJoinedEvent() {
+    if (!eventToLeave) return;
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/events/leave", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ eventId: eventToLeave.id })
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "イベントから退出できませんでした。");
+
+      setMyJoinedEvents((current) => current.filter((event) => event.id !== eventToLeave.id));
+      setEventToLeave(null);
+      setMessage(`「${eventToLeave.name}」から退出しました。`);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "イベントから退出できませんでした。");
     } finally {
       setIsBusy(false);
     }
@@ -953,21 +978,37 @@ export function OnboardingClient({
                   </p>
                   <div className="mt-3 space-y-2">
                     {myJoinedEvents.filter((event) => event.role === pickedRole).map((event) => (
-                      <button
+                      <div
                         key={event.id}
-                        type="button"
-                        onClick={() => void openJoinedEvent(event.id, event.role)}
-                        disabled={isBusy}
-                        className="flex w-full items-center justify-between rounded-lg border border-line px-3 py-2 text-left text-sm text-ink2 transition hover:bg-surface disabled:opacity-50"
+                        className="flex items-stretch rounded-lg border border-line bg-paper transition hover:bg-surface"
                       >
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium">{event.name}</span>
-                          <span className="block truncate text-xs text-muted">
-                            {event.teamName ?? roleLabels[event.role]}
+                        <button
+                          type="button"
+                          onClick={() => void openJoinedEvent(event.id, event.role)}
+                          disabled={isBusy}
+                          className="flex min-w-0 flex-1 items-center justify-between px-3 py-2 text-left text-sm text-ink2 disabled:opacity-50"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">{event.name}</span>
+                            <span className="block truncate text-xs text-muted">
+                              {event.teamName ?? roleLabels[event.role]}
+                            </span>
                           </span>
-                        </span>
-                        <span className="ml-3 shrink-0 text-xs font-medium text-pulse">開く</span>
-                      </button>
+                          <span className="ml-3 shrink-0 text-xs font-medium text-pulse">開く</span>
+                        </button>
+                        {event.role === "participant" && (
+                          <button
+                            type="button"
+                            onClick={() => setEventToLeave(event)}
+                            disabled={isBusy}
+                            className="grid w-11 shrink-0 place-items-center border-l border-line text-muted transition hover:bg-hot/10 hover:text-hot disabled:opacity-50"
+                            aria-label={`${event.name} から退出する`}
+                            title="このハッカソンから退出する"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1614,6 +1655,51 @@ export function OnboardingClient({
         )}
 
       </div>
+      {eventToLeave && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-ink/35 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="leave-event-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-line bg-paper p-5 shadow-card">
+            <div className="flex items-start gap-3">
+              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-hot/10 text-hot">
+                <TriangleAlert className="size-5" />
+              </div>
+              <div>
+                <h2 id="leave-event-title" className="font-bold text-ink">
+                  このハッカソンを退出しますか？
+                </h2>
+                <p className="mt-1 text-sm font-medium text-ink2">{eventToLeave.name}</p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-ink2">
+              あなたの参加とチーム所属を外します。チームの活動記録・スコア・他の参加者の情報は消えません。
+              もう一度参加するには、運営から部屋番号を受け取ってください。
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEventToLeave(null)}
+                disabled={isBusy}
+                className="h-10 rounded-xl border border-line bg-surface px-4 text-sm font-medium text-ink2 transition hover:text-ink disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => void leaveJoinedEvent()}
+                disabled={isBusy}
+                className="flex h-10 items-center gap-2 rounded-xl bg-hot px-4 text-sm font-bold text-white shadow-btn transition hover:brightness-95 disabled:opacity-50"
+              >
+                {isBusy ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                退出する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

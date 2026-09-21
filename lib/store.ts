@@ -1814,6 +1814,102 @@ export async function getEventsJoinedBy(githubUsername: string | undefined): Pro
   }).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
+/**
+ * 参加者本人が、終了したイベントから退出する。
+ *
+ * チームのスコア・活動・質問などイベント共有の記録は消さない。本人の所属だけを外し、
+ * 次に参加する場合は運営から渡された部屋番号で入り直す。
+ */
+export async function leaveEventAsParticipant(input: {
+  eventId: string;
+  githubUsername: string;
+}): Promise<void> {
+  const eventId = input.eventId.trim();
+  const githubUsername = input.githubUsername.trim();
+  if (!eventId || !githubUsername) {
+    throw new Error("退出するイベントを選択してください。");
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data: user, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("github_username", githubUsername)
+        .maybeSingle();
+      if (userError) throw userError;
+      if (!user) throw new Error("この参加者は見つかりません。");
+
+      const { data: eventMember, error: eventMemberError } = await supabase
+        .from("event_members")
+        .select("role")
+        .eq("event_id", eventId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (eventMemberError) throw eventMemberError;
+      if (eventMember?.role !== "participant") {
+        throw new Error("参加者として参加しているイベントだけ退出できます。");
+      }
+
+      const { data: memberships, error: membershipsError } = await supabase
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", user.id);
+      if (membershipsError) throw membershipsError;
+
+      const teamIds = [...new Set((memberships ?? []).map((membership) => membership.team_id))];
+      if (teamIds.length > 0) {
+        const { data: eventTeams, error: eventTeamsError } = await supabase
+          .from("teams")
+          .select("id")
+          .eq("event_id", eventId)
+          .in("id", teamIds);
+        if (eventTeamsError) throw eventTeamsError;
+        const eventTeamIds = (eventTeams ?? []).map((team) => team.id);
+        if (eventTeamIds.length > 0) {
+          const { error: removeTeamMembershipError } = await supabase
+            .from("team_members")
+            .delete()
+            .eq("user_id", user.id)
+            .in("team_id", eventTeamIds);
+          if (removeTeamMembershipError) throw removeTeamMembershipError;
+        }
+      }
+
+      const { error: removeEventMembershipError } = await supabase
+        .from("event_members")
+        .delete()
+        .eq("event_id", eventId)
+        .eq("user_id", user.id);
+      if (removeEventMembershipError) throw removeEventMembershipError;
+      return;
+    }
+  }
+
+  const store = getMemoryStore();
+  const user = store.users.find(
+    (candidate) => candidate.github_username.toLowerCase() === githubUsername.toLowerCase()
+  );
+  if (!user) throw new Error("この参加者は見つかりません。");
+  const eventMember = store.eventMembers.find(
+    (member) => member.event_id === eventId && member.user_id === user.id
+  );
+  if (eventMember?.role !== "participant") {
+    throw new Error("参加者として参加しているイベントだけ退出できます。");
+  }
+
+  const eventTeamIds = new Set(
+    store.teams.filter((team) => team.event_id === eventId).map((team) => team.id)
+  );
+  store.teamMembers = store.teamMembers.filter(
+    (member) => member.user_id !== user.id || !eventTeamIds.has(member.team_id)
+  );
+  store.eventMembers = store.eventMembers.filter(
+    (member) => !(member.event_id === eventId && member.user_id === user.id)
+  );
+}
+
 function resetMemoryEventData(store: MemoryStore, eventId: string) {
   const teamIds = new Set(
     store.teams.filter((team) => team.event_id === eventId).map((team) => team.id)
