@@ -1647,6 +1647,7 @@ export type JoinedEvent = HackEvent & {
   role: UserRole;
   teamId?: string;
   teamName?: string;
+  teamGithubRepo?: string | null;
 };
 
 export async function getEventMemberRole(input: {
@@ -1767,7 +1768,7 @@ export async function getEventsJoinedBy(githubUsername: string | undefined): Pro
       }
       const teamIds = (teamMembershipsResult.data ?? []).map((member) => member.team_id);
       const teamsResult = teamIds.length
-        ? await supabase.from("teams").select("id,event_id,name").in("id", teamIds)
+        ? await supabase.from("teams").select("id,event_id,name,github_repo").in("id", teamIds)
         : { data: [], error: null };
       if (teamsResult.error) throw teamsResult.error;
 
@@ -1782,7 +1783,8 @@ export async function getEventsJoinedBy(githubUsername: string | undefined): Pro
           ...(event as HackEvent),
           role,
           teamId: team?.id,
-          teamName: team?.name
+          teamName: team?.name,
+          teamGithubRepo: team?.github_repo
         }];
       });
     }
@@ -1809,7 +1811,8 @@ export async function getEventsJoinedBy(githubUsername: string | undefined): Pro
       ...event,
       role: membership.role,
       teamId: team?.id,
-      teamName: team?.name
+      teamName: team?.name,
+      teamGithubRepo: team?.github_repo
     }];
   }).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }

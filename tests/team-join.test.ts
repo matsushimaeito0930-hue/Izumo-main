@@ -117,6 +117,11 @@ describe("team invite onboarding", () => {
       expectedEventId: event.id
     });
 
+    expect((await getEventsJoinedBy("leaving-participant"))[0]).toMatchObject({
+      teamName: "Leaving Team",
+      teamGithubRepo: "demo/leaving-team"
+    });
+
     await leaveEventAsParticipant({
       eventId: event.id,
       githubUsername: "leaving-participant"

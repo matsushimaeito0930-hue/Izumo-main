@@ -993,6 +993,12 @@ export function OnboardingClient({
                             <span className="block truncate text-xs text-muted">
                               {event.teamName ?? roleLabels[event.role]}
                             </span>
+                            {event.teamGithubRepo && (
+                              <span className="mt-0.5 flex items-center gap-1 truncate font-mono text-[11px] text-muted">
+                                <Github className="size-3 shrink-0" />
+                                {event.teamGithubRepo}
+                              </span>
+                            )}
                           </span>
                           <span className="ml-3 shrink-0 text-xs font-medium text-pulse">開く</span>
                         </button>
