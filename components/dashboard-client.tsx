@@ -92,6 +92,8 @@ export function DashboardClient({
   const isJudge = activeViewer?.role === "judge";
   const isStaff = isAdmin || isMentor;
   const myTeam = state.teams.find((team) => team.id === myTeamId) ?? null;
+  const canViewAllTechStacks = isJudge || isStaff;
+  const techStackTeams = canViewAllTechStacks ? state.teams : myTeam ? [myTeam] : [];
   // state.teams はスコアの降順。順位はその並びから取る。
   const myRank = myTeam ? state.teams.findIndex((team) => team.id === myTeam.id) + 1 : 0;
   const myLatestActivity =
@@ -177,8 +179,13 @@ export function DashboardClient({
         )}
       </header>
 
-      {/* 審査員の評価に使う情報なので、スクロールしない画面上部に置く。 */}
-      {isJudge && <TechStackPanel teams={state.teams} />}
+      {/* 参加者には自チームのみ、支援・評価する役割には全チームを上部に出す。 */}
+      {(canViewAllTechStacks || myTeam) && (
+        <TechStackPanel
+          teams={techStackTeams}
+          scope={canViewAllTechStacks ? "all" : "own"}
+        />
+      )}
 
       {myTeam && !myTeam.github_repo && (
         <TeamRepoSetup team={myTeam} onDone={refresh} />

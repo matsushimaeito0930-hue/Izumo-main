@@ -24,7 +24,13 @@ function languageChart(languages: TechStackLanguage[]) {
   return `conic-gradient(${segments.join(", ")})`;
 }
 
-export function TechStackPanel({ teams }: { teams: Team[] }) {
+export function TechStackPanel({
+  teams,
+  scope
+}: {
+  teams: Team[];
+  scope: "own" | "all";
+}) {
   const [stacks, setStacks] = useState<TeamTechStack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -60,7 +66,11 @@ export function TechStackPanel({ teams }: { teams: Team[] }) {
   return (
     <Panel
       title="技術スタック"
-      description="GitHubリポジトリの言語構成と依存定義から自動判定しています。評価の補助情報です。"
+      description={
+        scope === "own"
+          ? "自分のチームのGitHubリポジトリから、言語構成と依存定義を自動判定しています。"
+          : "各チームのGitHubリポジトリから、言語構成と依存定義を自動判定しています。評価・支援の補助情報です。"
+      }
       action={
         <button
           type="button"
@@ -75,7 +85,11 @@ export function TechStackPanel({ teams }: { teams: Team[] }) {
       }
     >
       {teams.filter((team) => team.github_repo).length === 0 ? (
-        <p className="text-sm leading-6 text-muted">リポジトリが設定されたチームから表示されます。</p>
+        <p className="text-sm leading-6 text-muted">
+          {scope === "own"
+            ? "自分のチームのリポジトリを設定すると、ここに表示されます。"
+            : "リポジトリが設定されたチームから表示されます。"}
+        </p>
       ) : error ? (
         <p className="flex items-start gap-2 text-sm leading-6 text-hot">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
