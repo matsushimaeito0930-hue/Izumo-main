@@ -854,8 +854,8 @@ export async function syncDirectMessageProfile(input: {
 }
 
 function dmRecipientRoles(role: UserRole): UserRole[] {
-  if (role === "participant") return ["mentor", "admin"];
-  if (role === "mentor") return ["participant", "admin"];
+  // 個別相談の窓口は運営に限定する。メンター対応は公開の質問掲示板やチーム相談に残す。
+  if (role === "participant" || role === "mentor") return ["admin"];
   if (role === "admin") return ["participant", "mentor"];
   return [];
 }
@@ -1004,7 +1004,7 @@ export async function getDirectMessages(
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
 }
 
-/** メンター・運営・参加者の間でだけ、1対1のDMを送信する。 */
+/** 個人DMは参加者・メンターと運営の間だけで送信する。 */
 export async function createDirectMessage(input: {
   eventId?: string;
   senderLogin: string;

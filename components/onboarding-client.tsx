@@ -1097,7 +1097,7 @@ export function OnboardingClient({
               ) : pickedRole === "judge" ? (
                 <form onSubmit={joinJudge} className="space-y-4">
                   <p className="text-xs leading-5 text-muted">
-                    審査員はGitHubログイン不要です。見られるのは開発状況とお知らせだけで、
+                    審査員はGitHubログイン不要です。開発状況・技術スタック・お知らせ・質問掲示板を閲覧でき、
                     投稿はできません。
                   </p>
 

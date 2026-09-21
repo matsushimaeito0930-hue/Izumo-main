@@ -31,11 +31,13 @@ function formatTime(value: string) {
 export function HelpThread({
   post,
   onReply,
-  onAccept
+  onAccept,
+  readOnly = false
 }: {
   post: HelpPostView;
   onReply: (input: { helpPostId: string; body: string }) => Promise<void>;
   onAccept: (input: { helpPostId: string; replyId: string }) => Promise<void>;
+  readOnly?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(post.status !== "solved");
   const [body, setBody] = useState("");
@@ -45,7 +47,7 @@ export function HelpThread({
   // ベストアンサーを選ぶのは質問した本人。
   // 本人が席を外したまま解決した質問を閉じられるよう、運営だけ代われる。
   // メンターは回答する側なので、自分の回答を自分で採用できないようにする。
-  const canAccept = post.can_accept;
+  const canAccept = !readOnly && post.can_accept;
 
   async function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -155,7 +157,7 @@ export function HelpThread({
             </ul>
           )}
 
-          <form onSubmit={submitReply} className="mt-3 flex gap-2">
+          {!readOnly && <form onSubmit={submitReply} className="mt-3 flex gap-2">
             <input
               value={body}
               onChange={(event) => setBody(event.target.value)}
@@ -171,7 +173,7 @@ export function HelpThread({
               <Send className="size-4" />
               <span className="hidden sm:inline">回答</span>
             </button>
-          </form>
+          </form>}
 
           {error && <p className="mt-2 text-xs font-medium text-hot">{error}</p>}
         </div>

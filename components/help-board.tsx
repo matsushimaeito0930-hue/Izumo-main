@@ -16,11 +16,14 @@ const filterLabels: Record<Filter, string> = {
 export function HelpBoard({
   posts,
   onReply,
-  onAccept
+  onAccept,
+  readOnly = false
 }: {
   posts: HelpPostView[];
   onReply: (input: { helpPostId: string; body: string }) => Promise<void>;
   onAccept: (input: { helpPostId: string; replyId: string }) => Promise<void>;
+  /** 審査員は学生同士の質問・解決の流れを読むだけにする。 */
+  readOnly?: boolean;
 }) {
   const [filter, setFilter] = useState<Filter>("unsolved");
 
@@ -39,7 +42,11 @@ export function HelpBoard({
   return (
     <Panel
       title="質問掲示板"
-      description="困っていることを投稿すると、参加している人なら誰でも回答できます。"
+      description={
+        readOnly
+          ? "審査員用の閲覧画面です。学生同士の質問と解決の流れを確認できます。"
+          : "困っていることを投稿すると、参加している人なら誰でも回答できます。"
+      }
       action={
         <div className="flex items-center gap-1 rounded-xl border border-line bg-paper p-1 shadow-inset">
           {(Object.keys(filterLabels) as Filter[]).map((key) => (
@@ -75,6 +82,7 @@ export function HelpBoard({
               post={post}
               onReply={onReply}
               onAccept={onAccept}
+              readOnly={readOnly}
             />
           ))}
         </ul>

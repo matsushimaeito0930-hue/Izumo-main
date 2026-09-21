@@ -138,14 +138,13 @@ export function DashboardClient({
           />
         )}
         {!isJudge && <DirectMessages viewer={activeViewer} />}
-        {/* 掲示板は運営にも見せる。小規模な会では運営がサポートを兼ねるため。 */}
-        {!isJudge && (
-          <HelpBoard
-            posts={state.helpPosts}
-            onReply={createHelpReply}
-            onAccept={acceptHelpReply}
-          />
-        )}
+        {/* 審査員には学生同士の質問と解決の様子を、閲覧専用で見せる。 */}
+        <HelpBoard
+          posts={state.helpPosts}
+          onReply={createHelpReply}
+          onAccept={acceptHelpReply}
+          readOnly={isJudge}
+        />
         <StaffChat
           teams={state.teams}
           messages={state.messages}
@@ -178,6 +177,9 @@ export function DashboardClient({
         )}
       </header>
 
+      {/* 審査員の評価に使う情報なので、スクロールしない画面上部に置く。 */}
+      {isJudge && <TechStackPanel teams={state.teams} />}
+
       {myTeam && !myTeam.github_repo && (
         <TeamRepoSetup team={myTeam} onDone={refresh} />
       )}
@@ -206,8 +208,6 @@ export function DashboardClient({
         myTeamId={isStaff || isJudge ? null : myTeamId}
         members={state.members}
       />
-
-      {isJudge && <TechStackPanel teams={state.teams} />}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
         <ActivityFeed activities={state.activities} highlightId={lastActivityId} />

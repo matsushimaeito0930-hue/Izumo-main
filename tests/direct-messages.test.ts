@@ -4,7 +4,6 @@ import {
   createTeamByName,
   getDirectMessageContacts,
   getDirectMessages,
-  joinMentorByCode,
   joinTeamByName,
   saveEvent,
   createEvent,
@@ -12,13 +11,21 @@ import {
 } from "@/lib/store";
 
 describe("direct messages", () => {
-  it("lets a participant message a registered mentor and keeps the thread private", async () => {
+  it("lets a participant message a registered admin and keeps the thread private", async () => {
     const event = await saveEvent({ name: "DM Test Event" });
-    await joinMentorByCode({
-      code: event.join_code,
+    await syncDirectMessageProfile({
+      eventId: event.id,
+      displayName: "DM Admin",
+      githubUsername: "dm-admin",
+      avatarUrl: null,
+      role: "admin"
+    });
+    await syncDirectMessageProfile({
+      eventId: event.id,
       displayName: "DM Mentor",
-      specialty: "Next.js",
-      githubUsername: "dm-mentor"
+      githubUsername: "dm-mentor",
+      avatarUrl: null,
+      role: "mentor"
     });
     await createTeamByName({ name: "DM Team" });
     await joinTeamByName({
@@ -35,23 +42,34 @@ describe("direct messages", () => {
     expect(contacts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          github_username: "dm-mentor",
-          specialty: "Next.js",
-          role: "mentor"
+          github_username: "dm-admin",
+          role: "admin"
         })
       ])
     );
+    expect(contacts.map((contact) => contact.github_username)).not.toContain("dm-mentor");
+
+    await expect(
+      createDirectMessage({
+        senderLogin: "dm-participant",
+        senderName: "DM Participant",
+        senderRole: "participant",
+        eventId: event.id,
+        recipientLogin: "dm-mentor",
+        body: "個別相談"
+      })
+    ).rejects.toThrow("この相手にはDMを送れません。");
 
     await createDirectMessage({
       senderLogin: "dm-participant",
       senderName: "DM Participant",
       senderRole: "participant",
       eventId: event.id,
-      recipientLogin: "dm-mentor",
+      recipientLogin: "dm-admin",
       body: "レビューをお願いできますか？"
     });
 
-    expect(await getDirectMessages("dm-mentor", event.id)).toHaveLength(1);
+    expect(await getDirectMessages("dm-admin", event.id)).toHaveLength(1);
     expect(await getDirectMessages("dm-participant", event.id)).toHaveLength(1);
     expect(await getDirectMessages("someone-else", event.id)).toHaveLength(0);
   });
@@ -81,17 +99,17 @@ describe("direct messages", () => {
     });
     await syncDirectMessageProfile({
       eventId: eventA.id,
-      githubUsername: "event-a-mentor",
-      displayName: "Event A Mentor",
+      githubUsername: "event-a-admin",
+      displayName: "Event A Admin",
       avatarUrl: null,
-      role: "mentor"
+      role: "admin"
     });
     await syncDirectMessageProfile({
       eventId: eventB.id,
-      githubUsername: "event-b-mentor",
-      displayName: "Event B Mentor",
+      githubUsername: "event-b-admin",
+      displayName: "Event B Admin",
       avatarUrl: null,
-      role: "mentor"
+      role: "admin"
     });
 
     const contacts = await getDirectMessageContacts({
@@ -99,8 +117,8 @@ describe("direct messages", () => {
       viewerLogin: "event-a-participant",
       viewerRole: "participant"
     });
-    expect(contacts.map((contact) => contact.github_username)).toContain("event-a-mentor");
-    expect(contacts.map((contact) => contact.github_username)).not.toContain("event-b-mentor");
+    expect(contacts.map((contact) => contact.github_username)).toContain("event-a-admin");
+    expect(contacts.map((contact) => contact.github_username)).not.toContain("event-b-admin");
 
     await expect(
       createDirectMessage({
@@ -108,7 +126,7 @@ describe("direct messages", () => {
         senderLogin: "event-a-participant",
         senderName: "Event A Participant",
         senderRole: "participant",
-        recipientLogin: "event-b-mentor",
+        recipientLogin: "event-b-admin",
         body: "This must not cross events."
       })
     ).rejects.toThrow("この相手にはDMを送れません。");
@@ -125,10 +143,10 @@ describe("direct messages", () => {
     });
     await syncDirectMessageProfile({
       eventId: event.id,
-      githubUsername: "dm-image-mentor",
-      displayName: "Image mentor",
+      githubUsername: "dm-image-admin",
+      displayName: "Image admin",
       avatarUrl: null,
-      role: "mentor"
+      role: "admin"
     });
 
     const message = await createDirectMessage({
@@ -136,7 +154,7 @@ describe("direct messages", () => {
       senderLogin: "dm-image-sender",
       senderName: "Image sender",
       senderRole: "participant",
-      recipientLogin: "dm-image-mentor",
+      recipientLogin: "dm-image-admin",
       body: "",
       attachmentPath: `${event.id}/example.png`,
       attachmentName: "example.png",

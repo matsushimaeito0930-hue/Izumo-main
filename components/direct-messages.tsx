@@ -17,7 +17,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
 };
 
 /**
- * チーム共通の運営相談とは切り分けた、メンター・運営との個人DM。
+ * チーム共通の運営相談とは切り分けた、運営との個人DM。
  * 受信者も送信者もAPIでログイン中の本人に限定して取得する。
  */
 export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
@@ -170,7 +170,7 @@ export function DirectMessages({ viewer }: { viewer: Viewer | null }) {
   return (
     <Panel
       title="個人DM"
-      description="運営・メンターとは別々の会話です。選んだ相手とだけメッセージをやり取りできます。"
+      description="運営だけに届く個別の相談です。選んだ運営メンバーとだけメッセージをやり取りできます。"
     >
       <div className="grid gap-3 lg:grid-cols-[13rem_minmax(0,1fr)]">
         <aside className="rounded-xl border border-line bg-paper p-2 shadow-inset">
