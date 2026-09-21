@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CircleHelp, Github, LayoutDashboard, LogOut } from "lucide-react";
+import { Bell, CircleHelp, Github, LayoutDashboard, LogOut } from "lucide-react";
 import { AnnouncementBadge } from "@/components/announcement-badge";
 import { HackRadarLogo } from "@/components/hackradar-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -23,17 +23,18 @@ const roleLabels: Record<UserRole, string> = {
   judge: "審査員"
 };
 
-// ナビは2つだけ。増やすと初参加者がどこを見ればいいか分からなくなる。
-// 2つ目には運営からのお知らせも並ぶので、ラベルにその旨を出しておく。
+// 連絡（運営から）と質問（参加者どうし）を分けて、書く場所を迷わせない。
 const navItems = [
-  { href: "/dashboard", label: "開発状況", icon: LayoutDashboard },
-  { href: "/help", label: "質問・お知らせ", icon: CircleHelp }
+  { href: "/dashboard", label: "開発状況", shortLabel: "開発", icon: LayoutDashboard },
+  { href: "/announcements", label: "お知らせ", shortLabel: "お知らせ", icon: Bell },
+  { href: "/help", label: "質問", shortLabel: "質問", icon: CircleHelp }
 ];
 
-// 審査員は投稿できないので、2つ目は「お知らせ」と呼ぶ。
+// 審査員も公開質問の解決状況を閲覧できるが、投稿やチーム相談はできない。
 const judgeNavItems = [
-  { href: "/dashboard", label: "開発状況", icon: LayoutDashboard },
-  { href: "/help", label: "お知らせ", icon: CircleHelp }
+  { href: "/dashboard", label: "開発状況", shortLabel: "開発", icon: LayoutDashboard },
+  { href: "/announcements", label: "お知らせ", shortLabel: "お知らせ", icon: Bell },
+  { href: "/help", label: "質問", shortLabel: "質問", icon: CircleHelp }
 ];
 
 export function Nav({
@@ -80,9 +81,10 @@ export function Nav({
                 }`}
               >
                 <Icon className="size-4" />
-                {item.label}
+                <span className="sm:hidden">{item.shortLabel}</span>
+                <span className="hidden sm:inline">{item.label}</span>
                 {/* 運営のお知らせに気づかないまま進むのを防ぐ。 */}
-                {item.href === "/help" && <AnnouncementBadge />}
+                {item.href === "/announcements" && <AnnouncementBadge />}
               </Link>
             );
           })}

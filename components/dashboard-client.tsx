@@ -20,7 +20,7 @@ import { WakaTimePanel } from "@/components/wakatime-panel";
 import { useHackVerseState } from "@/components/use-hackverse-state";
 import type { HackVerseState, UserRole } from "@/lib/types";
 
-type ViewMode = "dashboard" | "help";
+type ViewMode = "dashboard" | "help" | "announcements";
 
 type Viewer = {
   login: string;
@@ -112,25 +112,40 @@ export function DashboardClient({
 
   // お知らせ画面を開いている間は既読扱いにして、ナビのバッジを消す。
   useEffect(() => {
-    if (view !== "help") return;
+    if (view !== "announcements") return;
     markAnnouncementsSeen(latestAnnouncementAt);
   }, [view, latestAnnouncementAt]);
 
-  if (view === "help") {
+  if (view === "announcements") {
     return (
       <div className="space-y-5">
-        {/* 運営のお知らせは全員が見る。読むだけなので入力欄は出さない。 */}
-        {!isAdmin && !isJudge && (
+        {/* 全体連絡は常に最上段。運営だけが投稿でき、他の役割は閲覧する。 */}
+        <StaffChat
+          teams={state.teams}
+          messages={state.messages}
+          myTeamId={myTeamId}
+          viewer={activeViewer}
+          announcementOnly
+          readOnly={isJudge}
+          onSend={createChatMessage}
+        />
+        {/* チーム単位の相談は運営・メンターと参加者だけに見せる。 */}
+        {!isJudge && (
           <StaffChat
             teams={state.teams}
             messages={state.messages}
             myTeamId={myTeamId}
             viewer={activeViewer}
-            announcementOnly
-            readOnly
             onSend={createChatMessage}
           />
         )}
+      </div>
+    );
+  }
+
+  if (view === "help") {
+    return (
+      <div className="space-y-5">
         {/* 質問を出すのは参加者だけ。メンターは他チームの質問にも答える。 */}
         {!isAdmin && !isJudge && (
           <HelpComposer
@@ -146,15 +161,6 @@ export function DashboardClient({
           onReply={createHelpReply}
           onAccept={acceptHelpReply}
           readOnly={isJudge}
-        />
-        <StaffChat
-          teams={state.teams}
-          messages={state.messages}
-          myTeamId={myTeamId}
-          viewer={activeViewer}
-          announcementOnly={isAdmin || isJudge}
-          readOnly={isJudge}
-          onSend={createChatMessage}
         />
       </div>
     );
