@@ -15,6 +15,7 @@ import { RankingPanel } from "@/components/ranking-panel";
 import { StaffChat } from "@/components/staff-chat";
 import { RealtimeStatusBadge } from "@/components/realtime-status-badge";
 import { TeamRepoSetup } from "@/components/team-repo-setup";
+import { TechStackPanel } from "@/components/tech-stack-panel";
 import { WakaTimePanel } from "@/components/wakatime-panel";
 import { useHackVerseState } from "@/components/use-hackverse-state";
 import type { HackVerseState, UserRole } from "@/lib/types";
@@ -205,6 +206,8 @@ export function DashboardClient({
         myTeamId={isStaff || isJudge ? null : myTeamId}
         members={state.members}
       />
+
+      {isJudge && <TechStackPanel teams={state.teams} />}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
         <ActivityFeed activities={state.activities} highlightId={lastActivityId} />
