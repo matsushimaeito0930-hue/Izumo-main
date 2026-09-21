@@ -35,7 +35,9 @@ export function TechStackPanel({ teams }: { teams: Team[] }) {
       setError("");
     }
     try {
-      const response = await fetch("/api/tech-stacks", { cache: "no-store" });
+      const response = await fetch(`/api/tech-stacks${isManualRefresh ? "?refresh=1" : ""}`, {
+        cache: "no-store"
+      });
       const payload = (await response.json().catch(() => ({}))) as {
         stacks?: TeamTechStack[];
         error?: string;

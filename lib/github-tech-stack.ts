@@ -180,13 +180,14 @@ function unavailable(repo: string, detail: string): RepoTechStack {
  */
 export async function inspectGitHubRepoTechStack(
   repoInput: string,
-  accessToken?: string
+  accessToken?: string,
+  options: { forceRefresh?: boolean } = {}
 ): Promise<RepoTechStack> {
   const repo = repoInput.trim();
   if (!validRepositoryName(repo)) return unavailable(repo, "リポジトリ名の形式が正しくありません。");
 
   const cached = readyCache.get(repo.toLowerCase());
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (!options.forceRefresh && cached && cached.expiresAt > Date.now()) return cached.value;
 
   try {
     const [languagesResult, rootResult] = await Promise.all([
