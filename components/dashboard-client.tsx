@@ -199,18 +199,17 @@ export function DashboardClient({
 
       {/* 参加者は自分のチームを先に見せる。運営は全チームをフラットに見る。 */}
       {!isStaff && !isJudge && myTeam && (
-        <MyTeamCard
-          team={myTeam}
-          rank={myRank}
-          totalTeams={state.teams.length}
-          latestActivity={myLatestActivity}
-          members={state.members.filter((member) => member.team_id === myTeam.id)}
-          viewerLogin={activeViewer?.login ?? null}
-        />
-      )}
-
-      {!isStaff && !isJudge && myTeam && (
-        <WakaTimePanel viewerLogin={activeViewer?.login ?? null} />
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+          <MyTeamCard
+            team={myTeam}
+            rank={myRank}
+            totalTeams={state.teams.length}
+            latestActivity={myLatestActivity}
+            members={state.members.filter((member) => member.team_id === myTeam.id)}
+            viewerLogin={activeViewer?.login ?? null}
+          />
+          <WakaTimePanel viewerLogin={activeViewer?.login ?? null} />
+        </div>
       )}
 
       {isAdmin && <AdminRepoStatus teams={state.teams} />}

@@ -1,5 +1,8 @@
 import Image from "next/image";
+import { useState } from "react";
 import {
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   GitCommitHorizontal,
   GitMerge,
@@ -33,16 +36,29 @@ export function ActivityFeed({
   activities: ActivityView[];
   highlightId?: string;
 }) {
-  const visibleActivities = activities.slice(0, 8);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const recentActivities = activities.slice(0, 8);
+  // 普段は最後の1件だけ。必要なときだけ直近の流れを開ける。
+  const visibleActivities = isExpanded ? recentActivities : recentActivities.slice(0, 1);
 
   return (
     <Panel
       title="みんなの動き"
-      description="GitHubにプッシュすると、ここに出ます。"
+      description={isExpanded ? "直近8件のGitHub活動です。" : "最後にあったGitHub活動を表示しています。"}
       action={
-        <span className="rounded-full bg-sand px-2.5 py-1 text-xs text-muted shadow-inset">
-          直近 {visibleActivities.length} 件
-        </span>
+        recentActivities.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => setIsExpanded((current) => !current)}
+            aria-expanded={isExpanded}
+            className="flex h-8 items-center gap-1 rounded-lg border border-line bg-paper px-2.5 text-xs font-medium text-ink2 shadow-inset transition-colors hover:text-ink"
+          >
+            {isExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            {isExpanded ? "閉じる" : `ほか ${recentActivities.length - 1} 件`}
+          </button>
+        ) : (
+          <span className="rounded-full bg-sand px-2.5 py-1 text-xs text-muted shadow-inset">最新 1 件</span>
+        )
       }
     >
       {visibleActivities.length === 0 ? (
