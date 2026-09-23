@@ -1,4 +1,3 @@
-import { GitCommitHorizontal, Trophy } from "lucide-react";
 import { TeamMembers } from "@/components/team-members";
 import type { ActivityView, Team, TeamMemberView } from "@/lib/types";
 
@@ -19,8 +18,6 @@ export function DevelopmentOverview({
   members?: TeamMemberView[];
 }) {
   const maxScore = Math.max(...teams.map((team) => team.score), 1);
-  const totalCommits = teams.reduce((total, team) => total + team.commit_count, 0);
-  const topTeam = teams[0];
   const latestByTeam = new Map<string, ActivityView>();
   const membersByTeam = new Map<string, TeamMemberView[]>();
 
@@ -38,42 +35,6 @@ export function DevelopmentOverview({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-line/70 bg-surface p-4 shadow-card">
-          <div className="flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-xl bg-pulse/10 text-pulse shadow-soft">
-              <GitCommitHorizontal className="size-4" />
-            </span>
-            <span className="text-xs font-medium text-muted">
-              みんなの合計コミット数
-            </span>
-          </div>
-          <p className="mt-3 flex items-baseline gap-1">
-            <span className="text-3xl font-bold tracking-tight text-ink">
-              {totalCommits}
-            </span>
-            <span className="text-sm text-muted">件</span>
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-line/70 bg-surface p-4 shadow-card">
-          <div className="flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-xl bg-sun/10 text-sun shadow-soft">
-              <Trophy className="size-4" />
-            </span>
-            <span className="text-xs font-medium text-muted">いま1位のチーム</span>
-          </div>
-          <p className="mt-3 flex items-baseline gap-2">
-            <span className="truncate text-3xl font-bold tracking-tight text-ink">
-              {topTeam?.name ?? "-"}
-            </span>
-            <span className="font-mono text-sm text-muted">
-              {topTeam?.score ?? 0} pt
-            </span>
-          </p>
-        </div>
-      </div>
-
       <section className="rounded-2xl border border-line/70 bg-surface shadow-card">
         <div className="border-b border-line px-5 py-4">
           <h2 className="text-base font-bold tracking-tight text-ink">チームの進み具合</h2>
