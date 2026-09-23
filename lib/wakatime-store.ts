@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase";
-import { getMembershipInEvent } from "@/lib/store";
+import { getHackVerseState, getMembershipInEvent } from "@/lib/store";
 import {
   fetchWakaTimeDailySeconds,
   fetchWakaTimeSeconds,
@@ -44,6 +44,19 @@ export type WakaTimeDailyTotal = {
   date: string;
   seconds: number;
 };
+
+export type WakaTimeLeaderboardTeam = {
+  teamId: string;
+  teamName: string;
+  seconds: number;
+  totalMembers: number;
+  connectedMembers: number;
+};
+
+const leaderboardCache = new Map<
+  string,
+  { expiresAt: number; value: { startDate: string; endDate: string; teams: WakaTimeLeaderboardTeam[] } }
+>();
 
 function tokyoDate(value: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -227,6 +240,97 @@ async function dailySecondsForConnection(
     }
     return { days: [], unavailable: true };
   }
+}
+
+async function mapWithConcurrency<Input, Output>(
+  inputs: Input[],
+  limit: number,
+  mapper: (input: Input) => Promise<Output>
+): Promise<Output[]> {
+  const results = new Array<Output>(inputs.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < inputs.length) {
+      const currentIndex = nextIndex++;
+      results[currentIndex] = await mapper(inputs[currentIndex]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, inputs.length) }, worker));
+  return results;
+}
+
+/**
+ * イベント全体の開発時間ランキング。個人の時間は返さず、同一イベント内のチーム合計だけを返す。
+ * WakaTimeへのリクエスト数を抑えるため、短時間だけイベント単位でキャッシュする。
+ */
+export async function getWakaTimeEventLeaderboard({
+  eventId,
+  eventStartedAt,
+  forceRefresh = false
+}: {
+  eventId: string;
+  eventStartedAt: string | null;
+  forceRefresh?: boolean;
+}): Promise<{ startDate: string; endDate: string; teams: WakaTimeLeaderboardTeam[] }> {
+  const cached = leaderboardCache.get(eventId);
+  if (!forceRefresh && cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const supabase = createServerSupabaseClient();
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const endDate = tokyoDate(new Date());
+  const startDate = eventStartedAt ? tokyoDate(new Date(eventStartedAt)) : endDate;
+  const state = await getHackVerseState(eventId);
+  const teams = state.teams;
+  const teamIds = teams.map((team) => team.id);
+  if (teamIds.length === 0) return { startDate, endDate, teams: [] };
+
+  const { data: membershipRows, error: membershipsError } = await supabase
+    .from("team_members")
+    .select("team_id,user_id")
+    .in("team_id", teamIds);
+  if (membershipsError) throw membershipsError;
+
+  const memberships = (membershipRows ?? []) as Array<{ team_id: string; user_id: string }>;
+  const userIds = [...new Set(memberships.map((member) => member.user_id))];
+  const connectionsResult = userIds.length
+    ? await supabase
+        .from("wakatime_connections")
+        .select("user_id,access_token,refresh_token,expires_at")
+        .in("user_id", userIds)
+    : { data: [], error: null };
+  if (connectionsResult.error) throw connectionsResult.error;
+
+  const connections = new Map(
+    ((connectionsResult.data ?? []) as WakaTimeConnectionRow[]).map((connection) => [connection.user_id, connection])
+  );
+  const results = await mapWithConcurrency(userIds, 3, async (userId) => {
+    const connection = connections.get(userId);
+    if (!connection) return { userId, seconds: 0, connected: false };
+    const result = await secondsForConnection(connection, startDate, endDate);
+    return { userId, seconds: result.seconds, connected: !result.unavailable };
+  });
+  const resultByUserId = new Map(results.map((result) => [result.userId, result]));
+
+  const value = {
+    startDate,
+    endDate,
+    teams: teams
+      .map((team) => {
+        const members = memberships.filter((membership) => membership.team_id === team.id);
+        const totals = members.map((member) => resultByUserId.get(member.user_id));
+        return {
+          teamId: team.id,
+          teamName: team.name,
+          seconds: totals.reduce((total, member) => total + (member?.seconds ?? 0), 0),
+          totalMembers: members.length,
+          connectedMembers: totals.filter((member) => member?.connected).length
+        };
+      })
+      .sort((left, right) => right.seconds - left.seconds || left.teamName.localeCompare(right.teamName))
+  };
+  leaderboardCache.set(eventId, { expiresAt: Date.now() + 5 * 60 * 1000, value });
+  return value;
 }
 
 export async function getWakaTimeDashboardSummary({

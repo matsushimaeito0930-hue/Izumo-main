@@ -8,6 +8,7 @@ import { DirectMessages } from "@/components/direct-messages";
 import { AdminRepoStatus } from "@/components/admin-repo-status";
 import { DemoControls } from "@/components/demo-controls";
 import { DevelopmentOverview } from "@/components/development-overview";
+import { EventLeaderboard } from "@/components/event-leaderboard";
 import { HelpBoard } from "@/components/help-board";
 import { HelpComposer } from "@/components/help-composer";
 import { MyTeamCard } from "@/components/my-team-card";
@@ -184,6 +185,9 @@ export function DashboardClient({
           <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
         )}
       </header>
+
+      {/* 最初に他チームとの現在地を示し、その後に自チームの詳細を見る。 */}
+      <EventLeaderboard teams={state.teams} myTeamId={myTeamId} />
 
       {/* 参加者には自チームのみ、支援・評価する役割には全チームを上部に出す。 */}
       {(canViewAllTechStacks || myTeam) && (
