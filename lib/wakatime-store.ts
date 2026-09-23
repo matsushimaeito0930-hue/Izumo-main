@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { getMembershipInEvent } from "@/lib/store";
 import {
+  fetchWakaTimeDailySeconds,
   fetchWakaTimeSeconds,
   refreshWakaTimeToken,
   type WakaTimeTokens
@@ -36,6 +37,12 @@ export type WakaTimeDashboardSummary = {
   startDate: string;
   endDate: string;
   members: WakaTimeMemberSummary[];
+  dailyTotals?: WakaTimeDailyTotal[];
+};
+
+export type WakaTimeDailyTotal = {
+  date: string;
+  seconds: number;
 };
 
 function tokyoDate(value: Date): string {
@@ -47,6 +54,25 @@ function tokyoDate(value: Date): string {
   }).formatToParts(value);
   const byType = new Map(parts.map((part) => [part.type, part.value]));
   return `${byType.get("year")}-${byType.get("month")}-${byType.get("day")}`;
+}
+
+function tokyoDateDaysAgo(days: number): string {
+  return tokyoDate(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+}
+
+function laterDate(left: string, right: string): string {
+  return left > right ? left : right;
+}
+
+function datesInclusive(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  const cursor = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
 }
 
 async function findUserByGitHubLogin(githubLogin: string): Promise<MemberRow | null> {
@@ -168,14 +194,51 @@ async function secondsForConnection(
   }
 }
 
+async function dailySecondsForConnection(
+  connection: WakaTimeConnectionRow,
+  startDate: string,
+  endDate: string
+): Promise<{ days: WakaTimeDailyTotal[]; unavailable: boolean }> {
+  let tokens: WakaTimeTokens = {
+    accessToken: connection.access_token,
+    refreshToken: connection.refresh_token,
+    expiresAt: connection.expires_at
+  };
+
+  async function fetchDays() {
+    return fetchWakaTimeDailySeconds({ accessToken: tokens.accessToken, start: startDate, end: endDate });
+  }
+
+  try {
+    if (tokens.expiresAt && Date.parse(tokens.expiresAt) <= Date.now() + 60_000 && tokens.refreshToken) {
+      tokens = await refreshWakaTimeToken(tokens.refreshToken);
+      await saveRefreshedTokens(connection.user_id, tokens);
+    }
+    return { days: await fetchDays(), unavailable: false };
+  } catch (error) {
+    if (error instanceof Error && error.name === "WakaTimeUnauthorizedError" && tokens.refreshToken) {
+      try {
+        tokens = await refreshWakaTimeToken(tokens.refreshToken);
+        await saveRefreshedTokens(connection.user_id, tokens);
+        return { days: await fetchDays(), unavailable: false };
+      } catch {
+        // 詳細グラフが取得できなくても、通常の合計表示は維持する。
+      }
+    }
+    return { days: [], unavailable: true };
+  }
+}
+
 export async function getWakaTimeDashboardSummary({
   githubLogin,
   eventId,
-  eventStartedAt
+  eventStartedAt,
+  includeDaily = false
 }: {
   githubLogin: string;
   eventId: string;
   eventStartedAt: string | null;
+  includeDaily?: boolean;
 }): Promise<WakaTimeDashboardSummary> {
   const supabase = createServerSupabaseClient();
   if (!supabase) throw new Error("Supabase is not configured.");
@@ -183,6 +246,7 @@ export async function getWakaTimeDashboardSummary({
   const viewer = await findUserByGitHubLogin(githubLogin);
   const endDate = tokyoDate(new Date());
   const startDate = eventStartedAt ? tokyoDate(new Date(eventStartedAt)) : endDate;
+  const dailyStartDate = laterDate(startDate, tokyoDateDaysAgo(6));
 
   if (!viewer) {
     return {
@@ -193,7 +257,8 @@ export async function getWakaTimeDashboardSummary({
       connectedMembers: 0,
       startDate,
       endDate,
-      members: []
+      members: [],
+      ...(includeDaily ? { dailyTotals: [] } : {})
     };
   }
 
@@ -220,7 +285,8 @@ export async function getWakaTimeDashboardSummary({
       connectedMembers: 0,
       startDate,
       endDate,
-      members: []
+      members: [],
+      ...(includeDaily ? { dailyTotals: [] } : {})
     };
   }
 
@@ -240,7 +306,8 @@ export async function getWakaTimeDashboardSummary({
       connectedMembers: 0,
       startDate,
       endDate,
-      members: []
+      members: [],
+      ...(includeDaily ? { dailyTotals: [] } : {})
     };
   }
 
@@ -262,7 +329,7 @@ export async function getWakaTimeDashboardSummary({
     ])
   );
 
-  const members = await Promise.all(
+  const memberResults = await Promise.all(
     ((usersResult.data ?? []) as MemberRow[]).map(async (member) => {
       const connection = connections.get(member.id);
       if (!connection) {
@@ -271,20 +338,43 @@ export async function getWakaTimeDashboardSummary({
           displayName: member.display_name,
           seconds: 0,
           connected: false,
-          unavailable: false
+          unavailable: false,
+          days: [] as WakaTimeDailyTotal[]
         };
       }
 
       const result = await secondsForConnection(connection, startDate, endDate);
+      const daily = includeDaily
+        ? await dailySecondsForConnection(connection, dailyStartDate, endDate)
+        : { days: [], unavailable: false };
       return {
         githubUsername: member.github_username,
         displayName: member.display_name,
         seconds: result.seconds,
         connected: true,
-        unavailable: result.unavailable
+        // 詳細グラフだけの一時エラーで、通常の連携状態を「再連携が必要」にしない。
+        unavailable: result.unavailable,
+        days: daily.days
       };
     })
   );
+
+  const members = memberResults.map((member) => ({
+    githubUsername: member.githubUsername,
+    displayName: member.displayName,
+    seconds: member.seconds,
+    connected: member.connected,
+    unavailable: member.unavailable
+  }));
+  const dailyTotals = includeDaily
+    ? datesInclusive(dailyStartDate, endDate).map((date) => ({
+        date,
+        seconds: memberResults.reduce(
+          (total, member) => total + (member.days.find((day) => day.date === date)?.seconds ?? 0),
+          0
+        )
+      }))
+    : undefined;
 
   return {
     connected: Boolean(viewerConnection),
@@ -294,6 +384,7 @@ export async function getWakaTimeDashboardSummary({
     connectedMembers: members.filter((member) => member.connected).length,
     startDate,
     endDate,
-    members: members.sort((a, b) => b.seconds - a.seconds)
+    members: members.sort((a, b) => b.seconds - a.seconds),
+    ...(dailyTotals ? { dailyTotals } : {})
   };
 }

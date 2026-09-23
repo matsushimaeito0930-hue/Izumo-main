@@ -6,7 +6,7 @@ import { isWakaTimeConfigured } from "@/lib/wakatime";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!isWakaTimeConfigured()) {
     return NextResponse.json({ configured: false });
   }
@@ -24,7 +24,8 @@ export async function GET() {
     const summary = await getWakaTimeDashboardSummary({
       githubLogin: identity.login,
       eventId: identity.eventId,
-      eventStartedAt: event?.created_at ?? null
+      eventStartedAt: event?.created_at ?? null,
+      includeDaily: new URL(request.url).searchParams.get("details") === "1"
     });
     return NextResponse.json({ configured: true, ...summary }, {
       headers: { "Cache-Control": "no-store, max-age=0" }

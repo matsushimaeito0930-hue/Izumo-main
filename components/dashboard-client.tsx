@@ -199,7 +199,7 @@ export function DashboardClient({
 
       {/* 参加者は自分のチームを先に見せる。運営は全チームをフラットに見る。 */}
       {!isStaff && !isJudge && myTeam && (
-        <div className="grid items-start gap-5 lg:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-2">
           <MyTeamCard
             team={myTeam}
             rank={myRank}

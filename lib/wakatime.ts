@@ -12,6 +12,11 @@ export type WakaTimeTokens = {
   expiresAt: string | null;
 };
 
+export type WakaTimeDailySeconds = {
+  date: string;
+  seconds: number;
+};
+
 export function isWakaTimeConfigured(): boolean {
   return Boolean(process.env.WAKATIME_CLIENT_ID && process.env.WAKATIME_CLIENT_SECRET);
 }
@@ -119,7 +124,7 @@ export async function refreshWakaTimeToken(refreshToken: string): Promise<WakaTi
   return requestToken(parameters);
 }
 
-export async function fetchWakaTimeSeconds({
+async function fetchWakaTimeSummaries({
   accessToken,
   start,
   end
@@ -127,7 +132,7 @@ export async function fetchWakaTimeSeconds({
   accessToken: string;
   start: string;
   end: string;
-}): Promise<number> {
+}): Promise<Array<{ date: string; seconds: number }>> {
   const url = new URL(WAKATIME_API_URL);
   url.searchParams.set("start", start);
   url.searchParams.set("end", end);
@@ -147,7 +152,10 @@ export async function fetchWakaTimeSeconds({
   }
 
   const payload = (await response.json().catch(() => ({}))) as {
-    data?: Array<{ grand_total?: { total_seconds?: number } }>;
+    data?: Array<{
+      grand_total?: { total_seconds?: number };
+      range?: { date?: string };
+    }>;
     error?: string;
   };
 
@@ -155,8 +163,37 @@ export async function fetchWakaTimeSeconds({
     throw new Error(payload.error ?? "Could not retrieve WakaTime summaries.");
   }
 
-  return (payload.data ?? []).reduce(
-    (total, day) => total + (day.grand_total?.total_seconds ?? 0),
-    0
-  );
+  return (payload.data ?? []).map((day) => ({
+    date: day.range?.date ?? "",
+    seconds: day.grand_total?.total_seconds ?? 0
+  }));
+}
+
+export async function fetchWakaTimeSeconds({
+  accessToken,
+  start,
+  end
+}: {
+  accessToken: string;
+  start: string;
+  end: string;
+}): Promise<number> {
+  const summaries = await fetchWakaTimeSummaries({ accessToken, start, end });
+  return summaries.reduce((total, day) => total + day.seconds, 0);
+}
+
+/** WakaTimeのサマリーは日ごとに返るので、グラフ用の値をそのまま保持する。 */
+export async function fetchWakaTimeDailySeconds({
+  accessToken,
+  start,
+  end
+}: {
+  accessToken: string;
+  start: string;
+  end: string;
+}): Promise<WakaTimeDailySeconds[]> {
+  const summaries = await fetchWakaTimeSummaries({ accessToken, start, end });
+  return summaries
+    .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day.date))
+    .map((day) => ({ date: day.date, seconds: day.seconds }));
 }
