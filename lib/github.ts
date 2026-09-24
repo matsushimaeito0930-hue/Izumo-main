@@ -19,7 +19,7 @@ type WithSender = {
 
 type PushPayload = WithSender & {
   repository?: GitHubRepository;
-  commits?: unknown[];
+  commits?: Array<{ id?: unknown }>;
   after?: string;
   head_commit?: {
     id?: string;
@@ -148,7 +148,10 @@ export function parseGitHubWebhook(
 ): ParsedGitHubActivity | null {
   if (eventName === "push") {
     const push = payload as PushPayload;
-    const commitCount = push.commits?.length ?? 0;
+    const commitShas = (push.commits ?? [])
+      .map((commit) => (typeof commit.id === "string" ? commit.id : ""))
+      .filter(Boolean);
+    const commitCount = commitShas.length;
     if (commitCount <= 0) {
       return null;
     }
@@ -161,6 +164,7 @@ export function parseGitHubWebhook(
       ...actorOf(push, push.head_commit?.author?.username ?? push.pusher?.name),
       metadata: {
         commitCount,
+        commitShas,
         ...(commitSha ? { commitSha } : {})
       }
     };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityFeed } from "@/components/activity-feed";
 import { markAnnouncementsSeen } from "@/components/announcement-badge";
 import { ContributorPanel } from "@/components/contributor-panel";
@@ -56,6 +56,7 @@ export function DashboardClient({
   // 参加時に保存したセッションから自分のチームを拾い、一覧で目印を付ける。
   const [myTeamId, setMyTeamId] = useState<string | null>(null);
   const [sessionViewer, setSessionViewer] = useState<Viewer | null>(null);
+  const reconciledTeamIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const restoreSession = window.setTimeout(() => {
@@ -99,6 +100,27 @@ export function DashboardClient({
   const myRank = myTeam ? state.teams.findIndex((team) => team.id === myTeam.id) + 1 : 0;
   const myLatestActivity =
     state.activities.find((activity) => activity.team_id === myTeamId) ?? null;
+
+  // 表示のコミット数はWebhookの配信回数ではなく、GitHub上のユニークなSHAで補正する。
+  // 1画面表示につき一度だけ実行し、通常のポーリングでGitHub APIを叩き続けない。
+  useEffect(() => {
+    if (!myTeam?.github_repo || reconciledTeamIdRef.current === myTeam.id) return;
+    reconciledTeamIdRef.current = myTeam.id;
+
+    void fetch("/api/teams/commits/reconcile", { method: "POST" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as { commitCount?: number };
+      })
+      .then((result) => {
+        if (typeof result?.commitCount === "number" && result.commitCount !== myTeam.commit_count) {
+          void refresh();
+        }
+      })
+      .catch(() => {
+        // GitHubが一時的に応答しない場合は、既存の表示を保ち次回の画面表示で再試行する。
+      });
+  }, [myTeam?.id, myTeam?.github_repo, myTeam?.commit_count, refresh]);
 
   // 全チーム宛のお知らせ（team_idなし）のうち、いちばん新しいものの時刻。
   const latestAnnouncementAt = useMemo(() => {

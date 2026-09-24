@@ -79,6 +79,28 @@ function normalizeTeam(team: Team): Team {
   };
 }
 
+/** 古い記録（commitShaだけ）と新しい記録（commitShas配列）の両方を扱う。 */
+function commitShasFromMetadata(metadata: Record<string, unknown>): string[] {
+  const values = Array.isArray(metadata.commitShas)
+    ? metadata.commitShas
+    : typeof metadata.commitSha === "string"
+      ? [metadata.commitSha]
+      : [];
+  return [
+    ...new Set(
+      values.filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  ];
+}
+
+function uniqueCommitDelta(
+  metadata: Record<string, unknown>,
+  activities: Array<Pick<Activity, "metadata">>
+): number {
+  const known = new Set(activities.flatMap((activity) => commitShasFromMetadata(activity.metadata ?? {})));
+  return commitShasFromMetadata(metadata).filter((sha) => !known.has(sha)).length;
+}
+
 declare global {
   var hackVerseMemoryStore: MemoryStore | undefined;
   var hackVerseMemoryStoreVersion: string | undefined;
@@ -583,7 +605,7 @@ export async function recordActivity(input: {
   };
   const actorLogin = input.actorLogin?.trim() || null;
   const actorAvatarUrl = input.actorAvatarUrl ?? null;
-  const commitDelta =
+  let commitDelta =
     input.type === "push" &&
     typeof metadata.commitCount === "number" &&
     Number.isFinite(metadata.commitCount)
@@ -625,6 +647,18 @@ export async function recordActivity(input: {
       // チームを特定してから、そのチームが属するイベントの配点を読む。
       const scoreConfig = await getScoreConfig(team.event_id);
       const scoreDelta = scoreConfig[input.type];
+
+      // 同じコミットを機能ブランチとmainへpushしても、SHA単位では一度だけ数える。
+      if (input.type === "push") {
+        const { data: previousActivities, error: previousActivitiesError } = await supabase
+          .from("activities")
+          .select("metadata")
+          .eq("team_id", team.id)
+          .eq("type", "push")
+          .limit(10000);
+        if (previousActivitiesError) throw previousActivitiesError;
+        commitDelta = uniqueCommitDelta(metadata, (previousActivities ?? []) as Activity[]);
+      }
 
       const message = makeActivityMessage(
         activitySubject(team.name, actorLogin),
@@ -687,6 +721,13 @@ export async function recordActivity(input: {
 
   const scoreConfig = await getScoreConfig(team.event_id);
   const scoreDelta = scoreConfig[input.type];
+
+  if (input.type === "push") {
+    commitDelta = uniqueCommitDelta(
+      metadata,
+      store.activities.filter((activity) => activity.team_id === team?.id && activity.type === "push")
+    );
+  }
 
   const duplicateActivity = store.activities.find((activity) => {
     const activityMetadata = activity.metadata ?? {};
@@ -2622,6 +2663,28 @@ export async function getTeamById(teamId: string): Promise<Team | null> {
     }
   }
   return getMemoryStore().teams.find((team) => team.id === teamId) ?? null;
+}
+
+/** GitHubの実コミットSHAで照合した合計を、チーム表示用に保存する。 */
+export async function updateTeamCommitCount(teamId: string, commitCount: number): Promise<Team | null> {
+  const normalizedCount = Math.max(0, Math.floor(commitCount));
+  if (isSupabaseConfigured()) {
+    const supabase = createServerSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("teams")
+        .update({ commit_count: normalizedCount })
+        .eq("id", teamId)
+        .select("*")
+        .maybeSingle();
+      if (error) throw error;
+      return data ? normalizeTeam(data as Team) : null;
+    }
+  }
+
+  const team = getMemoryStore().teams.find((candidate) => candidate.id === teamId) ?? null;
+  if (team) team.commit_count = normalizedCount;
+  return team;
 }
 
 export async function createTeamInvite(input: {

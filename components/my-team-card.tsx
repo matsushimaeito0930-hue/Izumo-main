@@ -57,7 +57,7 @@ export function MyTeamCard({
 
       <dl className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-line bg-paper p-3 shadow-inset">
-          <dt className="text-xs text-muted">スコア</dt>
+          <dt className="text-xs text-muted">活動スコア</dt>
           <dd className="mt-1 font-mono text-2xl font-bold tracking-tight text-ink">
             {team.score}
             <span className="ml-1 font-sans text-sm font-normal text-muted">pt</span>
@@ -66,7 +66,7 @@ export function MyTeamCard({
         <div className="rounded-xl border border-line bg-paper p-3 shadow-inset">
           <dt className="flex items-center gap-1.5 text-xs text-muted">
             <GitCommitHorizontal className="size-3.5" />
-            コミット
+            GitHubコミット
           </dt>
           <dd className="mt-1 font-mono text-2xl font-bold tracking-tight text-ink">
             {team.commit_count}
@@ -76,6 +76,9 @@ export function MyTeamCard({
       </dl>
 
       <div className="mt-4 space-y-1.5 text-sm">
+        <p className="text-xs leading-5 text-muted">
+          スコアはpush・PR・レビューなどの活動点です。GitHubコミット数とは別に計算します。
+        </p>
         <p className="truncate text-xs leading-5 text-muted">
           {latestActivity?.message ?? "まだ活動がありません。プッシュすると反映されます。"}
         </p>

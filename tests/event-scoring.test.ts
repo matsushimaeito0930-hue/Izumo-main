@@ -83,7 +83,14 @@ describe("event activity scoring", () => {
     );
 
     const activities = [
-      { type: "push" as const, metadata: { commitCount: 2, commitSha: "score-push" } },
+      {
+        type: "push" as const,
+        metadata: {
+          commitCount: 2,
+          commitSha: "score-push",
+          commitShas: ["score-push-1", "score-push"]
+        }
+      },
       { type: "pull_request_opened" as const, metadata: { number: 1 } },
       { type: "pull_request_merged" as const, metadata: { number: 1 } },
       { type: "issue_closed" as const, metadata: { number: 2 } },
