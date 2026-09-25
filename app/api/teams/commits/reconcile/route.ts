@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchUniqueRepoCommitCount } from "@/lib/github-commits";
+import { fetchUniqueRepoCommitSummary } from "@/lib/github-commits";
 import { getCurrentIdentity } from "@/lib/session";
 import { getEvent, getMembershipInEvent, getTeamById, updateTeamCommitCount } from "@/lib/store";
 
@@ -26,13 +26,18 @@ export async function POST() {
   }
 
   try {
-    const commitCount = await fetchUniqueRepoCommitCount(
+    const summary = await fetchUniqueRepoCommitSummary(
       team.github_repo,
       event.created_at,
       identity.accessToken
     );
-    await updateTeamCommitCount(team.id, commitCount);
-    return NextResponse.json({ teamId: team.id, commitCount });
+    await updateTeamCommitCount(team.id, summary.total);
+    return NextResponse.json({
+      teamId: team.id,
+      commitCount: summary.total,
+      contributorCommitCounts: summary.byLogin,
+      unattributedCommitCount: summary.unattributedCount
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "コミット数を照合できませんでした。" },

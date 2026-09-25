@@ -57,6 +57,8 @@ export function DashboardClient({
   const [myTeamId, setMyTeamId] = useState<string | null>(null);
   const [sessionViewer, setSessionViewer] = useState<Viewer | null>(null);
   const reconciledTeamIdRef = useRef<string | null>(null);
+  const [verifiedCommitCounts, setVerifiedCommitCounts] = useState<Record<string, number> | null>(null);
+  const [unattributedCommitCount, setUnattributedCommitCount] = useState(0);
 
   useEffect(() => {
     const restoreSession = window.setTimeout(() => {
@@ -106,13 +108,25 @@ export function DashboardClient({
   useEffect(() => {
     if (!myTeam?.github_repo || reconciledTeamIdRef.current === myTeam.id) return;
     reconciledTeamIdRef.current = myTeam.id;
+    setVerifiedCommitCounts(null);
+    setUnattributedCommitCount(0);
 
     void fetch("/api/teams/commits/reconcile", { method: "POST" })
       .then(async (response) => {
         if (!response.ok) return null;
-        return (await response.json()) as { commitCount?: number };
+        return (await response.json()) as {
+          commitCount?: number;
+          contributorCommitCounts?: Record<string, number>;
+          unattributedCommitCount?: number;
+        };
       })
       .then((result) => {
+        if (result?.contributorCommitCounts) {
+          setVerifiedCommitCounts(result.contributorCommitCounts);
+          setUnattributedCommitCount(
+            typeof result.unattributedCommitCount === "number" ? result.unattributedCommitCount : 0
+          );
+        }
         if (typeof result?.commitCount === "number" && result.commitCount !== myTeam.commit_count) {
           void refresh();
         }
@@ -257,6 +271,8 @@ export function DashboardClient({
         contributors={state.contributors}
         teams={state.teams}
         teamId={isStaff || isJudge ? null : myTeamId}
+        verifiedCommitCounts={isStaff || isJudge ? null : verifiedCommitCounts}
+        unattributedCommitCount={unattributedCommitCount}
         title={isStaff || isJudge ? "メンバー別の動き（全チーム）" : "チーム内の動き"}
         description={
           isStaff || isJudge

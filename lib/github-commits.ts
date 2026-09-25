@@ -1,14 +1,25 @@
 /** GitHub上で確認できる、イベント期間中のユニークなコミットを数える。 */
 
 type GitHubBranch = { name?: unknown };
-type GitHubCommit = { sha?: unknown };
+type GitHubCommit = {
+  sha?: unknown;
+  author?: { login?: unknown } | null;
+};
+
+export type UniqueCommitSummary = {
+  total: number;
+  /** GitHubログイン名（小文字）ごとの、重複排除済みコミット数。 */
+  byLogin: Record<string, number>;
+  /** GitHubアカウントに紐付けられず、誰のものか安全に判断できないコミット数。 */
+  unattributedCount: number;
+};
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 const MAX_BRANCHES = 100;
 const MAX_PAGES_PER_BRANCH = 20;
 const CACHE_DURATION_MS = 5 * 60 * 1000;
-const countCache = new Map<string, { expiresAt: number; value: number }>();
+const summaryCache = new Map<string, { expiresAt: number; value: UniqueCommitSummary }>();
 
 function isValidRepo(repo: string) {
   return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo);
@@ -48,19 +59,49 @@ export function countUniqueCommitShas(branchCommitLists: Array<Array<{ sha?: unk
 }
 
 /**
- * mainだけでなく、まだマージされていない機能ブランチも含める。
- * 同じSHAが複数ブランチに現れても Set で一度だけ数える。
+ * 同じSHAを複数ブランチで見つけても一度だけ数え、GitHub上の著者へ割り当てる。
+ * author.login がないコミットを推測でメンバーへ割り当てると誤表示になるため、別枠にする。
  */
-export async function fetchUniqueRepoCommitCount(
+export function summarizeUniqueCommitsByGitHubLogin(
+  branchCommitLists: Array<Array<GitHubCommit>>
+): UniqueCommitSummary {
+  const commitsBySha = new Map<string, string | null>();
+
+  for (const commits of branchCommitLists) {
+    for (const commit of commits) {
+      const sha = typeof commit.sha === "string" ? commit.sha.trim() : "";
+      if (!sha || commitsBySha.has(sha)) continue;
+
+      const login = typeof commit.author?.login === "string"
+        ? commit.author.login.trim().toLowerCase()
+        : "";
+      commitsBySha.set(sha, login || null);
+    }
+  }
+
+  const byLogin: Record<string, number> = {};
+  let unattributedCount = 0;
+  for (const login of commitsBySha.values()) {
+    if (!login) {
+      unattributedCount += 1;
+      continue;
+    }
+    byLogin[login] = (byLogin[login] ?? 0) + 1;
+  }
+
+  return { total: commitsBySha.size, byLogin, unattributedCount };
+}
+
+export async function fetchUniqueRepoCommitSummary(
   repo: string,
   since: string,
   accessToken?: string,
   fetcher: FetchLike = fetch
-): Promise<number> {
+): Promise<UniqueCommitSummary> {
   if (!isValidRepo(repo)) throw new Error("リポジトリ名の形式が正しくありません。");
 
   const cacheKey = `${repo.toLowerCase()}:${since}`;
-  const cached = countCache.get(cacheKey);
+  const cached = summaryCache.get(cacheKey);
   if (fetcher === fetch && cached && cached.expiresAt > Date.now()) return cached.value;
 
   const encodedRepo = repo.split("/").map(encodeURIComponent).join("/");
@@ -89,9 +130,22 @@ export async function fetchUniqueRepoCommitCount(
     }
   }
 
-  const value = countUniqueCommitShas(lists);
+  const value = summarizeUniqueCommitsByGitHubLogin(lists);
   if (fetcher === fetch) {
-    countCache.set(cacheKey, { value, expiresAt: Date.now() + CACHE_DURATION_MS });
+    summaryCache.set(cacheKey, { value, expiresAt: Date.now() + CACHE_DURATION_MS });
   }
   return value;
+}
+
+/**
+ * mainだけでなく、まだマージされていない機能ブランチも含める。
+ * 同じSHAが複数ブランチに現れても Set で一度だけ数える。
+ */
+export async function fetchUniqueRepoCommitCount(
+  repo: string,
+  since: string,
+  accessToken?: string,
+  fetcher: FetchLike = fetch
+): Promise<number> {
+  return (await fetchUniqueRepoCommitSummary(repo, since, accessToken, fetcher)).total;
 }

@@ -17,7 +17,9 @@ export function ContributorPanel({
   teams,
   teamId = null,
   title = "メンバー別の動き",
-  description = "GitHubの操作をアカウントごとに集計しています。"
+  description = "GitHubの操作をアカウントごとに集計しています。",
+  verifiedCommitCounts = null,
+  unattributedCommitCount = 0
 }: {
   contributors: ContributorView[];
   teams: Team[];
@@ -25,6 +27,10 @@ export function ContributorPanel({
   teamId?: string | null;
   title?: string;
   description?: string;
+  /** GitHub APIでSHA単位に重複排除した、対象チームのメンバー別コミット数。 */
+  verifiedCommitCounts?: Record<string, number> | null;
+  /** GitHubアカウントが分からず、特定のメンバーへ割り当てられないコミット数。 */
+  unattributedCommitCount?: number;
 }) {
   const teamNameById = new Map(teams.map((team) => [team.id, team.name]));
   const rows = (teamId ? contributors.filter((c) => c.team_id === teamId) : contributors)
@@ -52,6 +58,10 @@ export function ContributorPanel({
           {rows.map((row, index) => {
             // 合計に対する割合。偏りが一目で分かるようにバーで出す。
             const share = total > 0 ? Math.round((row.score / total) * 100) : 0;
+            const isVerified = teamId !== null && verifiedCommitCounts !== null;
+            const commitCount = isVerified
+              ? (verifiedCommitCounts[row.github_username.toLowerCase()] ?? 0)
+              : row.commit_count;
 
             return (
               <li
@@ -103,7 +113,7 @@ export function ContributorPanel({
                   <span>{share}%</span>
                   <span className="flex items-center gap-1">
                     <GitCommitHorizontal className="size-3" />
-                    {row.commit_count} コミット
+                    {commitCount} コミット
                   </span>
                   <span>{row.activity_count} 回の操作</span>
                   <span>最終 {formatShortDateTime(row.last_active_at)}</span>
@@ -112,6 +122,14 @@ export function ContributorPanel({
             );
           })}
         </ul>
+      )}
+      {teamId !== null && verifiedCommitCounts !== null && (
+        <p className="mt-3 text-xs leading-5 text-muted">
+          GitHub上のユニークなSHAで照合済みです。
+          {unattributedCommitCount > 0
+            ? ` GitHubアカウントに紐付けられないコミットが${unattributedCommitCount}件あります。`
+            : null}
+        </p>
       )}
     </Panel>
   );
