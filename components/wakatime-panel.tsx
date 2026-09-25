@@ -51,6 +51,7 @@ function formatDelta(seconds: number): string {
 }
 
 function TrendChart({ points }: { points: Array<{ date: string; seconds: number }> }) {
+  const [activeDate, setActiveDate] = useState<string | null>(null);
   const width = 560;
   const height = 160;
   const padding = { top: 18, right: 16, bottom: 28, left: 16 };
@@ -63,6 +64,12 @@ function TrendChart({ points }: { points: Array<{ date: string; seconds: number 
     y: padding.top + innerHeight - (point.seconds / max) * innerHeight
   }));
   const path = coordinates.map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`).join(" ");
+  const activePoint = coordinates.find((point) => point.date === activeDate) ?? null;
+  const tooltipWidth = 150;
+  const tooltipX = activePoint
+    ? Math.min(Math.max(activePoint.x - tooltipWidth / 2, 4), width - tooltipWidth - 4)
+    : 0;
+  const tooltipY = activePoint ? Math.max(activePoint.y - 48, 4) : 0;
 
   return (
     <div className="mt-4 overflow-x-auto">
@@ -77,12 +84,34 @@ function TrendChart({ points }: { points: Array<{ date: string; seconds: number 
         {coordinates.map((point) => (
           <g key={point.date}>
             <circle cx={point.x} cy={point.y} r="4" className="fill-surface stroke-pulse" strokeWidth="2" />
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="13"
+              fill="transparent"
+              tabIndex={0}
+              aria-label={`${point.date}のチーム合計: ${formatDuration(point.seconds)}`}
+              onMouseEnter={() => setActiveDate(point.date)}
+              onMouseLeave={() => setActiveDate((current) => (current === point.date ? null : current))}
+              onFocus={() => setActiveDate(point.date)}
+              onBlur={() => setActiveDate((current) => (current === point.date ? null : current))}
+            />
             <text x={point.x} y={height - 8} textAnchor="middle" className="fill-muted text-[11px]">
               {point.date.slice(5).replace("-", "/")}
             </text>
-            <title>{`${point.date}: ${formatDuration(point.seconds)}`}</title>
           </g>
         ))}
+        {activePoint && (
+          <g className="pointer-events-none" aria-live="polite">
+            <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height="38" rx="6" className="fill-ink" />
+            <text x={tooltipX + 10} y={tooltipY + 16} className="fill-white text-[10px]">
+              {activePoint.date}
+            </text>
+            <text x={tooltipX + 10} y={tooltipY + 30} className="fill-white text-[11px] font-bold">
+              {`チーム合計 ${formatDuration(activePoint.seconds)}`}
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );
