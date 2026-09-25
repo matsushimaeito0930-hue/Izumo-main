@@ -1,10 +1,16 @@
+@import "../tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
+  background: var(--color-paper);
+}
+
+html[data-theme="navy"] {
   color-scheme: dark;
-  background: #080914;
 }
 
 * {
@@ -13,17 +19,19 @@
 
 html {
   min-height: 100%;
-  background:
-    radial-gradient(circle at 18% 12%, rgba(51, 242, 209, 0.15), transparent 28rem),
-    radial-gradient(circle at 92% 8%, rgba(255, 79, 139, 0.12), transparent 24rem),
-    linear-gradient(180deg, #080914 0%, #101322 56%, #07110f 100%);
+  overflow-x: clip;
+  background: var(--color-paper);
 }
 
 body {
   min-height: 100%;
   margin: 0;
-  color: #f5f7fb;
-  background: transparent;
+  overflow-x: clip;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-feature-settings: "palt" 1;
+  background: var(--color-paper);
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
@@ -38,51 +46,36 @@ select {
   font: inherit;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 ::selection {
-  color: #080914;
-  background: #33f2d1;
+  color: #ffffff;
+  background: var(--color-pulse);
 }
 
-.grid-floor {
-  background-image:
-    linear-gradient(rgba(51, 242, 209, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(51, 242, 209, 0.1) 1px, transparent 1px);
-  background-size: 42px 42px;
+/* text-ink は本文用に明るくするため、濃紺テーマの主要操作だけは専用の暗色を使う。 */
+html[data-theme="navy"] .bg-ink {
+  background-color: rgb(var(--color-control-rgb) / var(--tw-bg-opacity, 1));
 }
 
-.scanline {
-  position: relative;
-  overflow: hidden;
-}
-
-.scanline::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  background: linear-gradient(
-    180deg,
-    transparent,
-    rgba(255, 255, 255, 0.035),
-    transparent
-  );
-  transform: translateY(-100%);
-  animation: scan 4.8s linear infinite;
-}
-
-@keyframes scan {
-  to {
-    transform: translateY(100%);
-  }
+html[data-theme="navy"] .hover\:bg-ink2:hover {
+  background-color: rgb(var(--color-control-hover-rgb) / var(--tw-bg-opacity, 1));
 }
 
 @keyframes flash {
   0%,
   100% {
-    box-shadow: 0 0 0 rgba(51, 242, 209, 0);
+    background-color: transparent;
   }
-  45% {
-    box-shadow: 0 0 42px rgba(51, 242, 209, 0.42);
+  40% {
+    background-color: rgba(15, 139, 126, 0.09);
   }
 }
 
@@ -90,7 +83,13 @@ select {
   animation: flash 1.8s ease-in-out;
 }
 
-.plaza-canvas canvas {
-  width: 100% !important;
-  height: 100% !important;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

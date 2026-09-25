@@ -1,0 +1,110 @@
+import { NextResponse } from "next/server";
+import { isDemoModeEnabled } from "@/lib/env";
+import { isGitHubAuthConfigured } from "@/lib/github-auth";
+import { getCurrentIdentity } from "@/lib/session";
+import { createChatMessage, getTeamById, isTeamMember } from "@/lib/store";
+import type { ChatChannel, ChatMessage } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request) {
+  const identity = await getCurrentIdentity();
+
+  // 審査員は閲覧専用。画面を書き換えて送っても通さない。
+  if (identity?.role === "judge") {
+    return NextResponse.json(
+      { error: "審査員は閲覧のみです。投稿はできません。" },
+      { status: 403 }
+    );
+  }
+
+  if ((isGitHubAuthConfigured() || !isDemoModeEnabled()) && !identity) {
+    return NextResponse.json(
+      { error: "GitHubでログインしてから運営に相談してください。" },
+      { status: 401 }
+    );
+  }
+  if (identity && !identity.eventId) {
+    return NextResponse.json(
+      { error: "開くイベントを選択してください。" },
+      { status: 400 }
+    );
+  }
+
+  const body = (await request.json().catch(() => ({}))) as {
+    channel?: ChatChannel;
+    teamId?: string;
+    authorName?: string;
+    authorRole?: ChatMessage["author_role"];
+    body?: string;
+  };
+
+  if (body.channel !== "staff") {
+    return NextResponse.json(
+      { error: "チャンネルの指定が正しくありません。" },
+      { status: 400 }
+    );
+  }
+
+  if (!body.body?.trim()) {
+    return NextResponse.json({ error: "メッセージを入力してください。" }, { status: 400 });
+  }
+
+  const isAnnouncement = !body.teamId;
+
+  if (body.teamId && identity?.eventId) {
+    const team = await getTeamById(body.teamId);
+    if (!team || team.event_id !== identity.eventId) {
+      return NextResponse.json({ error: "このイベントのチームではありません。" }, { status: 403 });
+    }
+  }
+
+  if (identity?.role === "admin" && !isAnnouncement) {
+    return NextResponse.json(
+      { error: "運営はお知らせチャットのみ利用できます。" },
+      { status: 403 }
+    );
+  }
+
+  if (isAnnouncement && identity?.role !== "admin") {
+    return NextResponse.json(
+      { error: "お知らせを投稿できるのは運営のみです。" },
+      { status: 403 }
+    );
+  }
+
+  if (identity?.role === "participant" && body.teamId) {
+    try {
+      if (!(await isTeamMember({ githubUsername: identity.login, teamId: body.teamId }))) {
+        return NextResponse.json(
+          { error: "自分が所属しているチームの相談だけ送信できます。" },
+          { status: 403 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "チーム所属を確認できませんでした。" },
+        { status: 403 }
+      );
+    }
+  }
+
+  try {
+    const message = await createChatMessage({
+      channel: body.channel,
+      eventId: identity?.eventId,
+      teamId: body.teamId,
+      // ログイン済みなら投稿者名はcookieの本人情報で固定する。
+      authorName: identity?.displayName ?? (body.authorName?.trim() || "HackRadar user"),
+      authorRole: identity?.role ?? body.authorRole ?? "participant",
+      body: body.body
+    });
+
+    return NextResponse.json({ message });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "メッセージを送信できませんでした。" },
+      { status: 400 }
+    );
+  }
+}

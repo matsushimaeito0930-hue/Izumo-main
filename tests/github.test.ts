@@ -30,7 +30,8 @@ describe("github webhook parsing", () => {
       githubRepo: "owner/hackverse",
       fallbackTeamName: "Hackverse",
       metadata: {
-        commitCount: 3
+        commitCount: 3,
+        commitShas: ["1", "2", "3"]
       }
     });
   });

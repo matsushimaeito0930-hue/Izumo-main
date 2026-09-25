@@ -1,0 +1,104 @@
+
+> hackverse@0.1.0 dev
+> next dev -p 3002
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3002
+
+ ✓ Starting...
+ ✓ Ready in 4.2s
+ ○ Compiling /api/admin/invites ...
+ ✓ Compiled /api/admin/invites in 1545ms (115 modules)
+ POST /api/admin/invites 200 in 2098ms
+ POST /api/admin/invites 200 in 25ms
+ POST /api/admin/invites 200 in 22ms
+ ✓ Compiled /api/demo/event in 151ms (117 modules)
+ POST /api/demo/event 200 in 259ms
+ POST /api/demo/event 200 in 21ms
+ POST /api/demo/event 200 in 25ms
+ POST /api/demo/event 200 in 23ms
+ POST /api/demo/event 200 in 29ms
+ POST /api/demo/event 200 in 22ms
+ POST /api/demo/event 200 in 23ms
+ ✓ Compiled /api/chat in 161ms (119 modules)
+ POST /api/chat 200 in 225ms
+ POST /api/chat 200 in 18ms
+ POST /api/chat 200 in 16ms
+ ✓ Compiled /api/help in 121ms (121 modules)
+ POST /api/help 200 in 166ms
+ POST /api/help 200 in 16ms
+ POST /api/help 200 in 19ms
+ ✓ Compiled /api/state in 128ms (123 modules)
+ GET /api/state 200 in 176ms
+ ✓ Compiled /api/teams/join in 376ms (125 modules)
+ POST /api/teams/join 200 in 545ms
+ POST /api/teams/join 200 in 14ms
+ POST /api/teams/join 200 in 12ms
+ GET /api/state 200 in 16ms
+ ○ Compiling / ...
+ ✓ Compiled / in 7.1s (621 modules)
+ GET / 200 in 7559ms
+ GET / 200 in 165ms
+ ✓ Compiled in 8.4s (583 modules)
+ ✓ Compiled in 311ms (271 modules)
+ ✓ Compiled in 4.2s (583 modules)
+ ✓ Compiled in 2.4s (583 modules)
+ ✓ Compiled in 5.9s (583 modules)
+ ✓ Compiled in 4.2s (583 modules)
+ ✓ Compiled in 589ms (583 modules)
+ ✓ Compiled in 238ms (271 modules)
+ ✓ Compiled in 3s (568 modules)
+ ✓ Compiled in 2.1s (583 modules)
+ ✓ Compiled in 1506ms (583 modules)
+ ✓ Compiled in 2.3s (583 modules)
+ ✓ Compiled in 456ms (271 modules)
+ ✓ Compiled in 3.9s (271 modules)
+ ✓ Compiled in 3.6s (583 modules)
+ ✓ Compiled in 690ms (271 modules)
+ ✓ Compiled in 1928ms (583 modules)
+ ✓ Compiled in 1703ms (583 modules)
+ ✓ Compiled in 3s (583 modules)
+ ✓ Compiled in 1814ms (583 modules)
+ ✓ Compiled in 600ms (271 modules)
+ ✓ Compiled in 1736ms (271 modules)
+ ✓ Compiled in 985ms (583 modules)
+ ✓ Compiled in 914ms (583 modules)
+ ✓ Compiled in 2s (583 modules)
+ ✓ Compiled in 1410ms (583 modules)
+ ✓ Compiled in 2.5s (583 modules)
+ ✓ Compiled in 3.9s (271 modules)
+ ✓ Compiled in 4.3s (585 modules)
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 1903ms (792 modules)
+ GET /dashboard 200 in 2342ms
+ GET /dashboard 200 in 68ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 669ms (795 modules)
+ GET /_next/static/chunks/main-app.js?v=1785828324241 404 in 947ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 944ms
+ GET /dashboard 200 in 220ms
+ GET /_next/static/chunks/main-app.js?v=1785828333847 404 in 94ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 64ms
+ ✓ Compiled in 3.9s (694 modules)
+ ✓ Compiled /dashboard in 420ms (426 modules)
+ GET /dashboard 200 in 1800ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 538ms (795 modules)
+ GET /_next/static/chunks/app-pages-internals.js 404 in 686ms
+ GET /_next/static/chunks/main-app.js?v=1785828904791 404 in 685ms
+ ✓ Compiled in 1631ms (810 modules)
+ ✓ Compiled in 5s (694 modules)
+ GET / 200 in 786ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 617ms (682 modules)
+ GET /_next/static/chunks/main-app.js?v=1785829573455 404 in 842ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 811ms
+ GET / 200 in 402ms
+ GET /_next/static/chunks/main-app.js?v=1785829650351 404 in 138ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 123ms
+ GET / 200 in 1233ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 415ms
+ GET /_next/static/chunks/main-app.js?v=1785829723862 404 in 441ms
+ GET / 200 in 922ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 140ms
+ GET /_next/static/chunks/main-app.js?v=1785829815493 404 in 148ms

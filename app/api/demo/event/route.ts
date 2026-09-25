@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { isDemoModeEnabled } from "@/lib/env";
+import { isGitHubAuthConfigured } from "@/lib/github-auth";
+import { getCurrentIdentity } from "@/lib/session";
 import { recordActivity } from "@/lib/store";
 import type { ActivityType } from "@/lib/types";
 
@@ -36,6 +38,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const identity = await getCurrentIdentity();
+  if (isGitHubAuthConfigured() && identity?.role !== "admin") {
+    return NextResponse.json(
+      { error: "デモイベントを実行できるのは運営だけです。" },
+      { status: 403 }
+    );
+  }
+
   const body = (await request.json().catch(() => ({}))) as {
     teamId?: string;
     type?: ActivityType;
@@ -53,6 +63,13 @@ export async function POST(request: Request) {
     teamId: body.teamId,
     metadata: demoMetadata(body.type)
   });
+
+  if (!activity) {
+    return NextResponse.json(
+      { error: "チームが登録されていないため、デモイベントを作れませんでした。" },
+      { status: 400 }
+    );
+  }
 
   return NextResponse.json({ activity });
 }

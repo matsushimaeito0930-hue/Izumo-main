@@ -1,12 +1,12 @@
-import { Wifi, WifiOff } from "lucide-react";
+import { RefreshCw, Wifi, WifiOff } from "lucide-react";
 
 type RealtimeStatus = "fallback-polling" | "connecting" | "connected" | "error";
 
 const statusText: Record<RealtimeStatus, string> = {
-  "fallback-polling": "Polling",
-  connecting: "Realtime connecting",
-  connected: "Realtime connected",
-  error: "Realtime fallback"
+  "fallback-polling": "定期更新中",
+  connecting: "接続中",
+  connected: "リアルタイム接続中",
+  error: "定期更新に切替"
 };
 
 export function RealtimeStatusBadge({
@@ -16,12 +16,21 @@ export function RealtimeStatusBadge({
   status: RealtimeStatus;
   isRefreshing: boolean;
 }) {
-  const Icon = status === "connected" ? Wifi : WifiOff;
+  const isConnected = status === "connected";
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-black uppercase tracking-[0.12em] text-white/70">
-      <Icon className={status === "connected" ? "size-3.5 text-field" : "size-3.5 text-sun"} />
-      <span>{isRefreshing ? "Syncing" : statusText[status]}</span>
+    <span
+      role="status"
+      aria-live="polite"
+      className={`fixed right-3 top-[4.5rem] z-40 inline-flex items-center gap-1.5 rounded-full border bg-paper/95 px-2.5 py-1 text-xs font-medium shadow-soft backdrop-blur sm:right-6 ${
+        isConnected ? "border-field/50 text-field" : "border-sun/50 text-sun"
+      }`}
+    >
+      {/* 接続状態と取得中かどうかは別の話。片方で上書きすると、
+          遅いのが回線なのか取得処理なのか切り分けられなくなる。 */}
+      {isConnected ? <Wifi className="size-3.5" /> : <WifiOff className="size-3.5" />}
+      <span>{statusText[status]}</span>
+      {isRefreshing && <RefreshCw className="size-3 animate-spin opacity-70" />}
     </span>
   );
 }

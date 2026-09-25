@@ -1,110 +1,285 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityFeed } from "@/components/activity-feed";
+import { markAnnouncementsSeen } from "@/components/announcement-badge";
+import { ContributorPanel } from "@/components/contributor-panel";
+import { DirectMessages } from "@/components/direct-messages";
+import { AdminRepoStatus } from "@/components/admin-repo-status";
 import { DemoControls } from "@/components/demo-controls";
+import { DevelopmentOverview } from "@/components/development-overview";
+import { EventLeaderboard } from "@/components/event-leaderboard";
 import { HelpBoard } from "@/components/help-board";
 import { HelpComposer } from "@/components/help-composer";
-import { MentorList } from "@/components/mentor-list";
+import { MyTeamCard } from "@/components/my-team-card";
 import { RankingPanel } from "@/components/ranking-panel";
+import { StaffChat } from "@/components/staff-chat";
 import { RealtimeStatusBadge } from "@/components/realtime-status-badge";
-import { TeamHouseCard } from "@/components/team-house-card";
+import { TeamRepoSetup } from "@/components/team-repo-setup";
+import { TechStackPanel } from "@/components/tech-stack-panel";
+import { WakaTimePanel } from "@/components/wakatime-panel";
 import { useHackVerseState } from "@/components/use-hackverse-state";
-import type { HackVerseState } from "@/lib/types";
+import type { HackVerseState, UserRole } from "@/lib/types";
 
-type ViewMode = "lobby" | "home" | "help" | "ranking";
+type ViewMode = "dashboard" | "help" | "announcements";
+
+type Viewer = {
+  login: string;
+  displayName: string;
+  role: UserRole;
+};
 
 export function DashboardClient({
   initialState,
-  view
+  view,
+  viewer = null,
+  demoEnabled = false
 }: {
   initialState: HackVerseState;
   view: ViewMode;
+  viewer?: Viewer | null;
+  demoEnabled?: boolean;
 }) {
   const {
     state,
     isRefreshing,
     realtimeStatus,
     lastActivityId,
+    refresh,
     triggerDemoEvent,
-    createHelp
+    createHelp,
+    createHelpReply,
+    acceptHelpReply,
+    createChatMessage
   } = useHackVerseState(initialState);
-  const currentTeam = state.teams.find((team) => team.name === "Team A") ?? state.teams[0];
 
-  if (view === "home") {
+  // 参加時に保存したセッションから自分のチームを拾い、一覧で目印を付ける。
+  const [myTeamId, setMyTeamId] = useState<string | null>(null);
+  const [sessionViewer, setSessionViewer] = useState<Viewer | null>(null);
+  const reconciledTeamIdRef = useRef<string | null>(null);
+  const [verifiedCommitCounts, setVerifiedCommitCounts] = useState<Record<string, number> | null>(null);
+  const [unattributedCommitCount, setUnattributedCommitCount] = useState(0);
+
+  useEffect(() => {
+    const restoreSession = window.setTimeout(() => {
+      const raw = window.localStorage.getItem("hackverse-session");
+      if (!raw) return;
+
+      try {
+        const session = JSON.parse(raw) as {
+          teamId?: string;
+          role?: UserRole;
+          displayName?: string;
+          githubUsername?: string;
+        };
+        setMyTeamId(session.teamId ?? null);
+        if (session.role && session.displayName) {
+          setSessionViewer({
+            login: session.githubUsername ?? "local-user",
+            displayName: session.displayName,
+            role: session.role
+          });
+        }
+      } catch {
+        setMyTeamId(null);
+        setSessionViewer(null);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(restoreSession);
+  }, [viewer]);
+
+  const activeViewer = viewer ?? sessionViewer;
+  const isAdmin = activeViewer?.role === "admin";
+  const isMentor = activeViewer?.role === "mentor";
+  // 審査員は閲覧専用。開発状況とお知らせだけを見る。
+  const isJudge = activeViewer?.role === "judge";
+  const isStaff = isAdmin || isMentor;
+  const myTeam = state.teams.find((team) => team.id === myTeamId) ?? null;
+  const canViewAllTechStacks = isJudge || isStaff;
+  const techStackTeams = canViewAllTechStacks ? state.teams : myTeam ? [myTeam] : [];
+  // state.teams はスコアの降順。順位はその並びから取る。
+  const myRank = myTeam ? state.teams.findIndex((team) => team.id === myTeam.id) + 1 : 0;
+  const myLatestActivity =
+    state.activities.find((activity) => activity.team_id === myTeamId) ?? null;
+
+  // 表示のコミット数はWebhookの配信回数ではなく、GitHub上のユニークなSHAで補正する。
+  // 1画面表示につき一度だけ実行し、通常のポーリングでGitHub APIを叩き続けない。
+  useEffect(() => {
+    if (!myTeam?.github_repo || reconciledTeamIdRef.current === myTeam.id) return;
+    reconciledTeamIdRef.current = myTeam.id;
+    setVerifiedCommitCounts(null);
+    setUnattributedCommitCount(0);
+
+    void fetch("/api/teams/commits/reconcile", { method: "POST" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          commitCount?: number;
+          contributorCommitCounts?: Record<string, number>;
+          unattributedCommitCount?: number;
+        };
+      })
+      .then((result) => {
+        if (result?.contributorCommitCounts) {
+          setVerifiedCommitCounts(result.contributorCommitCounts);
+          setUnattributedCommitCount(
+            typeof result.unattributedCommitCount === "number" ? result.unattributedCommitCount : 0
+          );
+        }
+        if (typeof result?.commitCount === "number" && result.commitCount !== myTeam.commit_count) {
+          void refresh();
+        }
+      })
+      .catch(() => {
+        // GitHubが一時的に応答しない場合は、既存の表示を保ち次回の画面表示で再試行する。
+      });
+  }, [myTeam?.id, myTeam?.github_repo, myTeam?.commit_count, refresh]);
+
+  // 全チーム宛のお知らせ（team_idなし）のうち、いちばん新しいものの時刻。
+  const latestAnnouncementAt = useMemo(() => {
+    let newest = 0;
+    for (const message of state.messages) {
+      if (message.channel !== "staff" || message.team_id !== null) continue;
+      const at = Date.parse(message.created_at);
+      if (at > newest) newest = at;
+    }
+    return newest ? new Date(newest).toISOString() : null;
+  }, [state.messages]);
+
+  // お知らせ画面を開いている間は既読扱いにして、ナビのバッジを消す。
+  useEffect(() => {
+    if (view !== "announcements") return;
+    markAnnouncementsSeen(latestAnnouncementAt);
+  }, [view, latestAnnouncementAt]);
+
+  if (view === "announcements") {
     return (
-      <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
-        <div className="space-y-5">
-          <TeamHouseCard team={currentTeam} />
-          <ActivityFeed
-            activities={state.activities.filter(
-              (activity) => activity.team_id === currentTeam.id
-            )}
-            highlightId={lastActivityId}
+      <div className="space-y-5">
+        {/* 全体連絡は常に最上段。運営だけが投稿でき、他の役割は閲覧する。 */}
+        <StaffChat
+          teams={state.teams}
+          messages={state.messages}
+          myTeamId={myTeamId}
+          viewer={activeViewer}
+          announcementOnly
+          readOnly={isJudge}
+          onSend={createChatMessage}
+        />
+        {/* チーム単位の相談は運営・メンターと参加者だけに見せる。 */}
+        {!isJudge && (
+          <StaffChat
+            teams={state.teams}
+            messages={state.messages}
+            myTeamId={myTeamId}
+            viewer={activeViewer}
+            onSend={createChatMessage}
           />
-        </div>
-        <div className="space-y-5">
-          <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
-          <RankingPanel teams={state.teams} />
-        </div>
+        )}
       </div>
     );
   }
 
   if (view === "help") {
     return (
-      <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
-        <div className="space-y-5">
-          <HelpComposer teams={state.teams} onSubmit={createHelp} />
-          <HelpBoard posts={state.helpPosts} />
-        </div>
-        <div className="space-y-5">
-          <MentorList mentors={state.mentors} />
-          <ActivityFeed activities={state.activities} highlightId={lastActivityId} />
-        </div>
-      </div>
-    );
-  }
-
-  if (view === "ranking") {
-    return (
-      <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
-        <RankingPanel teams={state.teams} />
-        <div className="space-y-5">
-          <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
-          <ActivityFeed activities={state.activities} highlightId={lastActivityId} />
-        </div>
+      <div className="space-y-5">
+        {/* 質問を出すのは参加者だけ。メンターは他チームの質問にも答える。 */}
+        {!isAdmin && !isJudge && (
+          <HelpComposer
+            teams={isMentor ? state.teams : myTeam ? [myTeam] : []}
+            lockedTeamId={isMentor ? null : myTeamId}
+            onSubmit={createHelp}
+          />
+        )}
+        {!isJudge && <DirectMessages viewer={activeViewer} />}
+        {/* 審査員には学生同士の質問と解決の様子を、閲覧専用で見せる。 */}
+        <HelpBoard
+          posts={state.helpPosts}
+          onReply={createHelpReply}
+          onAccept={acceptHelpReply}
+          readOnly={isJudge}
+        />
       </div>
     );
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1fr_22rem_22rem]">
-      <div className="space-y-5">
-        <section className="rounded-lg border border-pulse/20 bg-white/[0.045] p-6 shadow-neon">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-pulse">
-              Realtime Lobby
-            </p>
-            <RealtimeStatusBadge status={realtimeStatus} isRefreshing={isRefreshing} />
-          </div>
-          <h1 className="mt-3 max-w-3xl text-4xl font-black leading-tight text-white md:text-6xl">
-            ハッカソンに、ロビーを。
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+            {isAdmin ? "全体の開発状況" : "開発状況"}
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-white/64">
-            GitHubのPush、PR、Merge、Issue完了をMomentum Scoreへ変換し、
-            広場・家・ランキング・HELP掲示板へ数秒で反映します。
+          <p className="mt-1.5 text-sm leading-6 text-muted">
+            {isAdmin
+              ? "全チームの進み具合です。参加コードはヘッダー右上からコピーできます。"
+              : "GitHubにプッシュすると、この画面が自動で更新されます。"}
           </p>
-        </section>
+        </div>
+        <RealtimeStatusBadge status={realtimeStatus} isRefreshing={isRefreshing} />
+        {demoEnabled && (isAdmin || !viewer && !sessionViewer) && (
+          <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
+        )}
+      </header>
+
+      {/* 最初に他チームとの現在地を示し、その後に自チームの詳細を見る。 */}
+      <EventLeaderboard teams={state.teams} myTeamId={myTeamId} />
+
+      {/* 参加者には自チームのみ、支援・評価する役割には全チームを上部に出す。 */}
+      {(canViewAllTechStacks || myTeam) && (
+        <TechStackPanel
+          teams={techStackTeams}
+          scope={canViewAllTechStacks ? "all" : "own"}
+        />
+      )}
+
+      {myTeam && !myTeam.github_repo && (
+        <TeamRepoSetup team={myTeam} onDone={refresh} />
+      )}
+
+      {/* 参加者は自分のチームを先に見せる。運営は全チームをフラットに見る。 */}
+      {!isStaff && !isJudge && myTeam && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <MyTeamCard
+            team={myTeam}
+            rank={myRank}
+            totalTeams={state.teams.length}
+            latestActivity={myLatestActivity}
+            members={state.members.filter((member) => member.team_id === myTeam.id)}
+            viewerLogin={activeViewer?.login ?? null}
+          />
+          <WakaTimePanel viewerLogin={activeViewer?.login ?? null} />
+        </div>
+      )}
+
+      {isAdmin && <AdminRepoStatus teams={state.teams} />}
+
+      <DevelopmentOverview
+        teams={state.teams}
+        activities={state.activities}
+        myTeamId={isStaff || isJudge ? null : myTeamId}
+        members={state.members}
+      />
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
         <ActivityFeed activities={state.activities} highlightId={lastActivityId} />
+        <RankingPanel teams={state.teams} myTeamId={myTeamId} />
       </div>
-      <div className="space-y-5">
-        <DemoControls teams={state.teams} onTrigger={triggerDemoEvent} />
-        <HelpBoard posts={state.helpPosts} />
-      </div>
-      <div className="space-y-5">
-        <RankingPanel teams={state.teams} />
-        <MentorList mentors={state.mentors} />
-      </div>
+
+      {/* 合計だけだと、一人が全部やったチームと分担したチームが同じに見える。 */}
+      <ContributorPanel
+        contributors={state.contributors}
+        teams={state.teams}
+        teamId={isStaff || isJudge ? null : myTeamId}
+        verifiedCommitCounts={isStaff || isJudge ? null : verifiedCommitCounts}
+        unattributedCommitCount={unattributedCommitCount}
+        title={isStaff || isJudge ? "メンバー別の動き（全チーム）" : "チーム内の動き"}
+        description={
+          isStaff || isJudge
+            ? "GitHubの操作をアカウントごとに集計しています。誰が動いているかの確認に使えます。"
+            : "チームの中で誰がどれだけ動いたかです。GitHubの記録がもとになっています。"
+        }
+      />
     </div>
   );
 }

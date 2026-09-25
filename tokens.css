@@ -1,0 +1,93 @@
+/* HackVerse - macrostructure: Workbench - tone: light paper - anchor: warm beige */
+
+:root {
+  --color-paper: #faf7f1;
+  --color-paper-rgb: 250 247 241;
+  --color-paper-2: #f2ece1;
+  --color-paper-2-rgb: 242 236 225;
+  --color-surface: #fffdfa;
+  --color-surface-rgb: 255 253 250;
+  --color-sand: #f7f3ea;
+  --color-sand-rgb: 247 243 234;
+  --color-line: #e6dfd2;
+  --color-line-rgb: 230 223 210;
+  --color-line-strong: #d6cdbb;
+  --color-line-strong-rgb: 214 205 187;
+  --color-ink: #23201c;
+  --color-ink-rgb: 35 32 28;
+  --color-ink-2: #4a443c;
+  --color-ink-2-rgb: 74 68 60;
+  --color-muted: #7a7266;
+  --color-muted-rgb: 122 114 102;
+  --color-pulse: #0f8b7e;
+  --color-pulse-rgb: 15 139 126;
+  --color-hot: #c05575;
+  --color-hot-rgb: 192 85 117;
+  --color-sun: #b5771a;
+  --color-sun-rgb: 181 119 26;
+  --color-field: #2e7d5b;
+  --color-field-rgb: 46 125 91;
+  --color-focus: #0f8b7e;
+  --font-display: ui-sans-serif, system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --font-body: ui-sans-serif, system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --shadow-soft: 3px 3px 8px rgba(160, 148, 128, 0.16), -2px -2px 6px rgba(255, 255, 255, 0.85);
+  --shadow-card: 4px 4px 12px rgba(160, 148, 128, 0.18), -3px -3px 9px rgba(255, 255, 255, 0.9);
+  --shadow-inset: inset 2px 2px 4px rgba(160, 148, 128, 0.22),
+    inset -1px -1px 3px rgba(255, 255, 255, 0.75);
+  --shadow-pressed: inset 3px 3px 6px rgba(160, 148, 128, 0.32);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-short: 160ms;
+  --dur-medium: 240ms;
+}
+
+/* ネイビーは黒に寄せすぎず、長時間の運営画面でも文字と境界が読める濃紺にする。 */
+html[data-theme="navy"] {
+  --color-paper: #071526;
+  --color-paper-rgb: 7 21 38;
+  --color-paper-2: #0d2137;
+  --color-paper-2-rgb: 13 33 55;
+  --color-surface: #102942;
+  --color-surface-rgb: 16 41 66;
+  --color-sand: #0b1d31;
+  --color-sand-rgb: 11 29 49;
+  --color-line: #274360;
+  --color-line-rgb: 39 67 96;
+  --color-line-strong: #3c5a78;
+  --color-line-strong-rgb: 60 90 120;
+  --color-ink: #f1f5f9;
+  --color-ink-rgb: 241 245 249;
+  --color-ink-2: #cfdae7;
+  --color-ink-2-rgb: 207 218 231;
+  --color-muted: #9fb1c5;
+  --color-muted-rgb: 159 177 197;
+  --color-pulse: #2dd4bf;
+  --color-pulse-rgb: 45 212 191;
+  --color-hot: #f38aa8;
+  --color-hot-rgb: 243 138 168;
+  --color-sun: #f3bb54;
+  --color-sun-rgb: 243 187 84;
+  --color-field: #5ee0a1;
+  --color-field-rgb: 94 224 161;
+  --color-focus: #5eead4;
+  --color-control-rgb: 24 48 75;
+  --color-control-hover-rgb: 34 66 100;
+  --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.28), 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-card: 0 14px 30px rgba(0, 0, 0, 0.32), 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-inset: inset 0 1px 1px rgba(255, 255, 255, 0.05), inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  --shadow-pressed: inset 0 2px 5px rgba(0, 0, 0, 0.34);
+}

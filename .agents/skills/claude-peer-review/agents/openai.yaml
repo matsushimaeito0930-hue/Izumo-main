@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Peer Review"
+  short_description: "Ask Claude Code for a read-only second opinion"
+  default_prompt: "Ask Claude Code to review the current change, verify its findings, and improve the implementation where justified."

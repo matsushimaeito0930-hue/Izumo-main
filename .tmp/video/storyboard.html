@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1280, height=720, initial-scale=1">
+  <title>HackRadar demo storyboard</title>
+  <style>
+    :root {
+      --paper: #faf7f1;
+      --surface: #fffdfa;
+      --sand: #f2ece1;
+      --line: #e6dfd2;
+      --line-strong: #d6cdbb;
+      --ink: #23201c;
+      --muted: #7a7266;
+      --teal: #0f8b7e;
+      --coral: #c05575;
+      --gold: #b5771a;
+      --green: #2e7d5b;
+      --shadow: 0 14px 30px rgba(125, 108, 84, .12);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: var(--paper); }
+    body { color: var(--ink); font-family: "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif; }
+    .scene { position: relative; width: 1280px; height: 720px; padding: 48px 64px 58px; overflow: hidden; }
+    .scene::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 8px; background: var(--teal); }
+    .scene::after { content: ""; position: absolute; left: 64px; right: 64px; bottom: 28px; height: 1px; background: var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 800; letter-spacing: .02em; }
+    .brand-mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: white; background: var(--teal); font-size: 13px; box-shadow: 0 4px 10px rgba(15,139,126,.22); }
+    .kicker { margin-top: 56px; color: var(--teal); font-size: 14px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 14px 0 0; font-size: 58px; line-height: 1.1; letter-spacing: -.04em; }
+    h2 { margin: 8px 0 0; font-size: 36px; line-height: 1.2; letter-spacing: -.03em; }
+    h3 { margin: 0; font-size: 20px; }
+    p { margin: 0; color: var(--muted); line-height: 1.8; }
+    .lead { margin-top: 20px; font-size: 20px; max-width: 620px; }
+    .micro { font-size: 12px; color: var(--muted); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; color: var(--muted); background: var(--surface); font-size: 12px; }
+    .pill.teal { color: var(--teal); border-color: rgba(15,139,126,.25); background: #eef8f5; }
+    .pill.coral { color: var(--coral); border-color: rgba(192,85,117,.25); background: #fff2f5; }
+    .button { display: inline-flex; align-items: center; justify-content: center; padding: 12px 18px; border-radius: 10px; font-size: 14px; font-weight: 800; background: var(--ink); color: white; box-shadow: 0 5px 12px rgba(35,32,28,.14); }
+    .bottom { position: absolute; left: 64px; right: 64px; bottom: 0; height: 28px; display: flex; align-items: center; justify-content: space-between; z-index: 2; color: var(--muted); font-size: 11px; }
+    .step { display: flex; align-items: center; gap: 8px; }
+    .step-line { width: 110px; height: 3px; border-radius: 99px; background: var(--line-strong); }
+    .step-line.active { background: var(--teal); }
+    .grid { display: grid; gap: 18px; }
+    .card { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+    .card-pad { padding: 22px; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .muted { color: var(--muted); }
+    .number { font-size: 36px; font-weight: 800; letter-spacing: -.05em; }
+    .bar { height: 12px; border-radius: 99px; background: var(--sand); overflow: hidden; }
+    .bar > i { display: block; height: 100%; border-radius: inherit; background: var(--teal); }
+    .bar.coral > i { background: var(--coral); }
+    .bar.gold > i { background: var(--gold); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--teal); display: inline-block; }
+    .dot.coral { background: var(--coral); }
+    .dot.gold { background: var(--gold); }
+    .dot.green { background: var(--green); }
+    .arrow { color: var(--teal); font-size: 26px; font-weight: 700; }
+    .mock-nav { height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .mock-nav .brand-mark { width: 30px; height: 30px; border-radius: 8px; }
+    .mock-nav-links { display: flex; align-items: center; gap: 22px; color: var(--muted); font-size: 12px; }
+    .mock-nav-links .active { color: var(--ink); font-weight: 800; }
+    .mock-window { overflow: hidden; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface); box-shadow: 0 18px 40px rgba(69, 53, 33, .16); }
+    .mock-body { padding: 22px; background: var(--paper); }
+    .mock-title { margin-bottom: 14px; }
+    .mock-title h3 { font-size: 24px; }
+    .mock-title p { font-size: 12px; margin-top: 3px; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    .stat-label { color: var(--muted); font-size: 12px; }
+    .stat-value { margin-top: 8px; font-size: 26px; font-weight: 800; }
+    .team-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
+    .team-row:last-child { border-bottom: 0; }
+    .team-name { display: flex; align-items: center; gap: 8px; min-width: 160px; font-weight: 800; }
+    .team-count { width: 54px; text-align: right; font-family: Consolas, monospace; font-weight: 800; }
+    .mini-track { flex: 1; height: 8px; background: var(--sand); border-radius: 99px; overflow: hidden; }
+    .mini-track i { display: block; height: 100%; background: var(--teal); border-radius: inherit; }
+    .mini-track.coral i { background: var(--coral); }
+    .mini-track.gold i { background: var(--gold); }
+    .scene-0 { display: flex; align-items: center; }
+    .scene-0 .content { width: 58%; padding-left: 54px; }
+    .scene-0 .mark-large { position: absolute; right: 110px; top: 154px; width: 320px; height: 320px; border-radius: 50%; border: 1px solid var(--line-strong); display: grid; place-items: center; background: var(--surface); box-shadow: var(--shadow); }
+    .scene-0 .mark-large::before, .scene-0 .mark-large::after { content: ""; position: absolute; border-radius: 50%; border: 1px solid var(--line); }
+    .scene-0 .mark-large::before { inset: 26px; }
+    .scene-0 .mark-large::after { inset: 54px; border-color: rgba(15,139,126,.3); }
+    .scene-0 .mark-core { position: relative; width: 132px; height: 132px; border-radius: 34px; display: grid; place-items: center; color: white; background: var(--teal); font-size: 42px; font-weight: 800; box-shadow: 0 14px 24px rgba(15,139,126,.24); }
+    .scene-0 .mark-label { position: absolute; right: 32px; bottom: 30px; padding: 8px 12px; color: var(--teal); border: 1px solid rgba(15,139,126,.3); border-radius: 999px; background: #eef8f5; font-size: 12px; font-weight: 800; }
+    .scene-1 .columns { display: grid; grid-template-columns: 1fr 1.25fr; gap: 34px; align-items: center; height: 530px; }
+    .scene-1 .question { margin-top: 22px; font-size: 30px; font-weight: 800; line-height: 1.45; }
+    .scene-1 .board { padding: 28px; transform: rotate(-1deg); background: #f7f0e2; border: 1px solid var(--line-strong); box-shadow: 12px 16px 0 rgba(214,205,187,.36); }
+    .scene-1 .board h3 { font-size: 18px; color: var(--muted); }
+    .scene-1 .task { margin-top: 22px; padding: 16px; background: rgba(255,253,250,.72); border: 1px solid var(--line); }
+    .scene-1 .task .scribble { margin-top: 8px; height: 9px; width: 72%; background: var(--line-strong); border-radius: 3px; }
+    .scene-1 .task .scribble.short { width: 48%; margin-top: 7px; }
+    .scene-1 .blind-spot { position: absolute; right: 98px; bottom: 94px; padding: 14px 18px; color: var(--coral); border: 1px solid rgba(192,85,117,.3); background: #fff2f5; font-weight: 800; box-shadow: var(--shadow); }
+    .scene-2 .layout { display: grid; grid-template-columns: .78fr 1.22fr; gap: 46px; align-items: center; height: 540px; }
+    .scene-2 .copy p { margin-top: 18px; font-size: 18px; }
+    .form-card { padding: 26px; }
+    .field { margin-top: 15px; }
+    .field:first-child { margin-top: 0; }
+    .field label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .input { height: 42px; display: flex; align-items: center; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fffefa; color: var(--ink); font-size: 14px; }
+    .input.placeholder { color: #aaa092; }
+    .form-card .button { width: 100%; margin-top: 20px; }
+    .flow-list { margin-top: 18px; display: grid; gap: 13px; }
+    .flow-item { display: flex; gap: 12px; align-items: center; }
+    .flow-num { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--teal); font-size: 12px; font-weight: 800; }
+    .flow-item strong { display: block; font-size: 14px; }
+    .flow-item span { color: var(--muted); font-size: 12px; }
+    .scene-3 .heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 18px; }
+    .scene-3 .heading p { font-size: 13px; }
+    .scene-3 .dashboard-window { width: 100%; }
+    .scene-3 .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .scene-3 .overview { grid-column: 1 / -1; }
+    .scene-3 .teams { padding: 18px; }
+    .scene-3 .teams h3 { margin-bottom: 14px; font-size: 15px; }
+    .scene-3 .team-row { display: flex; align-items: center; gap: 15px; }
+    .scene-3 .activity { padding: 18px; }
+    .activity-item { display: flex; gap: 10px; align-items: start; padding: 11px 0; border-bottom: 1px solid var(--line); }
+    .activity-item:last-child { border-bottom: 0; }
+    .activity-icon { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: var(--teal); background: #eaf5f2; font-size: 11px; font-weight: 800; }
+    .activity-item strong { display: block; font-size: 12px; }
+    .activity-item span { color: var(--muted); font-size: 11px; }
+    .scene-4 .flow { display: grid; grid-template-columns: 1fr 72px 1fr 72px 1fr; align-items: center; gap: 12px; margin-top: 100px; }
+    .scene-4 .event-card { min-height: 195px; padding: 24px; }
+    .event-card .event-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; color: white; background: var(--ink); font-size: 20px; font-weight: 800; }
+    .event-card h3 { margin-top: 20px; font-size: 18px; }
+    .event-card p { margin-top: 8px; font-size: 13px; }
+    .event-card .event-code { margin-top: 18px; padding: 8px 10px; border-radius: 7px; background: #f3eee5; font-family: Consolas, monospace; color: var(--teal); font-size: 11px; }
+    .scene-4 .arrow-big { text-align: center; color: var(--teal); font-size: 42px; }
+    .scene-4 .result { position: absolute; right: 124px; bottom: 112px; padding: 14px 18px; border: 1px solid rgba(15,139,126,.3); border-radius: 10px; background: #eef8f5; color: var(--teal); font-weight: 800; }
+    .scene-5 .chart-layout { display: grid; grid-template-columns: 1.45fr .75fr; gap: 20px; align-items: stretch; height: 470px; margin-top: 26px; }
+    .chart-card { padding: 24px; }
+    .chart-card h3 { font-size: 17px; }
+    .chart { display: flex; align-items: end; gap: 28px; height: 290px; padding: 22px 30px 0; border-bottom: 1px solid var(--line-strong); }
+    .vbar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 10px; height: 100%; }
+    .vbar > i { width: 72px; border-radius: 8px 8px 0 0; background: var(--teal); display: block; }
+    .vbar.coral > i { background: var(--coral); }
+    .vbar.gold > i { background: var(--gold); }
+    .vbar strong { font-family: Consolas, monospace; font-size: 14px; }
+    .vbar span { color: var(--muted); font-size: 12px; }
+    .rank-card { padding: 24px; }
+    .rank { display: flex; align-items: center; gap: 10px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+    .rank:last-child { border-bottom: 0; }
+    .rank-num { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--sand); font-weight: 800; }
+    .rank strong { flex: 1; font-size: 14px; }
+    .rank em { color: var(--teal); font-family: Consolas, monospace; font-size: 12px; font-style: normal; font-weight: 800; }
+    .scene-6 .chat-layout { display: grid; grid-template-columns: .8fr 1.2fr; gap: 30px; align-items: center; height: 520px; }
+    .scene-6 .chat-copy p { margin-top: 18px; font-size: 18px; }
+    .chat-window { padding: 20px; }
+    .chat-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+    .chat-header strong { font-size: 15px; }
+    .chat-body { padding: 18px 0 4px; display: grid; gap: 14px; }
+    .bubble-row { display: flex; align-items: end; gap: 8px; }
+    .bubble-row.me { justify-content: end; }
+    .avatar { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--coral); font-size: 11px; font-weight: 800; }
+    .avatar.teal { background: var(--teal); }
+    .bubble { max-width: 68%; padding: 10px 13px; border: 1px solid var(--line); border-radius: 12px 12px 12px 3px; background: #f8f3eb; font-size: 13px; line-height: 1.5; }
+    .me .bubble { border-color: rgba(15,139,126,.22); border-radius: 12px 12px 3px 12px; background: #edf8f5; }
+    .chat-input { height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 0 10px 0 13px; border: 1px solid var(--line-strong); border-radius: 8px; color: #a69c8e; font-size: 12px; }
+    .send { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: white; background: var(--teal); font-size: 14px; }
+    .scene-7 .help-layout { display: grid; grid-template-columns: 1.15fr .85fr; gap: 22px; margin-top: 25px; }
+    .help-card { padding: 20px; }
+    .help-card h3 { font-size: 16px; }
+    .help-post { padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .help-post:last-child { border-bottom: 0; }
+    .help-post strong { display: block; font-size: 14px; }
+    .help-post p { margin-top: 6px; font-size: 12px; }
+    .tags { display: flex; gap: 6px; margin-top: 10px; }
+    .tag { padding: 4px 8px; border-radius: 999px; background: var(--sand); color: var(--muted); font-size: 10px; }
+    .resolved { color: var(--green); border: 1px solid rgba(46,125,91,.25); background: #eff8f2; }
+    .mentor { display: flex; gap: 12px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+    .mentor:last-child { border-bottom: 0; }
+    .mentor .avatar { background: var(--gold); }
+    .mentor strong { display: block; font-size: 13px; }
+    .mentor span { color: var(--muted); font-size: 11px; }
+    .scene-8 .journey { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 110px; }
+    .journey-item { position: relative; min-height: 180px; padding: 20px 16px; border-top: 3px solid var(--teal); background: var(--surface); box-shadow: var(--shadow); }
+    .journey-item:nth-child(2) { border-color: var(--coral); }
+    .journey-item:nth-child(3) { border-color: var(--gold); }
+    .journey-item:nth-child(4) { border-color: var(--green); }
+    .journey-item:nth-child(5) { border-color: var(--ink); }
+    .journey-num { color: var(--muted); font-family: Consolas, monospace; font-size: 12px; }
+    .journey-item h3 { margin-top: 19px; font-size: 17px; }
+    .journey-item p { margin-top: 8px; font-size: 12px; line-height: 1.6; }
+    .journey-line { position: absolute; top: -23px; right: -24px; z-index: 2; color: var(--line-strong); font-size: 28px; }
+    .scene-9 { display: grid; place-items: center; text-align: center; }
+    .scene-9 .closing { margin-top: -10px; }
+    .scene-9 .brand { justify-content: center; font-size: 22px; }
+    .scene-9 .brand-mark { width: 48px; height: 48px; border-radius: 13px; font-size: 16px; }
+    .scene-9 h1 { margin-top: 28px; font-size: 64px; }
+    .scene-9 p { margin-top: 16px; font-size: 20px; }
+    .scene-9 .line { width: 180px; height: 3px; margin: 30px auto 0; background: var(--teal); }
+  </style>
+</head>
+<body>
+  <main id="root"></main>
+  <script>
+    const scene = Number(new URLSearchParams(location.search).get("scene") || 0);
+    const names = ["導入", "課題", "チーム登録", "ダッシュボード", "GitHub連携", "進捗比較", "チームチャット", "メンター相談", "使い方", "HackRadar"];
+    const duration = [12, 20, 25, 30, 28, 25, 25, 20, 20, 15];
+    const footer = `
+      <div class="bottom"><div class="step"><span>${String(scene + 1).padStart(2, "0")} / 10</span><span class="step-line active"></span><span>${names[scene]}</span></div><span>HackRadar demo / ${duration[scene]} sec</span></div>`;
+    const brand = `<div class="brand"><span class="brand-mark">HR</span><span>HackRadar</span></div>`;
+    const dashboardNav = `<div class="mock-nav">${brand}<div class="mock-nav-links"><span class="active">開発状況</span><span>質問する</span><span class="pill teal">● 接続中</span></div><span class="button" style="padding:8px 12px;font-size:11px;">GitHubログイン</span></div>`;
+    const barRow = (dot, name, count, width, tone = "") => `<div class="team-row"><div class="team-name"><span class="dot ${dot}"></span>${name}</div><div class="team-count">${count}</div><div class="mini-track ${tone}"><i style="width:${width}%"></i></div><span class="micro">commits</span></div>`;
+    const scene0 = `<section class="scene scene-0"><div class="content">${brand}<div class="kicker">Hackathon development radar</div><h1>ハッカソンの開発状況を、<br>ひと目で。</h1><p class="lead">コミット、チームの動き、相談を一つの画面に集約。運営と参加者が、同じ進捗を見ながら動ける。</p><div style="margin-top:28px;display:flex;gap:10px;"><span class="pill teal">GitHub連携</span><span class="pill">チーム比較</span><span class="pill coral">メンター相談</span></div></div><div class="mark-large"><div class="mark-core">HR</div><span class="mark-label">Make progress visible</span></div>${footer}</section>`;
+    const scene1 = `<section class="scene scene-1"><div class="columns"><div>${brand}<div class="kicker">The problem</div><h2>開発状況が、<br>見えない。</h2><div class="question">誰が進んでいる？<br>どこで詰まっている？</div><p style="margin-top:20px;font-size:16px;">ハッカソンでは、完成度だけでなく<br>途中の動きがチームの差になる。</p></div><div class="board"><h3>いままでの進捗共有</h3><div class="task"><strong>Team ???</strong><div class="scribble"></div><div class="scribble short"></div></div><div class="task"><strong>Team ???</strong><div class="scribble" style="width:55%"></div><div class="scribble short" style="width:32%"></div></div><div class="task"><strong>Team ???</strong><div class="scribble" style="width:66%"></div><div class="scribble short" style="width:42%"></div></div></div></div><div class="blind-spot">見えないままだと、助けるタイミングを逃す</div>${footer}</section>`;
+    const scene2 = `<section class="scene scene-2"><div class="layout"><div class="copy">${brand}<div class="kicker">Step 01 / Team onboarding</div><h2>最初に、チームを<br>登録する。</h2><p>運営がチーム名とGitHubリポジトリを登録。参加者は自分のチームで参加する。</p><div class="flow-list"><div class="flow-item"><span class="flow-num">1</span><div><strong>チーム名を入力</strong><span>チーム名は自由に設定</span></div></div><div class="flow-item"><span class="flow-num">2</span><div><strong>GitHubを紐づける</strong><span>pushを進捗データに変換</span></div></div><div class="flow-item"><span class="flow-num">3</span><div><strong>参加者を招待</strong><span>同じ画面でチームを共有</span></div></div></div></div><div class="card form-card"><div class="row"><h3>チームを作成</h3><span class="pill teal">運営</span></div><div class="field"><label>チーム名</label><div class="input">Team Aurora</div></div><div class="field"><label>GitHubリポジトリ</label><div class="input">matsushimaeito0930-hue / aurora</div></div><div class="field"><label>参加者</label><div class="input placeholder">GitHubユーザー名を入力</div></div><div class="button">チームを登録する　→</div><p class="micro" style="margin-top:13px;text-align:center;">登録後、ダッシュボードにすぐ表示されます。</p></div></div>${footer}</section>`;
+    const scene3 = `<section class="scene scene-3"><div class="heading"><div>${brand}<div class="kicker" style="margin-top:26px;">Step 02 / Shared dashboard</div><h2>全チームの現在地を、<br>同じ画面で見る。</h2></div><span class="pill teal">● リアルタイム更新</span></div><div class="mock-window dashboard-window">${dashboardNav}<div class="mock-body"><div class="dashboard-grid"><div class="stat-grid overview"><div class="stat"><div class="stat-label">みんなの合計コミット数</div><div class="stat-value">46 <span class="micro">件</span></div></div><div class="stat"><div class="stat-label">いま1位のチーム</div><div class="stat-value">Team Aurora <span class="micro">+25 pt</span></div></div></div><div class="card teams"><h3>チームの進み具合</h3>${barRow("", "Team Aurora", "21", 92)}${barRow("coral", "Team Orbit", "16", 70, "coral")}${barRow("gold", "Team Nerve", "9", 42, "gold")}</div><div class="card activity"><h3>みんなの動き</h3><div class="activity-item"><span class="activity-icon">↗</span><div><strong>Team Aurora が3件のコミットをプッシュ</strong><span>たった今　スコア +15</span></div></div><div class="activity-item"><span class="activity-icon">?</span><div><strong>Team Orbit が質問を投稿</strong><span>5分前　メンターに相談</span></div></div><div class="activity-item"><span class="activity-icon">✓</span><div><strong>Team Nerve の回答が解決済み</strong><span>12分前</span></div></div></div></div></div></div>${footer}</section>`;
+    const scene4 = `<section class="scene scene-4"><div>${brand}<div class="kicker">Step 03 / GitHub webhook</div><h2>コミットが、進捗に変わる。</h2><p class="lead" style="font-size:17px;">GitHubのpushをWebhookで受け取り、チームの活動とスコアを自動更新。</p></div><div class="flow"><div class="card event-card"><div class="event-icon">G</div><h3>GitHubでpush</h3><p>開発者がいつものようにコミット。</p><div class="event-code">git push origin main</div></div><div class="arrow-big">→</div><div class="card event-card"><div class="event-icon" style="background:var(--teal);">↔</div><h3>Webhookで受信</h3><p>リポジトリのpushイベントを検知。</p><div class="event-code">event: push / 200 OK</div></div><div class="arrow-big">→</div><div class="card event-card"><div class="event-icon" style="background:var(--coral);">+</div><h3>画面に反映</h3><p>コミット数、スコア、活動を更新。</p><div class="event-code">commitCount: 3</div></div></div><div class="result">Team Aurora　+3 commits　+15 pt</div>${footer}</section>`;
+    const scene5 = `<section class="scene scene-5"><div>${brand}<div class="kicker">Step 04 / Compare progress</div><h2>差分ではなく、<br>動きを見比べる。</h2></div><div class="chart-layout"><div class="card chart-card"><div class="row"><h3>コミット数の比較</h3><span class="pill teal">更新 3秒前</span></div><div class="chart"><div class="vbar"><strong>21</strong><i style="height:88%"></i><span>Aurora</span></div><div class="vbar coral"><strong>16</strong><i style="height:68%"></i><span>Orbit</span></div><div class="vbar gold"><strong>9</strong><i style="height:40%"></i><span>Nerve</span></div><div class="vbar"><strong>7</strong><i style="height:30%"></i><span>Nova</span></div></div><p class="micro" style="margin-top:18px;">コミット数とPR数からチームの進捗を可視化</p></div><div class="card rank-card"><div class="row"><h3>ランキング</h3><span class="micro">score</span></div><div class="rank"><span class="rank-num">1</span><strong>Team Aurora</strong><em>25 pt</em></div><div class="rank"><span class="rank-num">2</span><strong>Team Orbit</strong><em>19 pt</em></div><div class="rank"><span class="rank-num">3</span><strong>Team Nerve</strong><em>11 pt</em></div><div style="margin-top:20px;padding:12px;border-radius:9px;background:#eef8f5;color:var(--teal);font-size:12px;line-height:1.6;">進捗の差が見えると、<br>次の一手を決めやすい。</div></div></div>${footer}</section>`;
+    const scene6 = `<section class="scene scene-6"><div class="chat-layout"><div class="chat-copy">${brand}<div class="kicker">Step 05 / Team chat</div><h2>困ったときは、<br>その場で相談。</h2><p>チーム内チャットで、実装の悩みや次の一手を共有。開発の流れを止めない。</p><div style="margin-top:24px;display:flex;gap:8px;"><span class="pill">チーム専用</span><span class="pill teal">すぐ返せる</span></div></div><div class="card chat-window"><div class="chat-header"><strong>Team Aurora / チームチャット</strong><span class="pill teal">3 members</span></div><div class="chat-body"><div class="bubble-row"><span class="avatar">A</span><div class="bubble">認証まわり、いったん画面を先に作ります。</div></div><div class="bubble-row me"><div class="bubble">了解です。Webhookの確認は自分が進めます。</div><span class="avatar teal">M</span></div><div class="bubble-row"><span class="avatar" style="background:var(--gold);">Y</span><div class="bubble">APIのレスポンス、ダッシュボードに反映されました。</div></div><div class="bubble-row me"><div class="bubble">いいですね。次はデモ用のデータを整えましょう。</div><span class="avatar teal">M</span></div></div><div class="chat-input">メッセージを入力<span class="send">↑</span></div></div></div>${footer}</section>`;
+    const scene7 = `<section class="scene scene-7"><div>${brand}<div class="kicker">Step 06 / Mentor support</div><h2>チームの壁を、<br>質問で越える。</h2></div><div class="help-layout"><div class="card help-card"><div class="row"><h3>質問ボード</h3><span class="pill coral">未解決 1</span></div><div class="help-post"><strong>SupabaseのRLS設定で詰まっています</strong><p>ポリシーを追加したあと、ブラウザから読み込めません。</p><div class="tags"><span class="tag">Supabase</span><span class="tag">Backend</span><span class="tag resolved">回答あり</span></div></div><div class="help-post"><strong>画面のレイアウトを相談したい</strong><p>モバイル幅でカードが詰まるときの考え方を教えてください。</p><div class="tags"><span class="tag">UI</span><span class="tag">Frontend</span></div></div></div><div class="card help-card"><div class="row"><h3>メンター</h3><span class="pill teal">オンライン 2</span></div><div class="mentor"><span class="avatar">KT</span><div><strong>Keita Tanaka</strong><span>Backend / Supabase</span></div><span class="dot green" style="margin-left:auto"></span></div><div class="mentor"><span class="avatar">RS</span><div><strong>Rina Sato</strong><span>Product / UX</span></div><span class="dot green" style="margin-left:auto"></span></div><div style="margin-top:16px;padding:13px;background:#f7f3ea;border-radius:9px;color:var(--muted);font-size:12px;line-height:1.6;">質問、回答、解決済み。<br>チームの学びも残ります。</div></div></div>${footer}</section>`;
+    const scene8 = `<section class="scene scene-8"><div>${brand}<div class="kicker">How it works</div><h2>HackRadarの使い方は、<br>5つだけ。</h2></div><div class="journey"><div class="journey-item"><div class="journey-num">01</div><h3>チーム登録</h3><p>チーム名とGitHubリポジトリを入力。</p><span class="journey-line">→</span></div><div class="journey-item"><div class="journey-num">02</div><h3>ログイン</h3><p>GitHubアカウントで参加。</p><span class="journey-line">→</span></div><div class="journey-item"><div class="journey-num">03</div><h3>開発する</h3><p>いつも通りコミットとpush。</p><span class="journey-line">→</span></div><div class="journey-item"><div class="journey-num">04</div><h3>比較する</h3><p>チームの進捗を数字と棒グラフで確認。</p><span class="journey-line">→</span></div><div class="journey-item"><div class="journey-num">05</div><h3>相談する</h3><p>チャットとメンターで詰まりを解消。</p></div></div>${footer}</section>`;
+    const scene9 = `<section class="scene scene-9"><div class="closing">${brand}<h1>進捗を、<br>同じ画面に。</h1><p>Hackathon development, made visible.</p><div class="line"></div><div style="margin-top:28px;display:flex;justify-content:center;gap:8px;"><span class="pill teal">GitHub連携</span><span class="pill">チーム比較</span><span class="pill coral">相談・メンター</span></div></div>${footer}</section>`;
+    document.getElementById("root").innerHTML = [scene0, scene1, scene2, scene3, scene4, scene5, scene6, scene7, scene8, scene9][scene] || scene0;
+  </script>
+</body>
+</html>

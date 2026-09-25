@@ -9,16 +9,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        void: "#080914",
-        panel: "#101322",
-        pulse: "#33f2d1",
-        hot: "#ff4f8b",
-        sun: "#ffd166",
-        field: "#6ee7b7"
+        paper: "rgb(var(--color-paper-rgb) / <alpha-value>)",
+        paper2: "rgb(var(--color-paper-2-rgb) / <alpha-value>)",
+        surface: "rgb(var(--color-surface-rgb) / <alpha-value>)",
+        sand: "rgb(var(--color-sand-rgb) / <alpha-value>)",
+        line: "rgb(var(--color-line-rgb) / <alpha-value>)",
+        lineStrong: "rgb(var(--color-line-strong-rgb) / <alpha-value>)",
+        ink: "rgb(var(--color-ink-rgb) / <alpha-value>)",
+        ink2: "rgb(var(--color-ink-2-rgb) / <alpha-value>)",
+        muted: "rgb(var(--color-muted-rgb) / <alpha-value>)",
+        pulse: "rgb(var(--color-pulse-rgb) / <alpha-value>)",
+        hot: "rgb(var(--color-hot-rgb) / <alpha-value>)",
+        sun: "rgb(var(--color-sun-rgb) / <alpha-value>)",
+        field: "rgb(var(--color-field-rgb) / <alpha-value>)"
       },
       boxShadow: {
-        neon: "0 0 28px rgba(51, 242, 209, 0.24)",
-        hot: "0 0 28px rgba(255, 79, 139, 0.22)"
+        // Soft UI: 右下に影、左上にハイライト。境界線は残すのでコントラストは落とさない。
+        soft: "var(--shadow-soft)",
+        card: "var(--shadow-card)",
+        lift: "var(--shadow-card)",
+        // 溝。プログレスバーの下地や入力欄に使う。
+        inset: "var(--shadow-inset)",
+        // 押し込み。ボタンの :active 用。
+        pressed: "var(--shadow-pressed)",
+        btn: "var(--shadow-soft)"
       }
     }
   },

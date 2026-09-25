@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseGitHubWebhook, verifyGitHubSignature } from "@/lib/github";
-import { recordActivity } from "@/lib/store";
+import { recordRepositoryActivity } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -22,22 +22,56 @@ export async function POST(request: Request) {
   }
 
   const eventName = request.headers.get("x-github-event") ?? "";
-  const payload = JSON.parse(body) as unknown;
+
+  if (eventName === "ping") {
+    return NextResponse.json({ ok: true, pong: true });
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return NextResponse.json({ error: "Payload could not be parsed." }, { status: 400 });
+  }
+
   const parsedActivity = parseGitHubWebhook(eventName, payload);
 
   if (!parsedActivity) {
-    return NextResponse.json({
-      ok: true,
-      ignored: true,
-      eventName
-    });
+    return NextResponse.json({ ok: true, ignored: true, eventName });
   }
 
-  const activity = await recordActivity(parsedActivity);
+  try {
+    const activities = await recordRepositoryActivity({
+      ...parsedActivity,
+      // 誰の操作かはGitHubのsenderから来る。参加者の自己申告ではない。
+      githubDeliveryId: request.headers.get("x-github-delivery") ?? undefined
+    });
 
-  return NextResponse.json({
-    ok: true,
-    eventName,
-    activity
-  });
+    if (activities.length === 0) {
+      // どのチームにも登録されていないリポジトリ。200で返して配信は成功扱いにする。
+      return NextResponse.json({
+        ok: true,
+        ignored: true,
+        reason: "unregistered_repository",
+        githubRepo: parsedActivity.githubRepo,
+        message:
+          "このリポジトリはどのチームにも登録されていないため、記録しませんでした。"
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      eventName,
+      activity: activities[0],
+      activities,
+      affectedTeams: activities.length
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Activity could not be recorded."
+      },
+      { status: 500 }
+    );
+  }
 }

@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { GitMerge, GitPullRequest, Rocket, Send } from "lucide-react";
-import { Panel } from "@/components/panel";
+import {
+  GitCommitHorizontal,
+  GitMerge,
+  GitPullRequest,
+  LoaderCircle,
+  Rocket,
+  Wand2
+} from "lucide-react";
 import type { ActivityType, Team } from "@/lib/types";
 
 const demoButtons: Array<{
@@ -10,12 +16,16 @@ const demoButtons: Array<{
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
-  { type: "push", label: "Push +1", icon: Send },
-  { type: "pull_request_opened", label: "PR Open", icon: GitPullRequest },
-  { type: "pull_request_merged", label: "PR Merge", icon: GitMerge },
-  { type: "issue_closed", label: "Issue Close", icon: Rocket }
+  { type: "push", label: "コミット +1", icon: GitCommitHorizontal },
+  { type: "pull_request_opened", label: "PR作成", icon: GitPullRequest },
+  { type: "pull_request_merged", label: "PRマージ", icon: GitMerge },
+  { type: "issue_closed", label: "Issue解決", icon: Rocket }
 ];
 
+/**
+ * 審査デモ用の擬似イベント。参加者の視界に入らないよう、
+ * 普段はボタン1つに畳んでおく。ENABLE_DEMO_MODE=false なら描画しない。
+ */
 export function DemoControls({
   teams,
   onTrigger
@@ -23,20 +33,32 @@ export function DemoControls({
   teams: Team[];
   onTrigger: (teamId: string, type: ActivityType) => Promise<void>;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
   const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
   const [busyType, setBusyType] = useState<ActivityType | null>(null);
 
   return (
-    <Panel title="Demo Mode">
-      <div className="space-y-3">
-        <label className="block">
-          <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-white/55">
-            Target Team
-          </span>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-expanded={isOpen}
+        className="flex h-8 items-center gap-1.5 rounded-xl border border-line bg-surface px-2.5 text-xs font-medium text-muted shadow-soft transition-[box-shadow,color,transform] hover:text-ink active:translate-y-px active:shadow-pressed"
+      >
+        <Wand2 className="size-3.5" />
+        デモ
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-10 z-20 w-64 rounded-2xl border border-line/70 bg-surface p-4 shadow-card">
+          <p className="text-xs leading-5 text-muted">
+            GitHub連携なしで動きを見せるための擬似イベントです。
+          </p>
+
           <select
             value={teamId}
             onChange={(event) => setTeamId(event.target.value)}
-            className="h-10 w-full rounded-md border border-white/10 bg-void px-3 text-sm font-bold text-white outline-none transition focus:border-pulse"
+            className="mt-3 h-9 w-full rounded-xl border border-line bg-paper px-2 text-sm text-ink shadow-inset outline-none focus:border-pulse"
           >
             {teams.map((team) => (
               <option key={team.id} value={team.id}>
@@ -44,33 +66,38 @@ export function DemoControls({
               </option>
             ))}
           </select>
-        </label>
 
-        <div className="grid grid-cols-2 gap-2">
-          {demoButtons.map((button) => {
-            const Icon = button.icon;
-            return (
-              <button
-                key={button.type}
-                type="button"
-                disabled={!teamId || busyType !== null}
-                onClick={async () => {
-                  setBusyType(button.type);
-                  try {
-                    await onTrigger(teamId, button.type);
-                  } finally {
-                    setBusyType(null);
-                  }
-                }}
-                className="flex h-11 items-center justify-center gap-2 rounded-md border border-pulse/30 bg-pulse/10 px-3 text-sm font-black text-pulse transition hover:border-pulse hover:bg-pulse/18 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <Icon className="size-4" />
-                <span>{busyType === button.type ? "Sending" : button.label}</span>
-              </button>
-            );
-          })}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {demoButtons.map((button) => {
+              const Icon = button.icon;
+              const isBusy = busyType === button.type;
+              return (
+                <button
+                  key={button.type}
+                  type="button"
+                  disabled={!teamId || busyType !== null}
+                  onClick={async () => {
+                    setBusyType(button.type);
+                    try {
+                      await onTrigger(teamId, button.type);
+                    } finally {
+                      setBusyType(null);
+                    }
+                  }}
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-2 text-xs font-medium text-ink2 shadow-soft transition-[box-shadow,color,transform] hover:text-pulse active:translate-y-px active:shadow-pressed disabled:opacity-45"
+                >
+                  {isBusy ? (
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                  ) : (
+                    <Icon className="size-3.5" />
+                  )}
+                  {button.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    </Panel>
+      )}
+    </div>
   );
 }
